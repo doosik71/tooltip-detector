@@ -1,2 +1,2 @@
-call .venv\scripts\activate.bat
+source .venv/bin/activate
 
