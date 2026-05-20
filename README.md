@@ -147,6 +147,8 @@ python -m scripts.annotation_editor
 
 문서: [docs/annotation_editor.md](./docs/annotation_editor.md)
 
+![Screen](./screen.png)
+
 ## scripts 요약
 
 - `scripts/download_model.py`

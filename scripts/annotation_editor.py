@@ -46,6 +46,7 @@ class AnnotationEditor:
         self.split_var = tk.StringVar(value=SPLIT_NAMES[0])
         self.show_segmentation_var = tk.BooleanVar(value=True)
         self.status_var = tk.StringVar(value="Ready")
+        self.images_label_var = tk.StringVar(value="Images (0 / 0)")
 
         self.current_split = SPLIT_NAMES[0]
         self.image_paths: list[Path] = []
@@ -96,6 +97,9 @@ class AnnotationEditor:
         self.delete_button = ttk.Button(top_bar, text="Delete Tool", command=self._delete_selected)
         self.delete_button.pack(side=tk.LEFT, padx=(8, 0))
 
+        self.reload_button = ttk.Button(top_bar, text="Reload", command=self._reload_current_annotation)
+        self.reload_button.pack(side=tk.LEFT, padx=(8, 0))
+
         self.save_button = ttk.Button(top_bar, text="Save", command=self._save_current_annotation)
         self.save_button.pack(side=tk.LEFT, padx=(18, 0))
 
@@ -115,7 +119,7 @@ class AnnotationEditor:
         left_panel = ttk.Frame(body, padding=(0, 0, 10, 0))
         body.add(left_panel, weight=0)
 
-        ttk.Label(left_panel, text="Images").pack(anchor=tk.W, pady=(0, 6))
+        ttk.Label(left_panel, textvariable=self.images_label_var).pack(anchor=tk.W, pady=(0, 6))
 
         list_frame = ttk.Frame(left_panel)
         list_frame.pack(fill=tk.BOTH, expand=True)
@@ -135,7 +139,7 @@ class AnnotationEditor:
 
         instruction = (
             "Drag bbox interior to move. Drag corner handles to resize. Drag red tip handle to move the tip. "
-            "Use Add Tool to draw a new bbox. Delete removes the selected tool. Ctrl+S saves." 
+            "A or Insert adds, D or Delete removes, R reloads, S or Ctrl+S saves, and arrow keys move between images."
         )
         ttk.Label(self.root, text=instruction, padding=(10, 0, 10, 10)).pack(side=tk.BOTTOM, fill=tk.X)
 
@@ -148,9 +152,22 @@ class AnnotationEditor:
         self.canvas.bind("<B1-Motion>", self._on_canvas_drag)
         self.canvas.bind("<ButtonRelease-1>", self._on_canvas_release)
         self.canvas.bind("<Configure>", self._on_canvas_resized)
+        self.root.bind("<KeyPress-a>", self._on_add_shortcut)
+        self.root.bind("<KeyPress-A>", self._on_add_shortcut)
+        self.root.bind("<Insert>", self._on_add_shortcut)
+        self.root.bind("<KeyPress-d>", self._on_delete_shortcut)
+        self.root.bind("<KeyPress-D>", self._on_delete_shortcut)
         self.root.bind("<Control-s>", self._on_save_shortcut)
         self.root.bind("<Control-S>", self._on_save_shortcut)
+        self.root.bind("<KeyPress-s>", self._on_save_shortcut)
+        self.root.bind("<KeyPress-S>", self._on_save_shortcut)
+        self.root.bind("<KeyPress-r>", self._on_reload_shortcut)
+        self.root.bind("<KeyPress-R>", self._on_reload_shortcut)
         self.root.bind("<Delete>", self._on_delete_shortcut)
+        self.root.bind("<Up>", self._on_previous_image_shortcut)
+        self.root.bind("<Left>", self._on_previous_image_shortcut)
+        self.root.bind("<Down>", self._on_next_image_shortcut)
+        self.root.bind("<Right>", self._on_next_image_shortcut)
         self.root.bind("<Escape>", self._on_escape)
 
     def _ensure_output_dirs(self) -> None:
@@ -188,12 +205,28 @@ class AnnotationEditor:
     def _on_canvas_resized(self, _event: tk.Event[tk.Misc]) -> None:
         self._render_scene()
 
+    def _on_add_shortcut(self, _event: tk.Event[tk.Misc]) -> str:
+        self._enter_add_mode()
+        return "break"
+
     def _on_save_shortcut(self, _event: tk.Event[tk.Misc]) -> str:
         self._save_current_annotation()
         return "break"
 
     def _on_delete_shortcut(self, _event: tk.Event[tk.Misc]) -> str:
         self._delete_selected()
+        return "break"
+
+    def _on_reload_shortcut(self, _event: tk.Event[tk.Misc]) -> str:
+        self._reload_current_annotation()
+        return "break"
+
+    def _on_previous_image_shortcut(self, _event: tk.Event[tk.Misc]) -> str:
+        self._navigate_images(-1)
+        return "break"
+
+    def _on_next_image_shortcut(self, _event: tk.Event[tk.Misc]) -> str:
+        self._navigate_images(1)
         return "break"
 
     def _on_escape(self, _event: tk.Event[tk.Misc]) -> str:
@@ -233,6 +266,7 @@ class AnnotationEditor:
             self.image_listbox.activate(0)
             self._open_image_at_index(0)
         else:
+            self._update_images_label()
             self._render_scene()
             self._update_status("No images found in the selected split.")
         self._update_buttons()
@@ -244,6 +278,7 @@ class AnnotationEditor:
         self.image_height, self.image_width = self.current_image_rgb.shape[:2]
         self.current_segmentation_mask = self._load_segmentation_mask(self.current_image_path)
         self.current_annotations = self._load_annotation(self.current_image_path)
+        self._update_images_label()
         self.selected_annotation_index = 0 if self.current_annotations else None
         self.preview_box = None
         self.drag_state = None
@@ -371,7 +406,10 @@ class AnnotationEditor:
         self.canvas.create_image(offset_x, offset_y, anchor=tk.NW, image=self.photo_image)
 
         for index, annotation in enumerate(self.current_annotations):
-            self._draw_annotation(index, annotation)
+            self._draw_annotation_box(index, annotation)
+
+        for index, annotation in enumerate(self.current_annotations):
+            self._draw_annotation_tip(index, annotation)
 
         if self.preview_box is not None:
             x1, y1, x2, y2 = self.preview_box
@@ -396,7 +434,35 @@ class AnnotationEditor:
             composed = cv2.addWeighted(overlay, SEGMENTATION_ALPHA, composed, 1.0 - SEGMENTATION_ALPHA, 0.0)
         return composed
 
-    def _draw_annotation(self, index: int, annotation: dict[str, dict[str, int]]) -> None:
+    def _draw_annotation_box(self, index: int, annotation: dict[str, dict[str, int]]) -> None:
+        bbox = annotation["bbox"]
+        x1 = bbox["x"]
+        y1 = bbox["y"]
+        x2 = bbox["x"] + bbox["width"]
+        y2 = bbox["y"] + bbox["height"]
+        cx1, cy1 = self._image_to_canvas(x1, y1)
+        cx2, cy2 = self._image_to_canvas(x2, y2)
+
+        is_selected = index == self.selected_annotation_index
+        outline = "#ffd34d" if is_selected else "#3bd7ff"
+        width = 3 if is_selected else 2
+
+        self.canvas.create_rectangle(cx1, cy1, cx2, cy2, outline=outline, width=width)
+        self.canvas.create_text(cx1 + 6, cy1 + 6, text=str(index + 1), fill=outline, anchor=tk.NW)
+
+        if is_selected:
+            for handle_x, handle_y in ((cx1, cy1), (cx2, cy1), (cx1, cy2), (cx2, cy2)):
+                self.canvas.create_rectangle(
+                    handle_x - HANDLE_SIZE,
+                    handle_y - HANDLE_SIZE,
+                    handle_x + HANDLE_SIZE,
+                    handle_y + HANDLE_SIZE,
+                    outline="#111111",
+                    fill="#ffd34d",
+                    width=1,
+                )
+
+    def _draw_annotation_tip(self, index: int, annotation: dict[str, dict[str, int]]) -> None:
         bbox = annotation["bbox"]
         tip = annotation["tip"]
         x1 = bbox["x"]
@@ -406,13 +472,6 @@ class AnnotationEditor:
         cx1, cy1 = self._image_to_canvas(x1, y1)
         cx2, cy2 = self._image_to_canvas(x2, y2)
         tip_x, tip_y = self._image_to_canvas(tip["x"], tip["y"])
-
-        is_selected = index == self.selected_annotation_index
-        outline = "#ffd34d" if is_selected else "#3bd7ff"
-        width = 3 if is_selected else 2
-
-        self.canvas.create_rectangle(cx1, cy1, cx2, cy2, outline=outline, width=width)
-        self.canvas.create_text(cx1 + 6, cy1 + 6, text=str(index + 1), fill=outline, anchor=tk.NW)
 
         self.canvas.create_line(
             (cx1 + cx2) / 2.0,
@@ -432,18 +491,6 @@ class AnnotationEditor:
             fill="#ff4d4d",
             width=2,
         )
-
-        if is_selected:
-            for handle_x, handle_y in ((cx1, cy1), (cx2, cy1), (cx1, cy2), (cx2, cy2)):
-                self.canvas.create_rectangle(
-                    handle_x - HANDLE_SIZE,
-                    handle_y - HANDLE_SIZE,
-                    handle_x + HANDLE_SIZE,
-                    handle_y + HANDLE_SIZE,
-                    outline="#111111",
-                    fill="#ffd34d",
-                    width=1,
-                )
 
     def _rgb_to_photoimage(self, rgb: np.ndarray) -> tk.PhotoImage:
         height, width = rgb.shape[:2]
@@ -484,6 +531,38 @@ class AnnotationEditor:
             self.selected_annotation_index = None
         self._mark_dirty()
         self._render_scene()
+
+    def _reload_current_annotation(self) -> None:
+        if self.current_image_path is None:
+            return
+        self.current_annotations = self._load_annotation(self.current_image_path)
+        self.selected_annotation_index = 0 if self.current_annotations else None
+        self.preview_box = None
+        self.drag_state = None
+        self.mode = "select"
+        self.dirty = False
+        self._update_buttons()
+        self._update_status("Reloaded annotation from file.")
+        self._render_scene()
+
+    def _navigate_images(self, step: int) -> None:
+        if self.current_index is None or not self.image_paths:
+            return
+
+        new_index = self.current_index + step
+        if new_index < 0 or new_index >= len(self.image_paths):
+            return
+        if not self._confirm_leave_current_image():
+            self._restore_listbox_selection()
+            return
+
+        self.suppress_listbox_event = True
+        self.image_listbox.selection_clear(0, tk.END)
+        self.image_listbox.selection_set(new_index)
+        self.image_listbox.activate(new_index)
+        self.image_listbox.see(new_index)
+        self.suppress_listbox_event = False
+        self._open_image_at_index(new_index)
 
     def _on_canvas_press(self, event: tk.Event[tk.Misc]) -> None:
         if self.current_image_rgb is None:
@@ -678,6 +757,11 @@ class AnnotationEditor:
         self.save_button.configure(state=tk.NORMAL if self.dirty else tk.DISABLED)
         self.delete_button.configure(state=tk.NORMAL if self.selected_annotation_index is not None else tk.DISABLED)
         self.add_button.configure(text="Adding... (Esc to cancel)" if self.mode == "add" else "Add Tool")
+
+    def _update_images_label(self) -> None:
+        total_count = len(self.image_paths)
+        current_position = self.current_index + 1 if self.current_index is not None and total_count else 0
+        self.images_label_var.set(f"Images ({current_position:,} / {total_count:,})")
 
     def _update_status(self, message: str | None = None) -> None:
         if message is not None:
