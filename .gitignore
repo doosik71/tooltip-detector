@@ -9,6 +9,7 @@ wheels/
 # Virtual environments
 .venv
 
+# Project specific
 /data
 /temp
-
+/git_commit_message.txt

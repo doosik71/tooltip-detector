@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 from pathlib import Path
+import random
 
 from tqdm import tqdm
 
@@ -32,7 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("./data/dataset"),
+        default=Path("./data/dataset/images"),
         help="Directory where extracted frames will be saved.",
     )
     parser.add_argument(
@@ -56,20 +58,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--train",
         type=int,
-        default=80,
+        default=60,
         help="Train split ratio.",
     )
     parser.add_argument(
         "--val",
         type=int,
-        default=10,
+        default=20,
         help="Validation split ratio.",
     )
     parser.add_argument(
         "--test",
         type=int,
-        default=10,
+        default=20,
         help="Test split ratio.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=0,
+        help="Random seed used for deterministic split assignment within each video.",
     )
     return parser.parse_args()
 
@@ -124,14 +132,26 @@ def allocate_split_counts(total_items: int, ratios: tuple[int, int, int]) -> dic
     return dict(zip(SPLIT_NAMES, counts, strict=True))
 
 
-def assign_splits(frame_numbers: list[int], ratios: tuple[int, int, int]) -> dict[int, str]:
+def create_split_rng(video_path: Path, seed: int) -> random.Random:
+    seed_material = f"{video_path.resolve()}::{seed}".encode("utf-8")
+    seed_digest = hashlib.blake2b(seed_material, digest_size=16).digest()
+    return random.Random(int.from_bytes(seed_digest, byteorder="big"))
+
+
+def assign_splits(
+    frame_numbers: list[int],
+    ratios: tuple[int, int, int],
+    rng: random.Random,
+) -> dict[int, str]:
     split_counts = allocate_split_counts(len(frame_numbers), ratios)
     assignments: dict[int, str] = {}
+    shuffled_frame_numbers = frame_numbers[:]
+    rng.shuffle(shuffled_frame_numbers)
     cursor = 0
 
     for split_name in SPLIT_NAMES:
         split_count = split_counts[split_name]
-        for frame_number in frame_numbers[cursor:cursor + split_count]:
+        for frame_number in shuffled_frame_numbers[cursor:cursor + split_count]:
             assignments[frame_number] = split_name
         cursor += split_count
 
@@ -169,6 +189,7 @@ def save_frames_for_video(
     ratios: tuple[int, int, int],
     output_width: int,
     output_height: int,
+    seed: int,
 ) -> dict[str, int]:
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
@@ -180,7 +201,8 @@ def save_frames_for_video(
             frame_count = 0
 
         frame_numbers = list(range(0, frame_count, frame_step))
-        assignments = assign_splits(frame_numbers, ratios)
+        split_rng = create_split_rng(video_path, seed)
+        assignments = assign_splits(frame_numbers, ratios, split_rng)
         saved_counts = {split_name: 0 for split_name in SPLIT_NAMES}
 
         progress = tqdm(
@@ -244,6 +266,7 @@ def main() -> int:
             ratios=ratios,
             output_width=args.width,
             output_height=args.height,
+            seed=args.seed,
         )
         for split_name, count in saved_counts.items():
             total_saved[split_name] += count
