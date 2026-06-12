@@ -190,7 +190,7 @@ def save_frames_for_video(
     output_width: int,
     output_height: int,
     seed: int,
-) -> dict[str, int]:
+) -> tuple[dict[str, int], dict[str, int]]:
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
         raise RuntimeError(f"Failed to open video: {video_path}")
@@ -203,7 +203,29 @@ def save_frames_for_video(
         frame_numbers = list(range(0, frame_count, frame_step))
         split_rng = create_split_rng(video_path, seed)
         assignments = assign_splits(frame_numbers, ratios, split_rng)
-        saved_counts = {split_name: 0 for split_name in SPLIT_NAMES}
+
+        # Build the full output-path map and separate pending from already-done.
+        output_map: dict[int, tuple[str, Path]] = {
+            fn: (
+                sn,
+                output_dir / sn / f"{video_path.stem}_{fn:08d}{IMAGE_SUFFIX}",
+            )
+            for fn, sn in assignments.items()
+        }
+        pending: dict[int, tuple[str, Path]] = {
+            fn: (sn, p) for fn, (sn, p) in output_map.items() if not p.exists()
+        }
+
+        saved_counts = {sn: 0 for sn in SPLIT_NAMES}
+        skipped_counts = {sn: 0 for sn in SPLIT_NAMES}
+        for fn, (sn, _) in output_map.items():
+            if fn not in pending:
+                skipped_counts[sn] += 1
+
+        if not pending:
+            return saved_counts, skipped_counts
+
+        pending_set = set(pending.keys())
 
         progress = tqdm(
             total=frame_count,
@@ -214,27 +236,26 @@ def save_frames_for_video(
 
         frame_number = 0
         while True:
-            success, frame = capture.read()
-            if not success:
-                break
-
-            split_name = assignments.get(frame_number)
-            if split_name is not None:
+            if frame_number in pending_set:
+                success, frame = capture.read()
+                if not success:
+                    break
+                split_name, output_path = pending[frame_number]
                 output_frame = resize_with_letterbox(frame, output_width, output_height)
-                output_path = (
-                    output_dir
-                    / split_name
-                    / f"{video_path.stem}_{frame_number:08d}{IMAGE_SUFFIX}"
-                )
                 if not cv2.imwrite(str(output_path), output_frame):
                     raise RuntimeError(f"Failed to write image: {output_path}")
                 saved_counts[split_name] += 1
+            else:
+                # Use grab() to advance without full decode.
+                success = capture.grab()
+                if not success:
+                    break
 
             frame_number += 1
             progress.update(1)
 
         progress.close()
-        return saved_counts
+        return saved_counts, skipped_counts
     finally:
         capture.release()
 
@@ -256,10 +277,11 @@ def main() -> int:
         return 0
 
     total_saved = {split_name: 0 for split_name in SPLIT_NAMES}
+    total_skipped = {split_name: 0 for split_name in SPLIT_NAMES}
     ratios = (args.train, args.val, args.test)
 
     for video_path in tqdm(video_files, desc="Videos", unit="video"):
-        saved_counts = save_frames_for_video(
+        saved_counts, skipped_counts = save_frames_for_video(
             video_path=video_path,
             output_dir=args.output,
             frame_step=args.frame,
@@ -268,8 +290,9 @@ def main() -> int:
             output_height=args.height,
             seed=args.seed,
         )
-        for split_name, count in saved_counts.items():
-            total_saved[split_name] += count
+        for split_name in SPLIT_NAMES:
+            total_saved[split_name] += saved_counts[split_name]
+            total_skipped[split_name] += skipped_counts[split_name]
 
     print("Extraction complete.")
     print(
@@ -277,6 +300,12 @@ def main() -> int:
         f"train={total_saved['train']}, "
         f"val={total_saved['val']}, "
         f"test={total_saved['test']}"
+    )
+    print(
+        "Skipped frames: "
+        f"train={total_skipped['train']}, "
+        f"val={total_skipped['val']}, "
+        f"test={total_skipped['test']}"
     )
     return 0
 

@@ -141,6 +141,14 @@ def ensure_output_dirs(output_root: Path) -> None:
         (output_root / split_name).mkdir(parents=True, exist_ok=True)
 
 
+def _all_outputs_exist(input_root: Path, output_root: Path) -> bool:
+    for split_name in SPLIT_NAMES:
+        for image_path in list_images(input_root / split_name):
+            if not (output_root / split_name / f"{image_path.stem}{MASK_SUFFIX}").exists():
+                return False
+    return True
+
+
 def build_model(model_path: Path, device: torch.device) -> torch.nn.Module:
     model = monai.networks.nets.FlexibleUNet(
         in_channels=3,
@@ -235,6 +243,11 @@ def main() -> int:
 
     device = resolve_device(args.device)
     ensure_output_dirs(args.output)
+
+    if not args.overwrite and _all_outputs_exist(args.input, args.output):
+        print("All segmentation masks already exist. Nothing to do.")
+        return 0
+
     model = build_model(args.model, device)
 
     totals = {

@@ -84,6 +84,14 @@ def ensure_output_dirs(output_root: Path) -> None:
         (output_root / split_name).mkdir(parents=True, exist_ok=True)
 
 
+def _all_outputs_exist(input_root: Path, output_root: Path) -> bool:
+    for split_name in SPLIT_NAMES:
+        for image_path in list_images(input_root / split_name):
+            if not (output_root / split_name / f"{image_path.stem}{ANNOTATION_SUFFIX}").exists():
+                return False
+    return True
+
+
 def list_images(image_dir: Path) -> list[Path]:
     return sorted(
         path
@@ -213,6 +221,10 @@ def main() -> int:
     args = parse_args()
     validate_args(args)
     ensure_output_dirs(args.output)
+
+    if not args.overwrite and _all_outputs_exist(args.input, args.output):
+        print("All annotation files already exist. Nothing to do.")
+        return 0
 
     totals = {
         split_name: {"saved": 0, "skipped": 0}

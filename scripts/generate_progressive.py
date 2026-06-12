@@ -19,24 +19,20 @@ def convert_to_progressive(input_dir, output_dir):
 
     total_files = len(video_files)
     if total_files == 0:
-        print(f"❌ '{input_dir}' 폴더에 변환할 동영상 파일이 없습니다.")
+        print(f"No video files found in '{input_dir}'.")
         return
 
-    print(f"🚀 총 {total_files}개의 동영상 검사 및 변환을 시작합니다...\n")
+    print(f"Found {total_files} video(s). Starting conversion...\n")
 
-    # 4. 루프를 돌며 ffmpeg 명령어 실행
     for idx, video_file in enumerate(video_files, start=1):
         output_file = output_path / video_file.name
 
-        # 🔍 [추가된 로직] 출력 파일이 이미 존재하는지 확인
         if output_file.exists():
-            print(f"==> [{idx}/{total_files}] ⏩ 건너뛰기(Skip): {video_file.name} (이미 변환된 파일이 존재합니다.)")
+            print(f"==> [{idx}/{total_files}] Skip: {video_file.name} (output already exists)")
             continue
 
-        print(f"==> [{idx}/{total_files}] ⏳ 변환 중: {video_file.name} ...")
+        print(f"==> [{idx}/{total_files}] Converting: {video_file.name} ...")
 
-        # ffmpeg 명령어 구성
-        # -y 옵션은 자동 skip을 위해 제거했습니다.
         cmd = [
             "ffmpeg",
             "-loglevel",
@@ -44,30 +40,27 @@ def convert_to_progressive(input_dir, output_dir):
             "-i",
             str(video_file),
             "-vf",
-            "yadif",  # 디인터레이스 필터
+            "yadif",
             "-c:v",
-            "libx264",  # H.264 코덱
+            "libx264",
             "-crf",
-            "20",  # 화질 설정
+            "20",
             "-c:a",
-            "copy",  # 오디오 복사
+            "copy",
             str(output_file),
         ]
 
         try:
-            # 명령어 실행 및 완료될 때까지 대기
             subprocess.run(cmd, check=True)
-            print(f"    ✨ 완료: {output_file.name}\n")
+            print(f"    Done: {output_file.name}\n")
         except subprocess.CalledProcessError as e:
-            print(f"    💥 에러 발생 ({video_file.name}): ffmpeg 변환에 실패했습니다.")
-            print(f"    상세 에러 코드: {e}\n")
+            print(f"    Error ({video_file.name}): ffmpeg conversion failed.")
+            print(f"    Exit code: {e}\n")
         except FileNotFoundError:
-            print(
-                "❌ 시스템에 'ffmpeg'이 설치되어 있지 않습니다. 'sudo apt install ffmpeg'을 실행해 주세요."
-            )
+            print("ffmpeg is not installed. Run 'sudo apt install ffmpeg'.")
             return
 
-    print("🎉 모든 작업이 완료되었습니다!")
+    print("All conversions complete.")
 
 
 if __name__ == "__main__":
