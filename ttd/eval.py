@@ -111,7 +111,7 @@ def evaluate(
     )
 
     run_ts = time.strftime("%Y%m%d_%H%M%S")
-    results_dir = os.path.join(results_root, run_ts)
+    results_dir = results_root
     os.makedirs(results_dir, exist_ok=True)
 
     print(f"Device      : {device}")

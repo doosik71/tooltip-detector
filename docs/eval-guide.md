@@ -6,7 +6,7 @@
 
 모델이 출력한 2채널 히트맵의 채널 1(tool channel)에 sigmoid를 적용하여 팁 위치 후보(피크)를 추출한다. 추출된 후보와 정답(GT) 팁 좌표를 매칭하여 픽셀 거리 기반 정확도 지표를 계산한다.
 
-평가 결과는 `data/results/YYYYMMDD_HHMMSS/` 디렉터리에 자동 저장된다.
+평가 결과는 `data/results/`에 자동 저장된다. 실행마다 덮어쓴다.
 
 ## 사전 준비
 
@@ -37,29 +37,26 @@ uv run python -m ttd.eval --threshold 0.3 --nms-radius 15
 
 ## 인수
 
-| 인수 | 기본값 | 설명 |
-| --- | --- | --- |
-| `--model` | `data/model/best.pt` | 모델 가중치 파일 경로 |
-| `--data-root` | `data/dataset` | 데이터셋 루트 디렉터리 |
-| `--results-dir` | `data/results` | 결과 저장 루트 디렉터리 |
-| `--threshold` | `0.5` | 피크 탐지 임계값 (히트맵 값 기준) |
-| `--nms-radius` | `20` | 두 피크 사이의 최소 픽셀 거리 (NMS) |
-| `--batch-size` | `16` | 추론 배치 크기 |
-| `--workers` | `4` | DataLoader 워커 수 |
-| `--device` | 자동 | torch device (예: `cuda:0`, `cpu`) |
+| 인수            | 기본값               | 설명                                |
+| --------------- | -------------------- | ----------------------------------- |
+| `--model`       | `data/model/best.pt` | 모델 가중치 파일 경로               |
+| `--data-root`   | `data/dataset`       | 데이터셋 루트 디렉터리              |
+| `--results-dir` | `data/results`       | 결과 저장 루트 디렉터리             |
+| `--threshold`   | `0.5`                | 피크 탐지 임계값 (히트맵 값 기준)   |
+| `--nms-radius`  | `20`                 | 두 피크 사이의 최소 픽셀 거리 (NMS) |
+| `--batch-size`  | `16`                 | 추론 배치 크기                      |
+| `--workers`     | `4`                  | DataLoader 워커 수                  |
+| `--device`      | 자동                 | torch device (예: `cuda:0`, `cpu`)  |
 
 ## 결과 저장
 
-실행마다 타임스탬프 디렉터리가 생성된다:
+실행마다 `data/results/`에 덮어쓴다:
 
 ```text
 data/results/
-└── 20260625_143022/
-    ├── summary.json
-    └── per_tip.csv
+├── summary.json
+└── per_tip.csv
 ```
-
-여러 실행 결과가 디렉터리별로 분리되므로 다른 모델이나 임계값 조합을 비교할 수 있다.
 
 ### summary.json
 
@@ -96,14 +93,14 @@ data/results/
 
 GT 팁 1개당 1행. 탐지 성공/실패 여부와 예측 좌표, 거리를 기록한다.
 
-| 컬럼 | 설명 |
-| --- | --- |
-| `frame` | 프레임 베이스명 (확장자 제외) |
-| `session` | 세션 ID |
-| `gt_x`, `gt_y` | GT 팁 픽셀 좌표 |
+| 컬럼               | 설명                                       |
+| ------------------ | ------------------------------------------ |
+| `frame`            | 프레임 베이스명 (확장자 제외)              |
+| `session`          | 세션 ID                                    |
+| `gt_x`, `gt_y`     | GT 팁 픽셀 좌표                            |
 | `pred_x`, `pred_y` | 매칭된 예측 피크 좌표 (탐지 실패 시 빈 값) |
-| `dist_px` | 유클리드 픽셀 거리 (탐지 실패 시 빈 값) |
-| `missed` | `1` = 탐지 실패, `0` = 탐지 성공 |
+| `dist_px`          | 유클리드 픽셀 거리 (탐지 실패 시 빈 값)    |
+| `missed`           | `1` = 탐지 실패, `0` = 탐지 성공           |
 
 예시:
 
@@ -134,17 +131,17 @@ doctor_250620_084707_00000042,doctor_250620_084707,186,240,,,,1
 
 ## 평가 지표
 
-| 지표 | 설명 |
-| --- | --- |
-| `n_gt_tips` | 테스트 세트 전체 GT 팁 수 |
-| `n_missed` | 후보 없음으로 탐지 실패한 팁 수 |
-| `miss_rate` | 탐지 실패율 (%) |
-| `mean_dist` | 매칭된 팁의 평균 픽셀 거리 |
-| `median_dist` | 중앙값 픽셀 거리 |
-| `p90_dist` | 90 백분위수 픽셀 거리 |
-| `hit_rate @ 10 px` | 거리 ≤ 10 px인 팁 비율 (%) |
-| `hit_rate @ 20 px` | 거리 ≤ 20 px인 팁 비율 (%) |
-| `hit_rate @ 50 px` | 거리 ≤ 50 px인 팁 비율 (%) |
+| 지표               | 설명                            |
+| ------------------ | ------------------------------- |
+| `n_gt_tips`        | 테스트 세트 전체 GT 팁 수       |
+| `n_missed`         | 후보 없음으로 탐지 실패한 팁 수 |
+| `miss_rate`        | 탐지 실패율 (%)                 |
+| `mean_dist`        | 매칭된 팁의 평균 픽셀 거리      |
+| `median_dist`      | 중앙값 픽셀 거리                |
+| `p90_dist`         | 90 백분위수 픽셀 거리           |
+| `hit_rate @ 10 px` | 거리 ≤ 10 px인 팁 비율 (%)      |
+| `hit_rate @ 20 px` | 거리 ≤ 20 px인 팁 비율 (%)      |
+| `hit_rate @ 50 px` | 거리 ≤ 50 px인 팁 비율 (%)      |
 
 세션별(`per_session`) `n_gt_tips`, `n_missed`, `mean_dist`도 함께 출력된다.
 
@@ -154,7 +151,7 @@ doctor_250620_084707_00000042,doctor_250620_084707,186,240,,,,1
 Device      : cuda
 Model       : data/model/best.pt
 Threshold   : 0.5   NMS radius: 20 px
-Results dir : data/results/20260625_143022
+Results dir : data/results
 Test frames : 36,142
 
   36000/36142  gt_tips_seen=30921  missed=312
@@ -183,8 +180,8 @@ Test frames : 36,142
     ...
 ==========================================================
 
-  summary.json  → data/results/20260625_143022/summary.json
-  per_tip.csv   → data/results/20260625_143022/per_tip.csv  (31,005 rows)
+  summary.json  → data/results/summary.json
+  per_tip.csv   → data/results/per_tip.csv  (31,005 rows)
 ```
 
 ## 임계값 튜닝
@@ -195,5 +192,3 @@ Test frames : 36,142
 - **임계값 높임** → 피크 수 감소 → 고신뢰도 탐지만 유지, miss 증가 가능성
 - **NMS 반경 낮춤** → 인접한 두 도구 팁을 별개로 탐지 가능
 - **NMS 반경 높임** → 같은 도구의 중복 피크 억제
-
-실행마다 결과가 별도 디렉터리에 저장되므로, 여러 조합으로 평가를 반복하여 `summary.json`끼리 비교할 수 있다.

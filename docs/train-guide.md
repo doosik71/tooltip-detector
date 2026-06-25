@@ -36,15 +36,15 @@ uv run python -m ttd.train
 
 ## 인수
 
-| 인수 | 기본값 | 설명 |
-| --- | --- | --- |
-| `--data-root` | `data/dataset` | 데이터셋 루트 디렉터리 |
-| `--model-dir` | `data/model` | 체크포인트 저장 디렉터리 |
-| `--epochs` | `30` | 총 에포크 수 |
-| `--batch-size` | `16` | 배치 크기 |
-| `--lr` | `1e-4` | 초기 학습률 (Adam optimizer) |
-| `--workers` | `4` | DataLoader 워커 수 |
-| `--resume` | off | `<model-dir>/last.pt`에서 이어서 학습 |
+| 인수           | 기본값         | 설명                                  |
+| -------------- | -------------- | ------------------------------------- |
+| `--data-root`  | `data/dataset` | 데이터셋 루트 디렉터리                |
+| `--model-dir`  | `data/model`   | 체크포인트 저장 디렉터리              |
+| `--epochs`     | `30`           | 총 에포크 수                          |
+| `--batch-size` | `16`           | 배치 크기                             |
+| `--lr`         | `1e-4`         | 초기 학습률 (Adam optimizer)          |
+| `--workers`    | `4`            | DataLoader 워커 수                    |
+| `--resume`     | off            | `<model-dir>/last.pt`에서 이어서 학습 |
 
 예시 — 에포크·배치 크기 변경:
 
@@ -56,17 +56,17 @@ uv run python -m ttd.train --epochs 60 --batch-size 8
 
 학습 시 아래 순서로 무작위 증강을 적용한다. 공간 변환은 이미지와 타겟 마스크에 동시 적용된다.
 
-| 변환 | 확률 | 파라미터 |
-| --- | --- | --- |
-| `HorizontalFlip` | 0.5 | — |
-| `VerticalFlip` | 0.2 | — |
-| `Affine` | 0.6 | 이동 ±5 %, 스케일 0.85–1.15, 회전 ±20° |
-| `RandomResizedCrop` | 0.5 | scale 0.7–1.0, 원본 가로세로비 ±10 % |
-| `Resize` | 항상 | 480 × 736 px |
-| `ColorJitter` | 0.6 | brightness/contrast ±0.3, saturation ±0.2, hue ±0.05 |
-| `GaussianBlur` | 0.3 | kernel 3–7 |
-| `GaussNoise` | 0.3 | — |
-| `Normalize` | 항상 | ImageNet mean/std |
+| 변환                | 확률 | 파라미터                                             |
+| ------------------- | ---- | ---------------------------------------------------- |
+| `HorizontalFlip`    | 0.5  | —                                                    |
+| `VerticalFlip`      | 0.2  | —                                                    |
+| `Affine`            | 0.6  | 이동 ±5 %, 스케일 0.85–1.15, 회전 ±20°               |
+| `RandomResizedCrop` | 0.5  | scale 0.7–1.0, 원본 가로세로비 ±10 %                 |
+| `Resize`            | 항상 | 480 × 736 px                                         |
+| `ColorJitter`       | 0.6  | brightness/contrast ±0.3, saturation ±0.2, hue ±0.05 |
+| `GaussianBlur`      | 0.3  | kernel 3–7                                           |
+| `GaussNoise`        | 0.3  | —                                                    |
+| `Normalize`         | 항상 | ImageNet mean/std                                    |
 
 검증(val)·평가(test) 시에는 `Resize` + `Normalize`만 적용한다.
 
@@ -89,9 +89,9 @@ loss = MSE(sigmoid(pred[:, 1]), target)
 
 각 에포크 종료 시 두 개의 파일이 저장된다.
 
-| 파일 | 저장 조건 | 설명 |
-| --- | --- | --- |
-| `data/model/last.pt` | 매 에포크 | 가장 최근 에포크의 모델 가중치 |
+| 파일                 | 저장 조건        | 설명                              |
+| -------------------- | ---------------- | --------------------------------- |
+| `data/model/last.pt` | 매 에포크        | 가장 최근 에포크의 모델 가중치    |
 | `data/model/best.pt` | val loss 개선 시 | 검증 손실이 가장 낮은 모델 가중치 |
 
 `data/model/` 디렉터리는 없으면 자동으로 생성된다.
