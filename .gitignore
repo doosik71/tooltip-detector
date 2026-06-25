@@ -11,3 +11,6 @@ wheels/
 
 # Project specific
 /data
+/PROMPTS.md
+/temp
+/.claude
