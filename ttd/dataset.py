@@ -128,17 +128,22 @@ class SurgicalToolDataset(Dataset):
 
     def __getitem__(self, idx: int):
         ann_path = self.samples[idx]
-        with open(ann_path) as f:
-            ann = json.load(f)
-
         stem = os.path.splitext(os.path.basename(ann_path))[0]
-        image = np.array(Image.open(os.path.join(self.img_dir, stem + ".png")))
-        seg = np.array(Image.open(os.path.join(self.seg_dir, stem + ".png")))
 
-        target = self._build_target(seg, ann["annotations"])
+        try:
+            with open(ann_path) as f:
+                ann = json.load(f)
 
-        if self.transform is not None:
-            out = self.transform(image=image, mask=target)
-            image, target = out["image"], out["mask"]
+            image = np.array(Image.open(os.path.join(self.img_dir, stem + ".png")))
+            seg = np.array(Image.open(os.path.join(self.seg_dir, stem + ".png")))
 
-        return image, target
+            target = self._build_target(seg, ann["annotations"])
+
+            if self.transform is not None:
+                out = self.transform(image=image, mask=target)
+                image, target = out["image"], out["mask"]
+
+            return image, target
+        except Exception as e:
+            print(f"Error: {stem}.png - {e}")
+            raise
