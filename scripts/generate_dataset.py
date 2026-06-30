@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 from pathlib import Path
 import random
 
@@ -78,6 +79,16 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=0,
         help="Random seed used for deterministic split assignment within each video.",
+    )
+    parser.add_argument(
+        "--verify",
+        choices=("fast", "full"),
+        default="fast",
+        help=(
+            "How existing images are validated on resume. "
+            "'fast' (default) checks the PNG header/trailer only; "
+            "'full' fully decodes each image to detect any corruption."
+        ),
     )
     return parser.parse_args()
 
@@ -182,6 +193,64 @@ def resize_with_letterbox(frame, width: int, height: int):
     return output_frame
 
 
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_PNG_IEND = b"IEND\xaeB`\x82"
+
+
+def _has_png_envelope(path: Path) -> bool:
+    """Lightweight integrity check: PNG signature at the start and IEND at the end.
+
+    A write interrupted by a forced termination leaves a truncated file that is
+    missing its IEND trailer, so this catches the common resume-corruption case
+    by reading only a few bytes. It does not detect corruption inside an
+    otherwise complete envelope (use the full check for that).
+    """
+    try:
+        with path.open("rb") as handle:
+            if handle.read(8) != _PNG_SIGNATURE:
+                return False
+            handle.seek(-8, os.SEEK_END)
+            return handle.read(8) == _PNG_IEND
+    except OSError:
+        return False
+
+
+def is_valid_image(path: Path, full: bool = False) -> bool:
+    """Return True only if the file exists and looks like a readable image.
+
+    Existence alone is not a safe resume condition: a run killed mid-write can
+    leave a truncated/corrupt PNG behind. Such a file must be re-extracted
+    instead of skipped. ``full=True`` fully decodes the image (slow, thorough);
+    otherwise a fast header/trailer check is used (default).
+    """
+    if not path.is_file():
+        return False
+    if full:
+        return cv2.imread(str(path), cv2.IMREAD_UNCHANGED) is not None
+    return _has_png_envelope(path)
+
+
+def write_image_atomic(path: Path, image) -> None:
+    """Encode and write an image so the final path never holds a partial file.
+
+    The image is encoded in memory, written to a temporary sibling file, and
+    then atomically moved into place with ``os.replace``. If the process is
+    killed mid-write, only the temporary file can be left incomplete; the final
+    path keeps either the previous file or nothing.
+    """
+    success, buffer = cv2.imencode(path.suffix, image)
+    if not success:
+        raise RuntimeError(f"Failed to encode image: {path}")
+
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    try:
+        tmp_path.write_bytes(buffer.tobytes())
+        os.replace(tmp_path, path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+
 def save_frames_for_video(
     video_path: Path,
     output_dir: Path,
@@ -190,6 +259,7 @@ def save_frames_for_video(
     output_width: int,
     output_height: int,
     seed: int,
+    full_verify: bool = False,
 ) -> tuple[dict[str, int], dict[str, int]]:
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
@@ -212,9 +282,22 @@ def save_frames_for_video(
             )
             for fn, sn in assignments.items()
         }
-        pending: dict[int, tuple[str, Path]] = {
-            fn: (sn, p) for fn, (sn, p) in output_map.items() if not p.exists()
-        }
+        # Re-extract a frame when its image is missing OR exists but does not
+        # decode (e.g. a truncated file left behind by a forced termination).
+        pending: dict[int, tuple[str, Path]] = {}
+        corrupt_count = 0
+        for fn, (sn, p) in output_map.items():
+            if is_valid_image(p, full=full_verify):
+                continue
+            if p.exists():
+                corrupt_count += 1
+            pending[fn] = (sn, p)
+
+        if corrupt_count:
+            tqdm.write(
+                f"{video_path.name}: re-extracting {corrupt_count} "
+                "unreadable image(s) left from a previous run"
+            )
 
         saved_counts = {sn: 0 for sn in SPLIT_NAMES}
         skipped_counts = {sn: 0 for sn in SPLIT_NAMES}
@@ -242,8 +325,7 @@ def save_frames_for_video(
                     break
                 split_name, output_path = pending[frame_number]
                 output_frame = resize_with_letterbox(frame, output_width, output_height)
-                if not cv2.imwrite(str(output_path), output_frame):
-                    raise RuntimeError(f"Failed to write image: {output_path}")
+                write_image_atomic(output_path, output_frame)
                 saved_counts[split_name] += 1
             else:
                 # Use grab() to advance without full decode.
@@ -279,6 +361,7 @@ def main() -> int:
     total_saved = {split_name: 0 for split_name in SPLIT_NAMES}
     total_skipped = {split_name: 0 for split_name in SPLIT_NAMES}
     ratios = (args.train, args.val, args.test)
+    full_verify = args.verify == "full"
 
     for video_path in tqdm(video_files, desc="Videos", unit="video"):
         saved_counts, skipped_counts = save_frames_for_video(
@@ -289,6 +372,7 @@ def main() -> int:
             output_width=args.width,
             output_height=args.height,
             seed=args.seed,
+            full_verify=full_verify,
         )
         for split_name in SPLIT_NAMES:
             total_saved[split_name] += saved_counts[split_name]

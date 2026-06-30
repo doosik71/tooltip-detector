@@ -40,8 +40,8 @@ else:
 
 SPLIT_NAMES = ("train", "val", "test")
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
-MODEL_INPUT_HEIGHT = 736
-MODEL_INPUT_WIDTH = 480
+MODEL_INPUT_WIDTH = 736
+MODEL_INPUT_HEIGHT = 480
 MASK_SUFFIX = ".png"
 
 

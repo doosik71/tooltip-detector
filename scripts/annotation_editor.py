@@ -45,6 +45,7 @@ class AnnotationEditor:
 
         self.split_var = tk.StringVar(value=SPLIT_NAMES[0])
         self.show_segmentation_var = tk.BooleanVar(value=True)
+        self.show_annotation_var = tk.BooleanVar(value=True)
         self.status_var = tk.StringVar(value="Ready")
         self.images_label_var = tk.StringVar(value="Images (0 / 0)")
 
@@ -110,6 +111,14 @@ class AnnotationEditor:
             command=self._render_scene,
         )
         self.show_segmentation_checkbutton.pack(side=tk.LEFT, padx=(18, 0))
+
+        self.show_annotation_checkbutton = ttk.Checkbutton(
+            top_bar,
+            text="Show Annotation",
+            variable=self.show_annotation_var,
+            command=self._render_scene,
+        )
+        self.show_annotation_checkbutton.pack(side=tk.LEFT, padx=(12, 0))
 
         ttk.Label(top_bar, textvariable=self.status_var).pack(side=tk.RIGHT)
 
@@ -405,11 +414,12 @@ class AnnotationEditor:
         self.photo_image = self._rgb_to_photoimage(resized)
         self.canvas.create_image(offset_x, offset_y, anchor=tk.NW, image=self.photo_image)
 
-        for index, annotation in enumerate(self.current_annotations):
-            self._draw_annotation_box(index, annotation)
+        if self.show_annotation_var.get():
+            for index, annotation in enumerate(self.current_annotations):
+                self._draw_annotation_box(index, annotation)
 
-        for index, annotation in enumerate(self.current_annotations):
-            self._draw_annotation_tip(index, annotation)
+            for index, annotation in enumerate(self.current_annotations):
+                self._draw_annotation_tip(index, annotation)
 
         if self.preview_box is not None:
             x1, y1, x2, y2 = self.preview_box
@@ -577,6 +587,13 @@ class AnnotationEditor:
                 "start": (self._clamp_x(image_x), self._clamp_y(image_y)),
             }
             self.preview_box = (image_x, image_y, image_x, image_y)
+            self._render_scene()
+            return
+
+        if not self.show_annotation_var.get():
+            self.selected_annotation_index = None
+            self.drag_state = None
+            self._update_buttons()
             self._render_scene()
             return
 

@@ -117,6 +117,8 @@ python -m scripts.generate_segmentation --device cpu
 python -m scripts.generate_segmentation --overwrite
 ```
 
+문서: [docs/generate_segmentation.md](./docs/generate_segmentation.md)
+
 ### 6. annotation JSON 자동 생성
 
 ```bash
@@ -126,6 +128,8 @@ python -m scripts.generate_annotation
 이 스크립트는 segmentation mask에서 contour를 찾고, 각 contour의 bounding box와 tool tip 좌표를 계산해 JSON으로 저장한다.
 
 기본 출력은 `./data/dataset/annotation/{train,val,test}`이다.
+
+문서: [docs/generate_annotation.md](./docs/generate_annotation.md)
 
 ### 7. GUI 편집기로 annotation 수정
 
@@ -165,10 +169,15 @@ python -m scripts.annotation_editor
   - segmentation mask로부터 bbox/tip annotation JSON 생성
 - `scripts/annotation_editor.py`
   - annotation 수동 보정을 위한 GUI 편집기
+- `scripts/pipeline.py`
+  - 전체 파이프라인 단계를 실행하고 진행 상태를 보여주는 통합 GUI
 
 ## 문서 목록
 
 - [docs/download_model.md](./docs/download_model.md)
 - [docs/generate_progressive.md](./docs/generate_progressive.md)
 - [docs/generate_dataset.md](./docs/generate_dataset.md)
+- [docs/generate_segmentation.md](./docs/generate_segmentation.md)
+- [docs/generate_annotation.md](./docs/generate_annotation.md)
 - [docs/annotation_editor.md](./docs/annotation_editor.md)
+- [docs/pipeline.md](./docs/pipeline.md)
