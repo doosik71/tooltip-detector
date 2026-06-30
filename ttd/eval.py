@@ -35,7 +35,8 @@ from scipy.ndimage import label as ndi_label
 from torch.utils.data import DataLoader
 
 from ttd.dataset import SurgicalToolDataset
-from ttd.model import TooltipDetector
+from ttd.model import REGISTRY as MODEL_REGISTRY
+from ttd.model import build as build_model
 from ttd.train import _eval_transform
 
 _HIT_THRESHOLDS = (10, 20, 50)
@@ -98,6 +99,7 @@ def _session_id(ann_path: str) -> str:
 
 def evaluate(
     model_path: str,
+    model_type: str,
     data_root: str,
     threshold: float,
     nms_radius: int,
@@ -115,12 +117,13 @@ def evaluate(
     os.makedirs(results_dir, exist_ok=True)
 
     print(f"Device      : {device}")
+    print(f"Model type  : {model_type}")
     print(f"Model       : {model_path}")
     print(f"Threshold   : {threshold}   NMS radius: {nms_radius} px")
     print(f"Results dir : {results_dir}")
 
     # ── Model ────────────────────────────────────────────────────────────
-    model = TooltipDetector(num_classes=2).to(device)
+    model = build_model(model_type, num_classes=2).to(device)
     state = torch.load(model_path, map_location=device, weights_only=False)
     model.load_state_dict(state)
     model.eval()
@@ -228,6 +231,7 @@ def evaluate(
 
     stats: dict = {
         "timestamp":            run_ts,
+        "model_type":           model_type,
         "model_path":           model_path,
         "threshold":            threshold,
         "nms_radius":           nms_radius,
@@ -332,11 +336,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Evaluate TooltipDetector tip-prediction accuracy on the test set"
     )
-    parser.add_argument("--model",       default="data/model/best.pt",
-                        help="Path to model weights (default: data/model/best.pt)")
+    parser.add_argument("--model-type",  default="monai",
+                        choices=list(MODEL_REGISTRY),
+                        help="Model architecture (default: monai)")
+    parser.add_argument("--model",       default=None,
+                        help="Path to model weights "
+                             "(default: data/models/<model-type>/best.pt)")
     parser.add_argument("--data-root",   default="data/dataset")
-    parser.add_argument("--results-dir", default="data/results",
-                        help="Root directory for result runs (default: data/results)")
+    parser.add_argument("--results-dir", default=None,
+                        help="Directory for results "
+                             "(default: data/results/<model-type>)")
     parser.add_argument("--threshold",   type=float, default=0.5,
                         help="Heatmap value threshold for peak detection (default: 0.5)")
     parser.add_argument("--nms-radius",  type=int,   default=20,
@@ -347,8 +356,14 @@ def main() -> None:
                         help="torch device, e.g. 'cuda:0' (default: auto)")
     args = parser.parse_args()
 
+    if args.model is None:
+        args.model = f"data/models/{args.model_type}/best.pt"
+    if args.results_dir is None:
+        args.results_dir = f"data/results/{args.model_type}"
+
     evaluate(
         model_path=args.model,
+        model_type=args.model_type,
         data_root=args.data_root,
         threshold=args.threshold,
         nms_radius=args.nms_radius,

@@ -5,7 +5,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
 uv run python -m ttd.eval \
-  --model      "data/model/best.pt" \
   --data-root  "data/dataset" \
   --threshold  0.5 \
   --nms-radius 20 \

@@ -21,12 +21,17 @@ Controls
 Usage
 -----
     uv run python ttd/tooltip-detector.py
-    uv run python ttd/tooltip-detector.py --model data/model/best.pt --data-root data/dataset
+    uv run python ttd/tooltip-detector.py --model-type monai_mini
+    uv run python ttd/tooltip-detector.py --model data/models/monai/best.pt --data-root data/dataset
+
+The model architecture can also be switched at runtime via the GUI's "Model"
+dropdown, which loads data/models/<model-type>/best.pt for the selected type.
 """
 import argparse
 import json
 import os
 import sys
+import time
 
 import numpy as np
 import torch
@@ -36,7 +41,8 @@ from PIL import Image, ImageDraw, ImageTk
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from ttd.model import TooltipDetector
+from ttd.model import REGISTRY as MODEL_REGISTRY
+from ttd.model import build as build_model
 from ttd.train import _eval_transform
 from ttd.eval import find_peaks
 from ttd.dataset import SurgicalToolDataset
@@ -55,6 +61,24 @@ _PRED_COLOR  = "#FF3333"  # predicted tip X marker
 _LINE_COLOR  = "#FFFF00"  # GT → prediction error line
 
 _HIT_THRESHOLDS = (10, 20, 50)
+_SEG_OVERLAY_RGB = np.array([0, 220, 120], dtype=np.uint8)
+
+
+# ---------------------------------------------------------------------------
+# Model helpers
+# ---------------------------------------------------------------------------
+
+def _default_model_path(model_type: str) -> str:
+    return os.path.join("data", "models", model_type, "best.pt")
+
+
+def _infer_model_type_from_path(model_path: str) -> str | None:
+    norm = os.path.normpath(model_path)
+    parts = norm.split(os.sep)
+    for model_type in MODEL_REGISTRY:
+        if model_type in parts:
+            return model_type
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +99,26 @@ def _blend_heatmap(image: np.ndarray, heatmap: np.ndarray, alpha: float = 0.65) 
     return np.where(mask,
                     (image * (1.0 - alpha) + colored * alpha).astype(np.uint8),
                     image)
+
+
+def _blend_segmentation(
+    image: np.ndarray,
+    segmentation: np.ndarray | None,
+    alpha: float = 0.35,
+) -> np.ndarray:
+    """Overlay a binary segmentation mask onto an RGB image."""
+    if segmentation is None:
+        return image
+
+    mask = segmentation > 0
+    if not mask.any():
+        return image
+
+    blended = image.copy()
+    blended[mask] = (
+        blended[mask] * (1.0 - alpha) + _SEG_OVERLAY_RGB * alpha
+    ).astype(np.uint8)
+    return blended
 
 
 def _draw_gt(image: np.ndarray, annotations: list) -> np.ndarray:
@@ -98,7 +142,8 @@ def _draw_gt(image: np.ndarray, annotations: list) -> np.ndarray:
 
 def _draw_predictions(image: np.ndarray,
                       peaks: list,
-                      gt_tips: list | None = None) -> np.ndarray:
+                      gt_tips: list | None = None,
+                      draw_X_markers: bool = True) -> np.ndarray:
     """Draw predicted tip X markers and yellow lines to GT tips."""
     pil = Image.fromarray(image)
     draw = ImageDraw.Draw(pil)
@@ -113,9 +158,12 @@ def _draw_predictions(image: np.ndarray,
     # Red X markers for predictions
     for px, py, _ in peaks:
         px, py = int(px), int(py)
-        r = 10
-        draw.line([px - r, py - r, px + r, py + r], fill=_PRED_COLOR, width=6)
-        draw.line([px + r, py - r, px - r, py + r], fill=_PRED_COLOR, width=6)
+
+        if draw_X_markers:
+            r = 10
+            draw.line([px - r, py - r, px + r, py + r], fill=_PRED_COLOR, width=6)
+            draw.line([px + r, py - r, px - r, py + r], fill=_PRED_COLOR, width=6)
+
         # Small white dot at center
         s = 4
         draw.ellipse([px - s, py - s, px + s, py + s], fill="white")
@@ -133,12 +181,13 @@ def _to_photo(arr: np.ndarray) -> ImageTk.PhotoImage:
 # ---------------------------------------------------------------------------
 
 class TooltipDetectorApp(tk.Tk):
-    def __init__(self, model_path: str, data_root: str):
+    def __init__(self, model_type: str, model_path: str, data_root: str):
         super().__init__()
         self.title("Tooltip Detector")
         self.resizable(False, False)
 
         self._data_root  = data_root
+        self._model_type = model_type
         self._model_path = model_path
         self._device     = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._transform  = _eval_transform()
@@ -149,7 +198,7 @@ class TooltipDetectorApp(tk.Tk):
         self._current_file_image: np.ndarray | None = None  # file mode: 480×736 RGB
 
         self._stats_reset()
-        self._model = self._load_model(model_path)
+        self._model = self._load_model(model_type, model_path)
 
         self._build_ui()
         self._load_split("test")
@@ -160,32 +209,87 @@ class TooltipDetectorApp(tk.Tk):
 
     # ── Model ────────────────────────────────────────────────────────────
 
-    def _load_model(self, path: str) -> TooltipDetector | None:
+    def _load_model(self, model_type: str, path: str) -> torch.nn.Module | None:
         try:
-            model = TooltipDetector(num_classes=2).to(self._device)
+            model = build_model(model_type, num_classes=2).to(self._device)
             state = torch.load(path, map_location=self._device, weights_only=False)
             model.load_state_dict(state)
             model.eval()
-            print(f"Model loaded: {path}  [{self._device}]")
+            print(f"Model loaded: {model_type}  {path}  [{self._device}]")
             return model
         except Exception as exc:
-            print(f"WARNING: could not load model — {exc}")
+            print(f"WARNING: could not load model '{model_type}' from {path} — {exc}")
             return None
 
-    def _infer(self, image: np.ndarray) -> tuple[np.ndarray, list]:
+    def _apply_model(self, model_type: str, model_path: str, *, show_error: bool):
+        self._model_type = model_type
+        self._model_path = model_path
+        self._model = self._load_model(model_type, model_path)
+        self._refresh_model_status()
+
+        if show_error and self._model is None:
+            messagebox.showwarning(
+                "Model Load Warning",
+                f"Could not load model '{model_type}' from:\n{model_path}",
+            )
+
+    def _refresh_model_status(self):
+        if not hasattr(self, "_model_status_var"):
+            return
+
+        model_name = os.path.basename(self._model_path)
+        if self._model:
+            text = f"Model: {self._model_type} ({model_name})  [{self._device}]"
+            color = "#005500"
+        else:
+            text = f"Model NOT loaded: {self._model_type} ({model_name})"
+            color = "#aa0000"
+
+        self._model_status_var.set(text)
+        self._model_status_lbl.config(fg=color)
+
+    def _rerender_current_view(self):
+        if self._mode_var.get() == "dataset" and self._ds:
+            self._render_dataset_frame(self._idx, update_stats=False)
+        elif self._current_file_image is not None:
+            self._render_file_frame(self._current_file_image)
+
+    def _load_segmentation_mask(self, ann_path: str) -> np.ndarray | None:
+        if self._ds is None:
+            return None
+
+        stem = os.path.splitext(os.path.basename(ann_path))[0]
+        seg_path = os.path.join(self._ds.seg_dir, stem + ".png")
+        if not os.path.exists(seg_path):
+            return None
+
+        try:
+            return np.array(Image.open(seg_path))
+        except Exception as exc:
+            print(f"WARNING: could not load segmentation mask {seg_path} — {exc}")
+            return None
+
+    def _infer(self, image: np.ndarray) -> tuple[np.ndarray, list, float]:
         """Run the model on a raw HWC uint8 RGB image.
 
-        Returns (heatmap, peaks) where heatmap is float32 (480, 736) and
-        peaks is a list of (x, y, confidence) tuples.
+        Returns (heatmap, peaks, infer_ms) where heatmap is float32 (480, 736),
+        peaks is a list of (x, y, confidence) tuples, and infer_ms is the model
+        forward time in milliseconds.
         """
         if self._model is None:
-            return np.zeros((480, 736), dtype=np.float32), []
+            return np.zeros((480, 736), dtype=np.float32), [], 0.0
 
         tensor = self._transform(image=image)["image"]
         tensor = tensor.unsqueeze(0).to(self._device, dtype=torch.float32)
 
+        if self._device.type == "cuda":
+            torch.cuda.synchronize()
+        infer_t0 = time.perf_counter()
         with torch.no_grad():
             pred = self._model(tensor)
+        if self._device.type == "cuda":
+            torch.cuda.synchronize()
+        infer_ms = (time.perf_counter() - infer_t0) * 1000.0
 
         heatmap = torch.sigmoid(pred[0, 1]).cpu().numpy()  # (H, W)
 
@@ -193,7 +297,7 @@ class TooltipDetectorApp(tk.Tk):
         nms_radius = int(self._nms_var.get())
         peaks = find_peaks(heatmap, threshold, nms_radius)
 
-        return heatmap, peaks
+        return heatmap, peaks, infer_ms
 
     # ── Accumulated stats ────────────────────────────────────────────────
 
@@ -261,6 +365,18 @@ class TooltipDetectorApp(tk.Tk):
         self._split_cb.bind("<<ComboboxSelected>>",
                             lambda _: self._load_split(self._split_var.get()))
 
+        tk.Label(ctrl, text="Model:").pack(side=tk.LEFT)
+        self._model_var = tk.StringVar(value=self._model_type)
+        self._model_cb = ttk.Combobox(
+            ctrl,
+            textvariable=self._model_var,
+            values=list(MODEL_REGISTRY),
+            width=12,
+            state="readonly",
+        )
+        self._model_cb.pack(side=tk.LEFT, padx=(2, 8))
+        self._model_cb.bind("<<ComboboxSelected>>", self._on_model_change)
+
         self._file_btn = tk.Button(ctrl, text="Open Image...",
                                    command=self._open_file, state=tk.DISABLED)
         self._file_btn.pack(side=tk.LEFT, padx=(0, 8))
@@ -305,13 +421,14 @@ class TooltipDetectorApp(tk.Tk):
         self._nms_lbl = tk.Label(param, text=" 20px", width=5)
         self._nms_lbl.pack(side=tk.LEFT, padx=(0, 16))
 
-        model_name = os.path.basename(self._model_path)
-        status_color = "#005500" if self._model else "#aa0000"
-        status_text  = f"Model: {model_name}  [{self._device}]"
-        if not self._model:
-            status_text = f"Model NOT loaded: {model_name}"
-        tk.Label(param, text=status_text,
-                 fg=status_color, font=("Monospace", 9)).pack(side=tk.LEFT)
+        self._model_status_var = tk.StringVar()
+        self._model_status_lbl = tk.Label(
+            param,
+            textvariable=self._model_status_var,
+            font=("Monospace", 9),
+        )
+        self._model_status_lbl.pack(side=tk.LEFT)
+        self._refresh_model_status()
 
         # ── Row 3: two image panels ───────────────────────────────────────
         panels = tk.Frame(self)
@@ -389,6 +506,14 @@ class TooltipDetectorApp(tk.Tk):
             self._lbl_heat.config(image="")
             self._info_var.set("[File mode]  Click 'Open Image…' to load an image.")
 
+    def _on_model_change(self, _=None):
+        model_type = self._model_var.get()
+        model_path = _default_model_path(model_type)
+        self._apply_model(model_type, model_path, show_error=True)
+        self._stats_reset()
+        self._refresh_stats_display()
+        self._rerender_current_view()
+
     def _on_param_change(self):
         """Slider moved — update labels and re-render current frame (no stat update)."""
         thr = self._threshold_var.get()
@@ -396,10 +521,7 @@ class TooltipDetectorApp(tk.Tk):
         self._thr_lbl.config(text=f"{thr:.2f}")
         self._nms_lbl.config(text=f"{nms:>3}px")
 
-        if self._mode_var.get() == "dataset" and self._ds:
-            self._render_dataset_frame(self._idx, update_stats=False)
-        elif self._current_file_image is not None:
-            self._render_file_frame(self._current_file_image)
+        self._rerender_current_view()
 
     # ── Dataset operations ───────────────────────────────────────────────
 
@@ -490,26 +612,28 @@ class TooltipDetectorApp(tk.Tk):
             ann_data = json.load(f)
         annotations = ann_data["annotations"]
         gt_tips = [(a["tip"]["x"], a["tip"]["y"]) for a in annotations]
+        segmentation = self._load_segmentation_mask(ann_path)
 
-        heatmap, peaks = self._infer(image)
+        heatmap, peaks, infer_ms = self._infer(image)
 
         if update_stats:
             self._stats_update(gt_tips, peaks)
             self._refresh_stats_display()
 
-        # Left panel: GT + predictions + error lines
-        left = _draw_gt(image.copy(), annotations)
-        left = _draw_predictions(left, peaks, gt_tips)
+        # Left panel: segmentation mask + GT + predictions + error lines
+        left = _blend_segmentation(image.copy(), segmentation)
+        left = _draw_gt(left, annotations)
+        left = _draw_predictions(left, peaks, gt_tips, False)
 
         # Right panel: heatmap + predicted peaks
         right = _blend_heatmap(image, heatmap)
         right = _draw_predictions(right, peaks)
 
         self._set_panels(left, right)
-        self._set_info_dataset(ann_path, gt_tips, peaks)
+        self._set_info_dataset(ann_path, gt_tips, peaks, infer_ms)
 
     def _render_file_frame(self, image: np.ndarray):
-        heatmap, peaks = self._infer(image)
+        heatmap, peaks, infer_ms = self._infer(image)
 
         left  = _draw_predictions(image.copy(), peaks)
         right = _blend_heatmap(image, heatmap)
@@ -522,6 +646,7 @@ class TooltipDetectorApp(tk.Tk):
         )
         self._info_var.set(
             f"[File mode]  Detected tips: {len(peaks)}\n"
+            f"Inference time: {infer_ms:.2f} ms\n"
             + (peaks_info if peaks_info else "(none — try lowering threshold)")
         )
 
@@ -530,9 +655,18 @@ class TooltipDetectorApp(tk.Tk):
         self._lbl_orig.config(image=self._photos[0])
         self._lbl_heat.config(image=self._photos[1])
 
-    def _set_info_dataset(self, ann_path: str, gt_tips: list, peaks: list):
+    def _set_info_dataset(
+        self,
+        ann_path: str,
+        gt_tips: list,
+        peaks: list,
+        infer_ms: float,
+    ):
         stem  = os.path.splitext(os.path.basename(ann_path))[0]
-        lines = [f"File: {stem}   GT tips: {len(gt_tips)}   Predicted: {len(peaks)}"]
+        lines = [
+            f"File: {stem}   GT tips: {len(gt_tips)}   Predicted: {len(peaks)}",
+            f"Inference time: {infer_ms:.2f} ms",
+        ]
 
         if gt_tips and peaks:
             for i, (gx, gy) in enumerate(gt_tips):
@@ -572,13 +706,27 @@ def main():
     parser = argparse.ArgumentParser(
         description="Interactive GUI for surgical tool tip detection"
     )
-    parser.add_argument("--model",     default="data/model/best.pt",
-                        help="Path to trained model weights (default: data/model/best.pt)")
+    parser.add_argument("--model-type", default="monai",
+                        choices=list(MODEL_REGISTRY),
+                        help="Model architecture to load (default: monai)")
+    parser.add_argument("--model",     default=None,
+                        help="Path to trained model weights "
+                             "(default: data/models/<model-type>/best.pt)")
     parser.add_argument("--data-root", default="data/dataset",
                         help="Path to data/dataset/ directory (default: data/dataset)")
     args = parser.parse_args()
 
-    app = TooltipDetectorApp(model_path=args.model, data_root=args.data_root)
+    model_path = args.model or _default_model_path(args.model_type)
+    model_type = args.model_type
+    inferred_model_type = _infer_model_type_from_path(model_path)
+    if args.model is not None and inferred_model_type is not None:
+        model_type = inferred_model_type
+
+    app = TooltipDetectorApp(
+        model_type=model_type,
+        model_path=model_path,
+        data_root=args.data_root,
+    )
     app.mainloop()
 
 
