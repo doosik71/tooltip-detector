@@ -184,7 +184,7 @@ class TooltipDetectorApp(tk.Tk):
     def __init__(self, model_type: str, model_path: str, data_root: str):
         super().__init__()
         self.title("Tooltip Detector")
-        self.resizable(False, False)
+        self.resizable(True, True)
 
         self._data_root  = data_root
         self._model_type = model_type
@@ -197,11 +197,20 @@ class TooltipDetectorApp(tk.Tk):
         self._photos: list[ImageTk.PhotoImage] = []
         self._current_file_image: np.ndarray | None = None  # file mode: 480×736 RGB
 
+        self._playing = False
+        self._play_after_id: str | None = None
+
         self._stats_reset()
         self._model = self._load_model(model_type, model_path)
 
         self._build_ui()
         self._load_split("test")
+
+        # Lock in the natural layout size as the minimum so per-frame result
+        # updates (info/stats text) never grow or shrink the window; the user
+        # can still enlarge it freely via the normal resize handles.
+        self.update_idletasks()
+        self.minsize(self.winfo_width(), self.winfo_height())
 
         self.bind("<Left>",  lambda _: self._navigate(-1))
         self.bind("<Right>", lambda _: self._navigate(+1))
@@ -388,12 +397,18 @@ class TooltipDetectorApp(tk.Tk):
         tk.Button(ctrl, text="Rand",
                   command=self._random).pack(side=tk.LEFT, padx=(4, 8))
 
+        self._play_btn = tk.Button(ctrl, text="Play", width=6, command=self._play)
+        self._play_btn.pack(side=tk.LEFT, padx=(0, 2))
+        self._pause_btn = tk.Button(ctrl, text="Pause", width=6,
+                                    command=self._pause, state=tk.DISABLED)
+        self._pause_btn.pack(side=tk.LEFT, padx=(0, 8))
+
         self._idx_var = tk.StringVar()
         idx_entry = tk.Entry(ctrl, textvariable=self._idx_var, width=8)
         idx_entry.pack(side=tk.LEFT)
         idx_entry.bind("<Return>", lambda _: self._jump())
 
-        self._total_lbl = tk.Label(ctrl, text="/ —")
+        self._total_lbl = tk.Label(ctrl, text="/ —", width=10, anchor="w")
         self._total_lbl.pack(side=tk.LEFT, padx=(2, 0))
 
         tk.Label(ctrl, text="  <- -> : navigate   R : random",
@@ -426,6 +441,7 @@ class TooltipDetectorApp(tk.Tk):
             param,
             textvariable=self._model_status_var,
             font=("Monospace", 9),
+            width=48, anchor="w",
         )
         self._model_status_lbl.pack(side=tk.LEFT)
         self._refresh_model_status()
@@ -452,11 +468,20 @@ class TooltipDetectorApp(tk.Tk):
         self._lbl_heat = tk.Label(lf_heat, width=PANEL_W, height=PANEL_H, bg="#1a1a1a")
         self._lbl_heat.pack()
 
-        # ── Row 4: per-frame info ─────────────────────────────────────────
-        self._info_var = tk.StringVar()
-        tk.Label(self, textvariable=self._info_var, anchor="w",
-                 justify=tk.LEFT, font=("Monospace", 9),
-                 padx=10, pady=2).pack(fill=tk.X)
+        # ── Row 4: per-frame info (fixed height; scrolls instead of resizing
+        #           the window when a frame has many GT tips / predictions) ──
+        info_frame = tk.Frame(self, padx=8, pady=2)
+        info_frame.pack(fill=tk.BOTH, expand=True)
+
+        info_scroll = tk.Scrollbar(info_frame, orient=tk.VERTICAL)
+        self._info_text = tk.Text(
+            info_frame, height=5, wrap=tk.WORD, font=("Monospace", 9),
+            relief=tk.FLAT, bg=self.cget("bg"), state=tk.DISABLED,
+            yscrollcommand=info_scroll.set,
+        )
+        info_scroll.config(command=self._info_text.yview)
+        self._info_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        info_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
         # ── Row 5: seek bar ───────────────────────────────────────────────
         seek_frame = tk.Frame(self, padx=8, pady=2)
@@ -490,21 +515,60 @@ class TooltipDetectorApp(tk.Tk):
 
         self._refresh_stats_display()
 
+    def _set_info(self, text: str):
+        """Update the per-frame info panel without resizing the window."""
+        self._info_text.config(state=tk.NORMAL)
+        self._info_text.delete("1.0", tk.END)
+        self._info_text.insert(tk.END, text)
+        self._info_text.config(state=tk.DISABLED)
+
     # ── Mode / parameter handlers ────────────────────────────────────────
 
     def _on_mode_change(self, _=None):
+        self._pause()
         mode = self._mode_var.get()
         if mode == "dataset":
             self._split_cb.config(state="readonly")
             self._file_btn.config(state=tk.DISABLED)
+            self._play_btn.config(state=tk.NORMAL)
             self._load_split(self._split_var.get() or "test")
         else:
             self._split_cb.config(state=tk.DISABLED)
             self._file_btn.config(state=tk.NORMAL)
+            self._play_btn.config(state=tk.DISABLED)
             # Clear panels
             self._lbl_orig.config(image="")
             self._lbl_heat.config(image="")
-            self._info_var.set("[File mode]  Click 'Open Image…' to load an image.")
+            self._set_info("[File mode]  Click 'Open Image…' to load an image.")
+
+    # ── Playback ─────────────────────────────────────────────────────────
+
+    def _play(self):
+        if self._mode_var.get() != "dataset" or not self._ds or self._playing:
+            return
+        self._playing = True
+        self._play_btn.config(state=tk.DISABLED)
+        self._pause_btn.config(state=tk.NORMAL)
+        self._schedule_play_tick()
+
+    def _pause(self):
+        self._playing = False
+        if self._play_after_id is not None:
+            self.after_cancel(self._play_after_id)
+            self._play_after_id = None
+        self._play_btn.config(state=tk.NORMAL)
+        self._pause_btn.config(state=tk.DISABLED)
+
+    def _schedule_play_tick(self):
+        self._play_after_id = self.after(500, self._play_tick)
+
+    def _play_tick(self):
+        if not self._playing:
+            return
+        # Schedule the next tick before rendering so the 0.5s cadence isn't
+        # inflated by this frame's inference/render time.
+        self._schedule_play_tick()
+        self._navigate(+1)
 
     def _on_model_change(self, _=None):
         model_type = self._model_var.get()
@@ -644,7 +708,7 @@ class TooltipDetectorApp(tk.Tk):
         peaks_info = "  ".join(
             f"({int(p[0])},{int(p[1])}) conf={p[2]:.3f}" for p in peaks
         )
-        self._info_var.set(
+        self._set_info(
             f"[File mode]  Detected tips: {len(peaks)}\n"
             f"Inference time: {infer_ms:.2f} ms\n"
             + (peaks_info if peaks_info else "(none — try lowering threshold)")
@@ -686,7 +750,7 @@ class TooltipDetectorApp(tk.Tk):
         elif gt_tips and not peaks:
             lines.append("  (no predictions — try lowering threshold or NMS radius)")
 
-        self._info_var.set("\n".join(lines))
+        self._set_info("\n".join(lines))
 
     # ── Stats display ─────────────────────────────────────────────────────
 
