@@ -1,51 +1,206 @@
-"""Asymmetric Kalman filter for the "which way should the camera move" signal.
-
-What *is* well suited to Kalman filtering is the derived signal actually
-sent to the robot: "which direction should the camera move right now".
-Every frame, the caller feeds this filter a measurement -- the raw
-center-to-tip vector when a tip is detected, or the zero vector when it is
-not -- and the filter's ordinary predict/update cycle does the smoothing.
-This makes the arrow ease toward newly detected tips instead of snapping to
-them, and decay smoothly to zero (both length and, implicitly, direction)
-when the tip is lost, all through the same mechanism.
-
-The filter's process noise is asymmetric, and which rate applies is decided
-by projecting the new measurement onto the *current* direction, not just by
-whether a tip was found this frame:
-
-  - The projection extends further than the current length (a still-valid
-    detection genuinely further along the same heading) -> small, slow
-    "grow" rate.
-  - The projection falls short of the current length -- no detection, OR a
-    valid detection whose tip moved toward center, past it, sideways, or
-    reversed relative to the current vector -> large, fast "decay" rate.
-
-This distinction matters because a surgeon signals "stop" by moving the
-tool tip *back* toward, or past, center -- i.e. opposite the arrow -- while
-the tip is still perfectly detected. Gating fast/slow purely on detection
-validity would miss that intent entirely. A robot that keeps drifting after
-the operator has clearly signalled a stop is a safety problem, so "stop"
-must always win the race against "start moving" -- growing into a motion
-may be gentle, but stopping may not be leisurely.
-"""
-
 import numpy as np
 
-DEFAULT_PROCESS_VAR_GROW = 0.05      # process noise while a tip is tracked
+W1 = 0.05             # slow blend weight -- "keep going"
+W2 = 0.5              # fast blend weight -- "stop" (lost tip, or reversal)
+
+DEFAULT_PROCESS_VAR_GROW = 0.5       # process noise while a tip is tracked
 DECAY_PROCESS_VAR = 150.0            # process noise once a tip is lost -- fixed
 # and independent of the grow rate, so a
 # "stop" always outraces a "start" toward
 # a new detection regardless of tuning
 DEFAULT_MEASUREMENT_VAR = 400.0      # ~20px measurement std
 
-FRESH_START_LEN = 5.0                # px; state length below which a new
-# detection counts as "starting from
-# zero" (decay asymptotically nears
-# zero but rarely hits it exactly) --
-# matches the GUI's minimum draw length
+FRESH_START_LEN = 5.0                # px; vector length below which it has no
+# established direction to project onto, and
+# below which a decaying result is snapped to
+# an exact (0, 0) instead of lingering forever
 
 
-class CameraMotionVector:
+class CameraMotionVectorMagnitudeBlend:
+    """Direction-vector smoothing for the "which way should the camera move" signal.
+
+    Only the *length* of the vector is smoothed here; the *direction*
+    snaps to this frame's raw measurement immediately (or holds the
+    previous direction when nothing was measured). This is a deliberate
+    difference from CameraMotionVectorBlend, which smooths direction too.
+
+    Let x be the current vector and m this frame's raw measurement (the
+    center-to-tip vector, or the zero vector when nothing valid was
+    detected this frame). p is the signed length of m's projection onto
+    x's own direction:
+
+        p = dot(m, x) / |x|
+
+    The new length s blends the current length |x| with p:
+
+        s = (1 - w) * |x| + w * p        (clamped to >= 0)
+
+    using a weight w chosen from just two fixed values:
+
+    - W1 (slow) when m points the same way x already does (p >= 0) and
+      this frame's detection is valid -- "keep going".
+    - W2 (fast) when there is no valid detection this frame, OR m points
+      back toward/past the origin relative to x (p < 0) -- "stop". A
+      surgeon signals "stop" by moving the tool tip back toward, or
+      past, center -- i.e. opposite the current vector -- while the tip
+      may still be perfectly detected, so this is judged by direction,
+      not by detection validity alone.
+
+    The new direction is simply unit(m) -- or, when m is the zero vector
+    (nothing detected), the previous direction is kept so the vector
+    shrinks in place instead of losing its heading.
+
+    When x has no established direction yet (its length is below
+    FRESH_START_LEN), the projection above is undefined, so s is instead
+    just w * |m| -- W1 if this frame's detection is valid (a fresh start
+    still ramps in slowly), W2 otherwise (|m| is 0 in that case anyway).
+    Decay only asymptotically approaches zero, so once a non-growing
+    step's length falls back under FRESH_START_LEN it is snapped to an
+    exact (0, 0) instead of lingering indefinitely.
+    """
+
+    def __init__(self):
+        self.x = np.zeros(2, dtype=np.float64)
+
+    def reset(self):
+        self.x[:] = 0.0
+
+    def step(self, measurement: tuple[float, float], valid: bool) -> tuple[float, float]:
+        m = np.asarray(measurement, dtype=np.float64)
+        prev_len = float(np.hypot(self.x[0], self.x[1]))
+        m_len = float(np.hypot(m[0], m[1]))
+
+        if prev_len < FRESH_START_LEN:
+            # No established direction to project onto -- treat the whole
+            # measurement as the "aligned" target length.
+            growing = valid
+            w = W1 if valid else W2
+            s = w * m_len
+        else:
+            p = float(np.dot(m, self.x)) / prev_len
+            growing = valid and p >= 0.0
+            w = W1 if growing else W2
+            s = max(0.0, (1.0 - w) * prev_len + w * p)
+
+        # Direction always follows the raw measurement directly (no
+        # smoothing) -- except when nothing was measured this frame, in
+        # which case there is no new direction to snap to, so the vector
+        # just shrinks in place along its previous heading.
+        if m_len > 0.0:
+            direction = m / m_len
+        elif prev_len > 0.0:
+            direction = self.x / prev_len
+        else:
+            direction = np.zeros(2, dtype=np.float64)
+
+        new_x = s * direction
+
+        # Decay only asymptotically approaches zero and would otherwise
+        # leave a permanent, never-quite-zero residual -- snap it to
+        # exactly zero once it's below the same threshold that defines
+        # "no established direction". Gated on "not growing" so this
+        # never clips the legitimately tiny first steps of a slow
+        # grow-in from zero.
+        if not growing and s < FRESH_START_LEN:
+            new_x = np.zeros(2, dtype=np.float64)
+
+        self.x = new_x
+        return float(self.x[0]), float(self.x[1])
+
+
+class CameraMotionVectorBlend:
+    """Direction-vector smoothing for the "which way should the camera move" signal.
+
+    Why not track the tip position directly
+    ------------------------------------------
+    A surgical tool tip does not move with a consistent velocity or
+    acceleration between frames -- in practice its motion is closer to
+    random. Tracking the raw tip position itself is therefore the wrong
+    problem. What matters is the derived signal actually sent to the robot:
+    "which direction should the camera move right now" -- and that signal
+    must only ever change gradually, since a sudden jump would translate
+    into a sudden, unsafe robot motion.
+
+    CameraMotionVectorBlend: direct geometric blend
+    ---------------------------------------------
+    An earlier version of this smoothing used a Kalman filter (preserved
+    below as CameraMotionVectorKalman for reference/comparison). In
+    practice its behavior did not match what was wanted -- most notably,
+    its inherited uncertainty could make the vector jump when growth
+    resumed after even a brief decay. CameraMotionVector replaces it with
+    an explicit weighted blend that carries no hidden filter state.
+
+    Let x be the current vector and m this frame's raw measurement (the
+    center-to-tip vector, or the zero vector when nothing valid was
+    detected this frame). m decomposes into its component p along x's own
+    direction and its component q perpendicular to x (p + q == m always):
+
+        dx = (1 - w) * x + w * p     # blended value along x's direction
+        dy = w * q                   # perpendicular value
+        x_new = dx + dy
+
+    The weight w for this frame is chosen from just two fixed values:
+
+    - W1 (slow) when m points the same way x already does (dot(m, x) >=
+        0) and this frame's detection is valid -- "keep going".
+    - W2 (fast) when there is no valid detection this frame, OR m points
+        back toward/past the origin relative to x (dot(m, x) < 0) -- "stop".
+        A surgeon signals "stop" by moving the tool tip back toward, or
+        past, center -- i.e. opposite the current vector -- while the tip
+        may still be perfectly detected, so this is judged by direction,
+        not by detection validity alone.
+
+    When x has no established direction yet (its length is below
+    FRESH_START_LEN), the projection above is undefined, so x eases
+    straight toward w * m instead -- W1 if this frame's detection is valid
+    (a fresh start still ramps in slowly), W2 otherwise (stays at zero,
+    since m is the zero vector in that case anyway). Decay only
+    asymptotically approaches zero, so once a non-growing step's result
+    falls back under FRESH_START_LEN it is snapped to an exact (0, 0)
+    instead of lingering indefinitely.
+    """
+
+    def __init__(self):
+        self.x = np.zeros(2, dtype=np.float64)
+
+    def reset(self):
+        self.x[:] = 0.0
+
+    def step(self, measurement: tuple[float, float], valid: bool) -> tuple[float, float]:
+        m = np.asarray(measurement, dtype=np.float64)
+        prev_len = float(np.hypot(self.x[0], self.x[1]))
+
+        if prev_len < FRESH_START_LEN:
+            # No established direction to project onto -- ease straight
+            # toward m instead. A valid detection still ramps in slowly
+            # (W1); otherwise m is (0, 0) anyway so the weight is moot.
+            growing = valid
+            w = W1 if valid else W2
+            new_x = w * m
+        else:
+            growing = valid and float(np.dot(m, self.x)) >= 0.0
+            w = W1 if growing else W2
+
+            p = (float(np.dot(m, self.x)) / (prev_len * prev_len)) * self.x
+            q = m - p
+            dx = (1.0 - w) * self.x + w * p
+            dy = w * q
+            new_x = dx + dy
+
+        # Decay only asymptotically approaches zero and would otherwise
+        # leave a permanent, never-quite-zero residual -- snap it to
+        # exactly zero once it's below the same threshold that defines
+        # "no established direction", so the two checks always agree.
+        # Gated on "not growing" so this never clips the legitimately
+        # tiny first steps of a slow grow-in from zero.
+        if not growing and float(np.hypot(new_x[0], new_x[1])) < FRESH_START_LEN:
+            new_x = np.zeros(2, dtype=np.float64)
+
+        self.x = new_x
+        return float(self.x[0]), float(self.x[1])
+
+
+class CameraMotionVectorKalman:
     """Random-walk Kalman filter over the center->tip vector.
 
     State is the (dx, dy) offset from a reference point (e.g. frame center)
@@ -108,16 +263,19 @@ class CameraMotionVector:
         return float((-q + np.sqrt(q * q + 4.0 * q * self.r)) / 2.0)
 
     def step(self, measurement: tuple[float, float], valid: bool) -> tuple[float, float]:
-        prev_len = float(np.hypot(self.x[0], self.x[1]))
-        if valid and prev_len < FRESH_START_LEN:
-            # Coming back from a full stop (or this is the very first
-            # detection ever): discard whatever covariance built up while
-            # decaying -- or the large startup default -- so the first frame
-            # after a stop grows in at the same slow, steady rate as ongoing
-            # tracking, instead of jumping because P was left inflated.
+        growing = self._is_growing(measurement, valid)
+
+        if growing:
+            # Pin P to the value ordinary, sustained tracking settles into
+            # before every growing step -- not just ones starting from zero.
+            # Any preceding decay run, however brief, inflates P (decay uses
+            # a much larger process noise); left alone, that inflated P
+            # would carry straight into the next growing step and produce a
+            # single-frame jump instead of the usual slow climb. During an
+            # uninterrupted growth run P is already at this value, so this
+            # is a no-op there -- it only matters right after a decay.
             self.p[:] = self._grow_steady_state_variance()
 
-        growing = self._is_growing(measurement, valid)
         q = self.q_grow if growing else DECAY_PROCESS_VAR
         self.p = self.p + q
         z = np.asarray(measurement, dtype=np.float64)
@@ -135,3 +293,6 @@ class CameraMotionVector:
             self.x[:] = 0.0
 
         return float(self.x[0]), float(self.x[1])
+
+
+CameraMotionVector = CameraMotionVectorMagnitudeBlend

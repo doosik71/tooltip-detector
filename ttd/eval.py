@@ -109,7 +109,8 @@ def evaluate(
     results_root: str,
 ) -> dict:
     device = torch.device(
-        device_str if device_str else ("cuda" if torch.cuda.is_available() else "cpu")
+        device_str if device_str else (
+            "cuda" if torch.cuda.is_available() else "cpu")
     )
 
     run_ts = time.strftime("%Y%m%d_%H%M%S")
@@ -250,7 +251,7 @@ def evaluate(
                 "n_gt_tips":    sess_gt[sid],
                 "n_missed":     sess_missed[sid],
                 "mean_dist_px": round(float(np.mean(sess_dists[sid])), 2)
-                                if sess_dists[sid] else None,
+                if sess_dists[sid] else None,
             }
             for sid in sorted(sess_gt)
         },
@@ -291,6 +292,7 @@ def _save_results(stats: dict, tip_rows: list[dict], results_dir: str) -> None:
 
 def _print_results(s: dict) -> None:
     W = 58
+
     def row(label, value):
         print(f"  {label:<34} {value}")
 
@@ -307,9 +309,9 @@ def _print_results(s: dict) -> None:
     row("Missed (no prediction)",
         f"{s['n_missed']:>10,}  ({s['miss_rate_pct']:.1f}%)")
     print("-" * W)
-    mean  = f"{s['mean_dist_px']:.2f} px"   if s['mean_dist_px']   is not None else "n/a"
-    med   = f"{s['median_dist_px']:.2f} px" if s['median_dist_px'] is not None else "n/a"
-    p90   = f"{s['p90_dist_px']:.2f} px"    if s['p90_dist_px']    is not None else "n/a"
+    mean = f"{s['mean_dist_px']:.2f} px" if s['mean_dist_px'] is not None else "n/a"
+    med = f"{s['median_dist_px']:.2f} px" if s['median_dist_px'] is not None else "n/a"
+    p90 = f"{s['p90_dist_px']:.2f} px" if s['p90_dist_px'] is not None else "n/a"
     row("Mean distance",   f"{mean:>14}")
     row("Median distance", f"{med:>14}")
     row("P90 distance",    f"{p90:>14}")

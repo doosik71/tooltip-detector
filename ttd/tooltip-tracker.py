@@ -13,12 +13,15 @@ Arrow smoothing
 ----------------
 The arrow's length/direction is owned by ArrowState, which turns each
 frame's raw peaks into a single measurement (resolve_measurement, below)
-and feeds it to ttd.camera_motion_vector.CameraMotionVector -- an
-asymmetric Kalman filter that smooths the "which direction should the
-camera move" signal rather than tracking the raw, near-randomly-moving
-tip. See that module for the full rationale: why a Kalman filter at all,
-why the grow/decay rates differ, and why "starting fresh" resets the
-filter's covariance instead of inheriting it.
+and feeds it to one of three interchangeable ttd.camera_motion_vector
+implementations, selectable at runtime via the "Method" dropdown:
+CameraMotionVectorMagnitudeBlend (default -- smooths length only,
+direction snaps to the measurement), CameraMotionVectorBlend (smooths
+the full vector, length and direction together), and
+CameraMotionVectorKalman (a Kalman filter, kept for comparison). See
+that module for the full rationale of each: why the tip itself isn't
+tracked directly, and why the blend/noise rate differs for "keep going"
+vs "stop".
 
 False-positive guards
 ----------------------
@@ -32,24 +35,27 @@ Arrow color
   Pink  (분홍색) : zero tips detected this frame.
   Green (연두색) : one or more tips detected this frame -- including counts
                    that get filtered out below as likely false positives.
-                   The tip-count polygon and the Kalman decay rate already
-                   flag those cases; the arrow color only distinguishes
-                   "nothing found" from "something found".
+                   The tip-count polygon and the fast "stop" blend rate
+                   already flag those cases; the arrow color only
+                   distinguishes "nothing found" from "something found".
 
 Controls
 --------
   Open Video...     : choose a video file
+  Method            : choose the arrow-smoothing implementation (see
+                       "Arrow smoothing" above); switching resets the
+                       arrow to zero since internal state isn't portable
+                       between implementations
   Play / Pause       : continuous, sequential playback with best-effort
                         real-time pacing (frames are dropped, never
                         reordered or skipped-then-reprocessed, to keep up)
   <- ->              : single-frame step (always sequential)
   Seek bar            : jump to an arbitrary frame (manual scrub)
   Threshold / NMS     : same peak-extraction parameters as tooltip-detector
-  Smoothing (grow q)  : Kalman process-noise variance used while a tip is
-                        tracked; lower = smoother/slower growth. The decay
-                        (tip lost) process noise is always kept much larger
-                        than this, so stopping is always faster than
-                        starting -- see ttd.camera_motion_vector.
+
+Each method's own internal blend/noise rates (W1/W2, or Kalman's process
+noise) are fixed in ttd.camera_motion_vector -- only which method runs
+is a GUI control, not its internal tuning.
 
 Usage
 -----
@@ -58,7 +64,6 @@ Usage
 """
 import argparse
 import os
-import sys
 import time
 
 import cv2
@@ -68,41 +73,71 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageDraw, ImageTk
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from ttd.model import REGISTRY as MODEL_REGISTRY
-from ttd.model import build as build_model
-from ttd.train import _eval_transform
-from ttd.eval import find_peaks
-from ttd.camera_motion_vector import (
-    CameraMotionVector,
-    DEFAULT_PROCESS_VAR_GROW,
-    DEFAULT_MEASUREMENT_VAR,
-)
+# NOTE: deliberately not top-level imports. `ttd.*` requires the project
+# root on sys.path, which only exists after the insert() below runs.
+# Editor/linter "organize imports" actions only reorder top-level import
+# statements, so nesting these under `if True:` keeps them pinned after the
+# sys.path fix-up instead of being hoisted back above it on every save.
+if True:
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+    from ttd.camera_motion_vector import (
+        CameraMotionVectorMagnitudeBlend,
+        CameraMotionVectorBlend,
+        CameraMotionVectorKalman,
+        DEFAULT_PROCESS_VAR_GROW,
+        DEFAULT_MEASUREMENT_VAR,
+    )
+    from ttd.eval import find_peaks
+    from ttd.train import _eval_transform
+    from ttd.model import build as build_model
+    from ttd.model import REGISTRY as MODEL_REGISTRY
 
 
 FRAME_W, FRAME_H = 736, 480          # model input size, and the coordinate
-                                     # space peaks/arrows are computed in
+# space peaks/arrows are computed in
 CENTER = (FRAME_W / 2.0, FRAME_H / 2.0)
 
-PANEL_W, PANEL_H = 552, 360          # on-screen display size (736 x 480 * 0.75,
-                                     # same scale-down as tooltip-detector.py so
-                                     # the window fits on smaller screens)
+# on-screen display size (736 x 480 * 0.75,
+PANEL_W, PANEL_H = 552, 360
+# same scale-down as tooltip-detector.py so
+# the window fits on smaller screens)
 
-_MAX_TIPS_BEFORE_REJECT = 3          # >= this many peaks => treat as no detection
-_TWO_TIP_MAX_ANGLE_DEG  = 90.0       # >= this angle between two tips => reject
-_MAX_ARROW_DRAW_LEN     = 200.0      # px, visual clamp only (state is unclamped)
-_MIN_ARROW_DRAW_LEN     = 2.0        # px, below this nothing is drawn
+_MAX_TIPS_BEFORE_REJECT = 3           # >= this many peaks => treat as no detection
+_TWO_TIP_MAX_ANGLE_DEG = 90.0         # >= this angle between two tips => reject
+# px, visual clamp only (state is unclamped)
+_MAX_ARROW_DRAW_LEN = 200.0
+_MIN_ARROW_DRAW_LEN = 2.0             # px, below this nothing is drawn
 
-_TIP_OVERFLOW_THRESHOLD = 3          # > this many peaks => draw the warning polygon
-_MAX_POLYGON_SIDES      = 5          # capped at a pentagon -- a hexagon reads too
-                                     # much like a circle to tell apart at a glance
-_POLYGON_RADIUS         = 12.0       # px
+# > this many peaks => draw the warning polygon
+_TIP_OVERFLOW_THRESHOLD = 3
+_MAX_POLYGON_SIDES = 5                # capped at a pentagon -- a hexagon reads too
+# much like a circle to tell apart at a glance
+_POLYGON_RADIUS = 12.0                # px
 
-_COLOR_DETECTED     = "#8CFF3C"      # 연두색 (yellow-green)
-_COLOR_NOT_DETECTED = "#FF7FCF"      # 분홍색 (pink)
-_COLOR_RAW_MARKER   = "#33AAFF"
+_MIN_VECTOR_LEN = 5.0
+
+_COLOR_DETECTED = "#8CFF3C"         # 연두색 (yellow-green)
+_COLOR_NOT_DETECTED = "#FF7FCF"     # 분홍색 (pink)
+_COLOR_RAW_MARKER = "#33AAFF"
 _COLOR_POLYGON_OUTLINE = "#EE1111"  # 붉은색 (red), outline only -- no fill
+
+# Selectable camera-motion smoothing implementations (ttd.camera_motion_vector).
+# Kalman needs constructor args the other two don't, so each entry is a
+# no-arg factory rather than the class itself.
+_METHOD_FACTORIES = {
+    "CameraMotionVectorMagnitudeBlend": lambda: CameraMotionVectorMagnitudeBlend(),
+    "CameraMotionVectorBlend": lambda: CameraMotionVectorBlend(),
+    "CameraMotionVectorKalman": lambda: CameraMotionVectorKalman(
+        DEFAULT_PROCESS_VAR_GROW, DEFAULT_MEASUREMENT_VAR),
+}
+_DEFAULT_METHOD = "CameraMotionVectorMagnitudeBlend"
+
+
+def _build_motion_vector(method: str):
+    return _METHOD_FACTORIES[method]()
 
 
 # ---------------------------------------------------------------------------
@@ -119,8 +154,7 @@ def resolve_measurement(
     always a concrete (dx, dy) -- the zero vector when invalid, so the
     caller can feed it straight into the Kalman filter unconditionally.
     two_tip_conflict is True only for the "exactly 2 tips, too far apart in
-    direction" case -- there's no such thing as a 2-sided warning polygon,
-    so the caller draws a red X instead (see _draw_two_tip_conflict_x).
+    direction" case.
     """
     cx, cy = center
 
@@ -139,7 +173,7 @@ def resolve_measurement(
     v0 = np.array([p0x - cx, p0y - cy])
     v1 = np.array([p1x - cx, p1y - cy])
     n0, n1 = np.linalg.norm(v0), np.linalg.norm(v1)
-    if n0 < 1e-6 or n1 < 1e-6:
+    if n0 < _MIN_VECTOR_LEN or n1 < _MIN_VECTOR_LEN:
         return (0.0, 0.0), False, "2 tips detected, one at center (degenerate)", False
 
     cos_angle = float(np.clip(np.dot(v0, v1) / (n0 * n1), -1.0, 1.0))
@@ -166,18 +200,20 @@ class ArrowState:
     peaks via update(), read back .vector / .length / .angle_deg for
     drawing, and .reason / .tip_count for the info panel. Internally it
     turns peaks into a single measurement (resolve_measurement) and feeds
-    the asymmetric Kalman filter (CameraMotionVector) that actually
-    smooths it -- see that class for why the smoothing is asymmetric.
+    whichever ttd.camera_motion_vector implementation is selected
+    (see _METHOD_FACTORIES) -- swap it at runtime with set_method().
     """
 
-    def __init__(
-        self,
-        process_var_grow: float = DEFAULT_PROCESS_VAR_GROW,
-        measurement_var: float = DEFAULT_MEASUREMENT_VAR,
-        center: tuple[float, float] = CENTER,
-    ):
+    def __init__(self, method: str = _DEFAULT_METHOD, center: tuple[float, float] = CENTER):
         self._center = center
-        self._kf = CameraMotionVector(process_var_grow, measurement_var)
+        self.method = method
+        self._kf = _build_motion_vector(method)
+        self.reason = "no tip detected"
+        self.tip_count = 0
+        self.last_measurement = (0.0, 0.0)
+        self.two_tip_conflict = False
+
+    def _reset_tracking_state(self):
         self.reason = "no tip detected"
         self.tip_count = 0
         self.last_measurement = (0.0, 0.0)
@@ -185,13 +221,16 @@ class ArrowState:
 
     def reset(self):
         self._kf.reset()
-        self.reason = "no tip detected"
-        self.tip_count = 0
-        self.last_measurement = (0.0, 0.0)
-        self.two_tip_conflict = False
+        self._reset_tracking_state()
 
-    def set_smoothing(self, process_var_grow: float):
-        self._kf.set_noise(process_var_grow)
+    def set_method(self, method: str):
+        """Switch the smoothing implementation. The different
+        implementations keep incompatible internal state (e.g. Kalman's
+        covariance vs. a bare vector), so switching restarts the arrow
+        from zero rather than trying to carry state across."""
+        self.method = method
+        self._kf = _build_motion_vector(method)
+        self._reset_tracking_state()
 
     @property
     def vector(self) -> tuple[float, float]:
@@ -208,7 +247,8 @@ class ArrowState:
 
     def update(self, peaks: list[tuple[float, float, float]]) -> tuple[float, float]:
         """Advance the arrow state from this frame's detected peaks."""
-        measurement, valid, reason, two_tip_conflict = resolve_measurement(peaks, self._center)
+        measurement, valid, reason, two_tip_conflict = resolve_measurement(
+            peaks, self._center)
         self.reason = reason
         self.tip_count = len(peaks)
         self.last_measurement = measurement
@@ -239,7 +279,8 @@ def _draw_arrow(
     draw = ImageDraw.Draw(pil)
 
     cx, cy = center
-    draw.ellipse([cx - 4, cy - 4, cx + 4, cy + 4], fill="white", outline="black")
+    draw.ellipse([cx - 4, cy - 4, cx + 4, cy + 4],
+                 fill="white", outline="black")
 
     length = float(np.hypot(*vector))
     if length >= _MIN_ARROW_DRAW_LEN:
@@ -257,7 +298,8 @@ def _draw_arrow(
         wings = []
         for sign in (-1, 1):
             ang = base_ang + np.pi - sign * head_ang
-            wings.append((tip_x + head_len * np.cos(ang), tip_y + head_len * np.sin(ang)))
+            wings.append((tip_x + head_len * np.cos(ang),
+                         tip_y + head_len * np.sin(ang)))
         draw.polygon([(tip_x, tip_y), wings[0], wings[1]], fill=color)
 
     return np.array(pil)
@@ -305,8 +347,10 @@ def _draw_two_tip_conflict_x(
     r = _POLYGON_RADIUS
     pil = Image.fromarray(image)
     draw = ImageDraw.Draw(pil)
-    draw.line([cx - r, cy - r, cx + r, cy + r], fill=_COLOR_POLYGON_OUTLINE, width=6)
-    draw.line([cx - r, cy + r, cx + r, cy - r], fill=_COLOR_POLYGON_OUTLINE, width=6)
+    draw.line([cx - r, cy - r, cx + r, cy + r],
+              fill=_COLOR_POLYGON_OUTLINE, width=6)
+    draw.line([cx - r, cy + r, cx + r, cy - r],
+              fill=_COLOR_POLYGON_OUTLINE, width=6)
     return np.array(pil)
 
 
@@ -327,7 +371,8 @@ class TooltipTrackerApp(tk.Tk):
 
         self._model_type = model_type
         self._model_path = model_path
-        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self._device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
         self._transform = _eval_transform()
 
         self._cap: cv2.VideoCapture | None = None
@@ -336,7 +381,7 @@ class TooltipTrackerApp(tk.Tk):
         self._total_frames = 0
         self._photo: ImageTk.PhotoImage | None = None
 
-        self._arrow = ArrowState(DEFAULT_PROCESS_VAR_GROW, DEFAULT_MEASUREMENT_VAR)
+        self._arrow = ArrowState()
 
         self._playing = False
         self._play_after_id: str | None = None
@@ -350,7 +395,7 @@ class TooltipTrackerApp(tk.Tk):
         self.update_idletasks()
         self.minsize(self.winfo_width(), self.winfo_height())
 
-        self.bind("<Left>",  lambda _: self._step(-1))
+        self.bind("<Left>", lambda _: self._step(-1))
         self.bind("<Right>", lambda _: self._step(+1))
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -360,13 +405,15 @@ class TooltipTrackerApp(tk.Tk):
     def _load_model(self, model_type: str, path: str) -> torch.nn.Module | None:
         try:
             model = build_model(model_type, num_classes=2).to(self._device)
-            state = torch.load(path, map_location=self._device, weights_only=False)
+            state = torch.load(
+                path, map_location=self._device, weights_only=False)
             model.load_state_dict(state)
             model.eval()
             print(f"Model loaded: {model_type}  {path}  [{self._device}]")
             return model
         except Exception as exc:
-            print(f"WARNING: could not load model '{model_type}' from {path} — {exc}")
+            print(
+                f"WARNING: could not load model '{model_type}' from {path} — {exc}")
             return None
 
     def _on_model_change(self, _=None):
@@ -382,6 +429,10 @@ class TooltipTrackerApp(tk.Tk):
                 f"Could not load model '{model_type}' from:\n{model_path}",
             )
         self._arrow.reset()
+        self._render_current_frame(advance_kf=False)
+
+    def _on_method_change(self, _=None):
+        self._arrow.set_method(self._method_var.get())
         self._render_current_frame(advance_kf=False)
 
     def _refresh_model_status(self):
@@ -432,7 +483,15 @@ class TooltipTrackerApp(tk.Tk):
         model_cb.pack(side=tk.LEFT, padx=(2, 8))
         model_cb.bind("<<ComboboxSelected>>", self._on_model_change)
 
-        self._open_btn = tk.Button(ctrl, text="Open Video...", command=self._open_video)
+        tk.Label(ctrl, text="Method:").pack(side=tk.LEFT)
+        self._method_var = tk.StringVar(value=self._arrow.method)
+        method_cb = ttk.Combobox(ctrl, textvariable=self._method_var,
+                                 values=list(_METHOD_FACTORIES), width=28, state="readonly")
+        method_cb.pack(side=tk.LEFT, padx=(2, 8))
+        method_cb.bind("<<ComboboxSelected>>", self._on_method_change)
+
+        self._open_btn = tk.Button(
+            ctrl, text="Open Video...", command=self._open_video)
         self._open_btn.pack(side=tk.LEFT, padx=(0, 8))
 
         tk.Button(ctrl, text="<-", width=3,
@@ -475,15 +534,6 @@ class TooltipTrackerApp(tk.Tk):
         self._nms_lbl = tk.Label(param, text=" 20px", width=5)
         self._nms_lbl.pack(side=tk.LEFT, padx=(0, 12))
 
-        tk.Label(param, text="Smoothing (grow q):").pack(side=tk.LEFT)
-        self._smoothing_var = tk.DoubleVar(value=DEFAULT_PROCESS_VAR_GROW)
-        ttk.Scale(param, from_=0.001, to=1.0, orient=tk.HORIZONTAL,
-                  variable=self._smoothing_var, length=120,
-                  command=lambda _: self._on_smoothing_change()
-                  ).pack(side=tk.LEFT, padx=(4, 2))
-        self._smoothing_lbl = tk.Label(param, text=f"{DEFAULT_PROCESS_VAR_GROW:.3f}", width=6)
-        self._smoothing_lbl.pack(side=tk.LEFT, padx=(0, 12))
-
         self._model_status_var = tk.StringVar()
         self._model_status_lbl = tk.Label(
             param, textvariable=self._model_status_var,
@@ -501,7 +551,8 @@ class TooltipTrackerApp(tk.Tk):
             padx=4, pady=4,
         )
         panel.pack(padx=8, pady=4)
-        self._lbl_video = tk.Label(panel, width=PANEL_W, height=PANEL_H, bg="#1a1a1a")
+        self._lbl_video = tk.Label(
+            panel, width=PANEL_W, height=PANEL_H, bg="#1a1a1a")
         self._lbl_video.pack()
 
         # A Label's width/height are character/line counts until an image is
@@ -509,7 +560,8 @@ class TooltipTrackerApp(tk.Tk):
         # video opened yet) would blow up to hundreds of "characters" wide
         # instead of PANEL_W pixels, and the whole window would balloon past
         # the screen size.
-        self._photo = ImageTk.PhotoImage(Image.new("RGB", (PANEL_W, PANEL_H), (26, 26, 26)))
+        self._photo = ImageTk.PhotoImage(
+            Image.new("RGB", (PANEL_W, PANEL_H), (26, 26, 26)))
         self._lbl_video.config(image=self._photo)
 
         # ── Row 4: per-frame info ───────────────────────────────────────────
@@ -531,7 +583,8 @@ class TooltipTrackerApp(tk.Tk):
                                   orient=tk.HORIZONTAL, variable=self._seek_var,
                                   command=self._on_seek, state=tk.DISABLED)
         self._seekbar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=6)
-        self._seek_end_lbl = tk.Label(seek_frame, text="—", width=6, anchor="w")
+        self._seek_end_lbl = tk.Label(
+            seek_frame, text="—", width=6, anchor="w")
         self._seek_end_lbl.pack(side=tk.LEFT)
         self._seek_after_id: str | None = None
 
@@ -549,11 +602,6 @@ class TooltipTrackerApp(tk.Tk):
         if not self._playing:
             self._render_current_frame(advance_kf=False)
 
-    def _on_smoothing_change(self):
-        q = self._smoothing_var.get()
-        self._smoothing_lbl.config(text=f"{q:.3f}")
-        self._arrow.set_smoothing(q)
-
     # ── Video loading ────────────────────────────────────────────────────
 
     def _open_video(self):
@@ -567,7 +615,8 @@ class TooltipTrackerApp(tk.Tk):
 
         cap = cv2.VideoCapture(path)
         if not cap.isOpened():
-            messagebox.showerror("Load Error", f"Could not open video:\n{path}")
+            messagebox.showerror(
+                "Load Error", f"Could not open video:\n{path}")
             return
 
         self._pause()
@@ -579,7 +628,8 @@ class TooltipTrackerApp(tk.Tk):
         self._total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
         self._arrow.reset()
-        self._seekbar.config(state=tk.NORMAL, to=max(1, self._total_frames - 1))
+        self._seekbar.config(
+            state=tk.NORMAL, to=max(1, self._total_frames - 1))
         self._seek_end_lbl.config(text=str(max(0, self._total_frames - 1)))
         self._play_btn.config(state=tk.NORMAL)
 
@@ -646,6 +696,7 @@ class TooltipTrackerApp(tk.Tk):
 
         display = _draw_raw_markers(frame.copy(), peaks)
         display = _draw_arrow(display, smoothed, color)
+
         if len(peaks) > _TIP_OVERFLOW_THRESHOLD:
             display = _draw_tip_overflow_polygon(display, len(peaks))
         elif self._arrow.two_tip_conflict:
@@ -656,15 +707,17 @@ class TooltipTrackerApp(tk.Tk):
 
         measurement = self._arrow.last_measurement
         self._set_info(
-            f"{self._arrow.reason}   |   inference: {infer_ms:.1f} ms\n"
-            f"raw measurement: ({measurement[0]:+.1f}, {measurement[1]:+.1f})   "
+            f"inference: {infer_ms:.1f} ms\n"
+            f"{self._arrow.reason}\n"
+            f"raw measurement: ({measurement[0]:+.1f}, {measurement[1]:+.1f})\n"
             f"smoothed arrow: len={self._arrow.length:.1f}px  angle={self._arrow.angle_deg:+.1f}deg"
         )
 
     def _update_frame_label(self):
         idx = self._current_frame_index() - 1  # after read(), pos already advanced
         idx = max(0, idx)
-        self._frame_lbl.config(text=f"{idx} / {max(0, self._total_frames - 1)}")
+        self._frame_lbl.config(
+            text=f"{idx} / {max(0, self._total_frames - 1)}")
         self._seek_var.set(idx)
 
     # ── Playback ─────────────────────────────────────────────────────────

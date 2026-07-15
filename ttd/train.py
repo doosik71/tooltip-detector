@@ -27,6 +27,7 @@ from ttd.model import build as build_model
 # Augmentation pipelines
 # ---------------------------------------------------------------------------
 
+
 def _train_transform(image_size=(480, 736)):
     """Geometric + photometric augmentation for training frames.
 
@@ -46,7 +47,8 @@ def _train_transform(image_size=(480, 736)):
         A.RandomResizedCrop(size=(h, w), scale=(0.7, 1.0),
                             ratio=(w / h * 0.9, w / h * 1.1), p=0.5),
         A.Resize(h, w),
-        A.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2, hue=0.05, p=0.6),
+        A.ColorJitter(brightness=0.3, contrast=0.3,
+                      saturation=0.2, hue=0.05, p=0.6),
         A.GaussianBlur(blur_limit=(3, 7), p=0.3),
         A.GaussNoise(p=0.3),
         A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
@@ -114,11 +116,11 @@ def _run_epoch(
 
     with torch.set_grad_enabled(train):
         for step, (images, targets) in enumerate(loader, 1):
-            images  = images.to(device,  dtype=torch.float32)
+            images = images.to(device,  dtype=torch.float32)
             targets = targets.to(device, dtype=torch.float32)
 
             preds = model(images)
-            loss  = tip_loss(preds, targets)
+            loss = tip_loss(preds, targets)
 
             if train:
                 optimizer.zero_grad()
@@ -126,11 +128,11 @@ def _run_epoch(
                 optimizer.step()
 
             total_loss += loss.item() * images.size(0)
-            total_n    += images.size(0)
+            total_n += images.size(0)
 
             elapsed = time.time() - t0
-            eta     = elapsed / step * (n_steps - step)
-            avg     = total_loss / total_n
+            eta = elapsed / step * (n_steps - step)
+            avg = total_loss / total_n
 
             print(
                 f"\r  [{phase}] |{_bar(step, n_steps)}|"
@@ -176,8 +178,10 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # ── Datasets & loaders ───────────────────────────────────────────────
-    train_ds = SurgicalToolDataset(args.data_root, "train", transform=_train_transform())
-    val_ds   = SurgicalToolDataset(args.data_root, "val",   transform=_eval_transform())
+    train_ds = SurgicalToolDataset(
+        args.data_root, "train", transform=_train_transform())
+    val_ds = SurgicalToolDataset(
+        args.data_root, "val",   transform=_eval_transform())
 
     train_loader = DataLoader(
         train_ds, batch_size=args.batch_size, shuffle=True,
@@ -196,28 +200,33 @@ def main() -> None:
         print(f"Resumed from {last_path}")
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=args.epochs)
 
     # ── Header ───────────────────────────────────────────────────────────
     print(f"Device     : {device}")
     print(f"Model type : {args.model_type}")
-    print(f"Train      : {len(train_ds):,} samples  ({len(train_loader)} batches)")
+    print(
+        f"Train      : {len(train_ds):,} samples  ({len(train_loader)} batches)")
     print(f"Val        : {len(val_ds):,} samples  ({len(val_loader)} batches)")
-    print(f"Epochs     : {args.epochs}   batch={args.batch_size}   lr={args.lr:.2e}")
+    print(
+        f"Epochs     : {args.epochs}   batch={args.batch_size}   lr={args.lr:.2e}")
     print(f"Checkpoints: {best_path}  /  {last_path}")
     print()
 
     best_val_loss = float("inf")
-    train_start   = time.time()
+    train_start = time.time()
 
     # ── Training loop ────────────────────────────────────────────────────
     for epoch in range(1, args.epochs + 1):
         lr_now = optimizer.param_groups[0]["lr"]
         print(f"Epoch {epoch:3d}/{args.epochs}  lr={lr_now:.2e}")
 
-        epoch_t0   = time.time()
-        train_loss = _run_epoch(model, train_loader, optimizer, device, train=True)
-        val_loss   = _run_epoch(model, val_loader,   optimizer, device, train=False)
+        epoch_t0 = time.time()
+        train_loss = _run_epoch(model, train_loader,
+                                optimizer, device, train=True)
+        val_loss = _run_epoch(model, val_loader,
+                              optimizer, device, train=False)
         scheduler.step()
 
         epoch_time = time.time() - epoch_t0
@@ -225,7 +234,7 @@ def main() -> None:
         eta_total = total_elapsed / epoch * (args.epochs - epoch)
 
         is_best = val_loss < best_val_loss
-        star    = " ★" if is_best else "  "
+        star = " ★" if is_best else "  "
 
         print(
             f"  {star} train={train_loss:.6f}  val={val_loss:.6f}"
@@ -244,7 +253,8 @@ def main() -> None:
 
         print()
 
-    print(f"Training complete.  Total time: {_fmt_time(time.time() - train_start)}")
+    print(
+        f"Training complete.  Total time: {_fmt_time(time.time() - train_start)}")
     print(f"Best val loss : {best_val_loss:.6f}  → {best_path}")
     print(f"Last model    : {last_path}")
 

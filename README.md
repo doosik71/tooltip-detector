@@ -3,6 +3,7 @@
 복강경(laparoscope) 수술 영상에서 수술도구의 끝부분(팁)을 탐지하는 딥러닝 모델 기반 실험 도구이다.
 EfficientNet-B2 인코더와 U-Net 디코더를 결합한 모델이 각 프레임에서 도구 팁의 위치를 거리 기반 히트맵으로 출력한다.
 현재는 `monai`와 `monai_mini` 두 가지 모델 변형을 지원하며, 학습·평가·GUI 추론 모두 멀티 모델 선택이 가능하다.
+정지 이미지/데이터셋 기반 탐지 시각화(`tooltip-detector`) 외에, 동영상을 실시간으로 처리하며 내시경 카메라가 이동해야 할 방향을 화살표로 안내하는 `tooltip-tracker` GUI도 제공한다.
 
 ## 모델 구조
 
@@ -52,25 +53,29 @@ uv sync
 tooltip-detector/
 ├── ttd/
 │   ├── model/
-│   │   ├── monai.py          # EfficientNet-B2 + U-Net (풀 모델, MONAI 호환)
-│   │   └── monai_mini.py     # EfficientNet-B2 + U-Net (경량 모델, 인코더 블록 수 절반)
-│   ├── dataset.py            # SurgicalToolDataset (히트맵 타겟 생성)
-│   ├── train.py              # 학습 스크립트
-│   ├── eval.py               # 평가 스크립트
-│   ├── compare-speed.py      # 모델 속도 비교 스크립트
-│   ├── tooltip-detector.py   # 탐지 결과 시각화 GUI
-│   └── dataset-browser.py    # 데이터셋 시각화 GUI
+│   │   ├── monai.py               # EfficientNet-B2 + U-Net (풀 모델, MONAI 호환)
+│   │   └── monai_mini.py          # EfficientNet-B2 + U-Net (경량 모델, 인코더 블록 수 절반)
+│   ├── dataset.py                 # SurgicalToolDataset (히트맵 타겟 생성)
+│   ├── train.py                   # 학습 스크립트
+│   ├── eval.py                    # 평가 스크립트
+│   ├── compare-speed.py           # 모델 속도 비교 스크립트
+│   ├── tooltip-detector.py        # 탐지 결과 시각화 GUI (이미지/데이터셋)
+│   ├── tooltip-tracker.py         # 동영상 실시간 탐지·추적 GUI
+│   ├── camera_motion_vector.py    # tooltip-tracker의 화살표(카메라 이동 방향) 스무딩 구현
+│   └── dataset-browser.py         # 데이터셋 시각화 GUI
 ├── bin/
 │   ├── train-model(.bat)         # 학습 실행
 │   ├── eval-model(.bat)          # 평가 실행
 │   ├── compare-speed(.bat)       # 모델 속도 비교 실행
 │   ├── tooltip-detector(.bat)    # 탐지 결과 시각화 실행
+│   ├── tooltip-tracker(.bat)     # 동영상 실시간 추적 실행
 │   └── dataset-browser(.bat)     # 데이터셋 브라우저 실행
 ├── docs/
 │   ├── dataset-guide.md          # 데이터셋 구조 및 포맷
 │   ├── train-guide.md            # 학습 절차 및 설정
 │   ├── eval-guide.md             # 평가 방법 및 지표
 │   ├── tooltip-detector.md       # 탐지 GUI 상세설계서 및 사용자설명서
+│   ├── tooltip-tracker.md        # 동영상 추적 GUI 상세설계서 및 사용자설명서
 │   └── dataset-browser-guide.md  # GUI 브라우저 사용법
 ├── images/
 │   └── tooltip-detector.png      # Tooltip Detector GUI 스크린샷
@@ -197,15 +202,31 @@ GUI 상단의 `Model` 드롭다운으로 `monai`와 `monai_mini`를 전환할 �
 - **Inference time 표시**: 현재 프레임의 모델 forward 시간을 ms 단위로 표시
 - **누적 통계 패널**: 탐색한 프레임의 hit-rate, 평균 거리 등 평가 지표를 실시간 집계
 
+### 5. 동영상 실시간 추적
+
+```bash
+bin/tooltip-tracker
+```
+
+사용자가 선택한 동영상 파일을 프레임 단위로 순차 처리하며, 화면 중앙에서 탐지된 수술도구 팁 방향으로 화살표를 그려 내시경 카메라가 이동해야 할 방향을 안내한다. 화살표의 방향·길이는 프레임 간 급격히 바뀌지 않도록 스무딩되며, 오탐지(팁 미탐지·개수 이상·방향 모순)는 별도의 색상·경고 도형으로 표시된다.
+
+- **`Model` 드롭다운**: `monai` / `monai_mini` 전환
+- **`Method` 드롭다운**: 화살표 스무딩 구현 전환 (`CameraMotionVectorMagnitudeBlend` 기본값 / `CameraMotionVectorBlend` / `CameraMotionVectorKalman`)
+- **Play / Pause, 탐색 바**: 벽시계 기준 재생(필요 시 프레임 드롭) 및 임의 프레임 이동
+- **Threshold / NMS radius 슬라이더**: `tooltip-detector`와 동일한 피크 탐지 파라미터
+
+상세 설계와 스무딩 로직, 오탐지 판정 규칙: [docs/tooltip-tracker.md](docs/tooltip-tracker.md)
+
 ## 스크립트 요약
 
-| 스크립트               | 설명                 | 주요 인수                                                      |
-| ---------------------- | -------------------- | -------------------------------------------------------------- |
-| `bin/train-model`      | 모델 학습            | `--model-type`, `--epochs`, `--batch-size`, `--lr`, `--resume` |
-| `bin/eval-model`       | 팁 탐지 정확도 평가  | `--model-type`, `--threshold`, `--nms-radius`, `--model`       |
-| `bin/compare-speed`    | 모델 추론 속도 비교  | `--model-types`, `--num-samples`, `--batch-size`, `--workers`  |
-| `bin/tooltip-detector` | 탐지 결과 시각화 GUI | `--model-type`, `--model`, `--data-root`                       |
-| `bin/dataset-browser`  | 데이터셋 시각화 GUI  | `--split`, `--data-root`                                       |
+| 스크립트               | 설명                       | 주요 인수                                                      |
+| ---------------------- | -------------------------- | -------------------------------------------------------------- |
+| `bin/train-model`      | 모델 학습                  | `--model-type`, `--epochs`, `--batch-size`, `--lr`, `--resume` |
+| `bin/eval-model`       | 팁 탐지 정확도 평가        | `--model-type`, `--threshold`, `--nms-radius`, `--model`       |
+| `bin/compare-speed`    | 모델 추론 속도 비교        | `--model-types`, `--num-samples`, `--batch-size`, `--workers`  |
+| `bin/tooltip-detector` | 탐지 결과 시각화 GUI       | `--model-type`, `--model`, `--data-root`                       |
+| `bin/tooltip-tracker`  | 동영상 실시간 추적 GUI     | `--model-type`, `--model`                                      |
+| `bin/dataset-browser`  | 데이터셋 시각화 GUI        | `--split`, `--data-root`                                       |
 
 직접 실행 예시:
 
@@ -268,6 +289,7 @@ uv run python ttd/compare-speed.py --num-samples 1000
 | [docs/train-guide.md](docs/train-guide.md)                         | 학습 실행 방법, 인수 설명, 증강 파이프라인, 체크포인트, 출력 예시    |
 | [docs/eval-guide.md](docs/eval-guide.md)                           | 평가 실행 방법, 피크 탐지 알고리즘, 지표 정의, 결과 파일 구조        |
 | [docs/tooltip-detector.md](docs/tooltip-detector.md)               | 탐지 GUI 화면 구성, 추론 흐름, 조작 방법, 설계 상세                  |
+| [docs/tooltip-tracker.md](docs/tooltip-tracker.md)                 | 추적 GUI 화면 구성, 화살표 스무딩 로직, 오탐지 판정 규칙, 설계 상세  |
 | [docs/dataset-browser-guide.md](docs/dataset-browser-guide.md)     | GUI 화면 구성, 조작 방법, 키보드 단축키                              |
 | [docs/eval-results-monai.md](docs/eval-results-monai.md)           | `monai` 테스트 세트 평가 결과 분석                                   |
 | [docs/eval-results-monai_mini.md](docs/eval-results-monai_mini.md) | `monai_mini` 테스트 세트 평가 결과 분석                              |
