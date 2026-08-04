@@ -119,7 +119,11 @@ annotation의 `annotations` 배열이 비어있지 않은 프레임에는 거의
 
 ## 학습 타겟 생성 방법
 
-본 프로젝트에서는 단순 이진 분할 대신 **거리 기반 히트맵(heatmap)** 을 학습 타겟으로 사용한다.
+본 프로젝트에서는 단순 이진 분할 대신 **히트맵(heatmap)** 을 학습 타겟으로 사용한다. `SurgicalToolDataset`의 `target_mode` 인수(학습 스크립트의 `--target-mode`)로 아래 두 생성 방식 중 하나를 고른다.
+
+### `gradient-seg` (기본값) — segmentation mask 필요
+
+**거리 기반 히트맵**. segmentation 마스크의 도구 영역 전체를 팁까지의 거리에 따라 선형으로 채운다.
 
 1. segmentation 마스크의 각 도구 화소에 대해 가장 가까운 팁까지의 거리를 계산한다.
 2. 팁 화소: 값 `1.0`
@@ -131,3 +135,17 @@ $$
 $$
 
 배경 화소(마스크 외부)의 타겟값은 `0.0`이다. 프레임에 도구가 없으면 전체 타겟이 `0.0`이다.
+
+### `gaussian-tip` — 팁 좌표만 필요 (segmentation mask 불필요)
+
+**팁 중심 gaussian 히트맵**. segmentation 마스크를 전혀 사용하지 않고, 각 도구의 팁 좌표를 중심으로 한 2차원 gaussian을 그린다. 여러 도구의 gaussian이 겹치는 화소는 픽셀별 최댓값을 취한다.
+
+$$
+\text{target}(p) = \max_{t \in \text{tips}} \exp\left(-\frac{\|p - t\|^2}{2\sigma^2}\right)
+$$
+
+- $\sigma$ (학습 스크립트의 `--gaussian-sigma`, 기본 15 px)가 클수록 팁 주변의 넓은 영역에 학습 신호가 퍼진다.
+- 팁 화소는 항상 값 `1.0`이며, 프레임에 도구가 없으면 전체 타겟이 `0.0`이다.
+- segmentation 레이블링 없이 팁 좌표만으로 학습 데이터를 만들 수 있어, `gradient-seg` 대비 레이블링 비용이 훨씬 낮다. 대신 도구 영역 전체에 대한 정보는 학습에 반영되지 않는다.
+
+두 방식 모두 `MSE(sigmoid(pred[:, 1]), target)` 손실로 학습하며 모델 구조는 동일하다. 체크포인트·평가 결과 저장 경로도 `target_mode`별로 분리된다 (`data/models/<target-mode>/<model-type>/`, `data/results/<target-mode>/<model-type>/`).

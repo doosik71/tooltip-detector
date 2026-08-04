@@ -4,7 +4,7 @@
 
 ## 개요
 
-`ttd/tooltip-tracker.py`는 사용자가 선택한 동영상 파일을 프레임 단위로 순차 처리하면서, 매 프레임마다:
+`scripts/tooltip-tracker.py`는 사용자가 선택한 동영상 파일을 프레임 단위로 순차 처리하면서, 매 프레임마다:
 
 1. 모델로 팁 히트맵을 추론하고 피크(팁 후보)를 추출한다.
 2. 피크 개수와 방향을 검사해 오탐지 여부를 판정하고, 단일 "화면 중앙 → 팁" 방향 측정값으로 정리한다.
@@ -16,23 +16,22 @@
 ## 실행
 
 ```bash
-bin/tooltip-tracker          # Linux / macOS
-bin\tooltip-tracker.bat      # Windows
+run tooltip-tracker          # Linux / macOS
+run.bat tooltip-tracker      # Windows
 ```
 
-직접 실행:
-
 ```bash
-uv run python ttd/tooltip-tracker.py
-uv run python ttd/tooltip-tracker.py --model-type monai_mini
+run tooltip-tracker --model-type monai_mini
+run tooltip-tracker --target-mode gaussian-tip
 ```
 
 ## 인수
 
-| 인수           | 기본값                             | 설명                                   |
-| -------------- | ---------------------------------- | -------------------------------------- |
-| `--model-type` | `monai`                            | 모델 아키텍처 (`monai` / `monai_mini`) |
-| `--model`      | `data/models/<model-type>/best.pt` | 학습된 모델 가중치 파일 경로           |
+| 인수            | 기본값                                           | 설명                                                            |
+| --------------- | ------------------------------------------------ | --------------------------------------------------------------- |
+| `--model-type`  | `monai`                                          | 모델 아키텍처 (`monai` / `monai_mini`)                          |
+| `--target-mode` | `gradient-seg`                                   | 로드할 체크포인트의 타겟 생성 방식. 세션 중 고정(드롭다운 없음) |
+| `--model`       | `data/models/<target-mode>/<model-type>/best.pt` | 학습된 모델 가중치 파일 경로                                    |
 
 동영상 파일은 커맨드라인 인수가 아니라 GUI의 `Open Video...` 버튼으로 선택한다.
 
@@ -203,7 +202,7 @@ x_new = dx + dy
 
 ### 비대칭 칼만 필터 (비교용) — `CameraMotionVectorKalman`
 
-화살표의 길이·방향 계산 로직은 `ttd/tooltip-tracker.py`가 아니라 별도 모듈 `ttd/camera_motion_vector.py`에 있다. `Method` 드롭다운에서 선택할 수 있는 세 번째 구현이지만, 기본값은 아니며 주로 비교용으로 남아 있다. `(dx, dy)` 2차원 random-walk 칼만 필터 형태이며, process noise(`q`)로 **증가(성장)와 감소(감속)에 서로 다른 값**을 사용한다.
+화살표의 길이·방향 계산 로직은 `scripts/tooltip-tracker.py`가 아니라 별도 모듈 `ttd/camera_motion_vector.py`에 있다. `Method` 드롭다운에서 선택할 수 있는 세 번째 구현이지만, 기본값은 아니며 주로 비교용으로 남아 있다. `(dx, dy)` 2차원 random-walk 칼만 필터 형태이며, process noise(`q`)로 **증가(성장)와 감소(감속)에 서로 다른 값**을 사용한다.
 
 | 상황                                                                                                                                                     | 사용하는 q                         | 결과                 |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | -------------------- |
@@ -254,7 +253,7 @@ ArrowState.update(peaks)   →  (선택된 Method).step(measurement, valid)
 
 ### 클래스 구조
 
-세 스무딩 구현은 모두 `ttd/camera_motion_vector.py`에, 나머지는 모두 `ttd/tooltip-tracker.py`에 있다. `CameraMotionVector`는 기본 구현(`CameraMotionVectorMagnitudeBlend`)을 가리키는 별칭이다.
+세 스무딩 구현은 모두 `ttd/camera_motion_vector.py`에, 나머지는 모두 `scripts/tooltip-tracker.py`에 있다. `CameraMotionVector`는 기본 구현(`CameraMotionVectorMagnitudeBlend`)을 가리키는 별칭이다.
 
 ```text
 ttd/camera_motion_vector.py
@@ -265,7 +264,7 @@ ttd/camera_motion_vector.py
 └── CameraMotionVectorKalman          칼만 필터 구현 (비교용)
     └── step(measurement, valid)       predict/update, 공분산 P 관리
 
-ttd/tooltip-tracker.py
+scripts/tooltip-tracker.py
 ├── _METHOD_FACTORIES               "Method" 드롭다운 값 → 각 구현의 무인자 팩토리
 ├── resolve_measurement(peaks)       peaks → (measurement, valid, reason, two_tip_conflict)
 ├── ArrowState                       GUI가 실제로 다루는 단일 진입점
@@ -297,7 +296,7 @@ ttd/tooltip-tracker.py
 | `DECAY_PROCESS_VAR`        | 150.0  | 감소(정지) 시 고정 process noise                                                         | `CameraMotionVectorKalman`                                  |
 | `DEFAULT_MEASUREMENT_VAR`  | 400.0  | 측정 노이즈 분산 (약 20px 표준편차)                                                      | `CameraMotionVectorKalman`                                  |
 
-`ttd/tooltip-tracker.py` (GUI·탐지·렌더링 전용 내부 상수):
+`scripts/tooltip-tracker.py` (GUI·탐지·렌더링 전용 내부 상수):
 
 | 상수                      | 값       | 설명                                                              |
 | ------------------------- | -------- | ----------------------------------------------------------------- |
@@ -317,4 +316,4 @@ ttd/tooltip-tracker.py
 - 모델 파일이 없거나 로드에 실패하면 경고 메시지를 출력하고 탐지 없이(피크 0개) 실행된다. 화살표는 항상 분홍색으로 표시되고 서서히 0으로 수렴한다.
 - CPU 환경에서는 모델 추론이 동영상 프레임 간격보다 오래 걸릴 수 있다. 이 경우 `Play` 재생은 벽시계 동기화를 위해 프레임을 건너뛴다 — 정확한 프레임 단위 분석이 필요하면 `<-` `->`로 한 프레임씩 순차 이동한다.
 - 화살표는 로봇 제어 신호가 아니라 **시각화**이며, 실제 로봇 구동 로직과는 별개다.
-- 누적 평가 통계는 제공하지 않는다(GT 어노테이션이 없는 동영상이 입력이므로). 정량 평가가 필요하면 `bin/eval-model` 또는 `bin/tooltip-detector`(dataset 모드)를 사용한다.
+- 누적 평가 통계는 제공하지 않는다(GT 어노테이션이 없는 동영상이 입력이므로). 정량 평가가 필요하면 `run eval-model` 또는 `run tooltip-detector`(dataset 모드)를 사용한다.

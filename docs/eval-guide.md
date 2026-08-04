@@ -6,54 +6,56 @@
 
 모델이 출력한 2채널 히트맵의 채널 1(tool channel)에 sigmoid를 적용하여 팁 위치 후보(피크)를 추출한다. 추출된 후보와 정답(GT) 팁 좌표를 매칭하여 픽셀 거리 기반 정확도 지표를 계산한다.
 
-평가 결과는 `data/results/`에 자동 저장된다. 실행마다 덮어쓴다.
+평가 결과는 `data/results/<target-mode>/<model-type>/`에 자동 저장된다. 실행마다 덮어쓴다.
 
 ## 사전 준비
 
 학습이 완료된 가중치 파일이 필요하다:
 
 ```text
-data/model/best.pt   ← 기본 경로
+data/models/<target-mode>/<model-type>/best.pt   ← 기본 경로 (예: data/models/gradient-seg/monai/best.pt)
 ```
 
 ## 실행
 
 ```bash
-bin/eval-model          # Linux / macOS
-bin\eval-model.bat      # Windows
-```
-
-직접 실행:
-
-```bash
-uv run python -m ttd.eval
+run eval-model          # Linux / macOS
+run.bat eval-model      # Windows
 ```
 
 임계값 조정:
 
 ```bash
-uv run python -m ttd.eval --threshold 0.3 --nms-radius 15
+run eval-model --threshold 0.3 --nms-radius 15
+```
+
+`gaussian-tip`으로 학습한 모델 평가 (GT 팁 좌표는 annotation에서 직접 읽으므로 segmentation mask 없는 테스트 세트도 가능):
+
+```bash
+run eval-model --target-mode gaussian-tip
 ```
 
 ## 인수
 
-| 인수            | 기본값               | 설명                                |
-| --------------- | -------------------- | ----------------------------------- |
-| `--model`       | `data/model/best.pt` | 모델 가중치 파일 경로               |
-| `--data-root`   | `data/dataset`       | 데이터셋 루트 디렉터리              |
-| `--results-dir` | `data/results`       | 결과 저장 루트 디렉터리             |
-| `--threshold`   | `0.5`                | 피크 탐지 임계값 (히트맵 값 기준)   |
-| `--nms-radius`  | `20`                 | 두 피크 사이의 최소 픽셀 거리 (NMS) |
-| `--batch-size`  | `16`                 | 추론 배치 크기                      |
-| `--workers`     | `4`                  | DataLoader 워커 수                  |
-| `--device`      | 자동                 | torch device (예: `cuda:0`, `cpu`)  |
+| 인수            | 기본값                                           | 설명                                   |
+| --------------- | ------------------------------------------------ | -------------------------------------- |
+| `--model-type`  | `monai`                                          | 모델 아키텍처 (`monai` / `monai_mini`) |
+| `--target-mode` | `gradient-seg`                                   | 평가 대상 모델이 학습된 타겟 생성 방식 |
+| `--model`       | `data/models/<target-mode>/<model-type>/best.pt` | 모델 가중치 파일 경로                  |
+| `--data-root`   | `data/dataset`                                   | 데이터셋 루트 디렉터리                 |
+| `--results-dir` | `data/results/<target-mode>/<model-type>`        | 결과 저장 루트 디렉터리                |
+| `--threshold`   | `0.5`                                            | 피크 탐지 임계값 (히트맵 값 기준)      |
+| `--nms-radius`  | `20`                                             | 두 피크 사이의 최소 픽셀 거리 (NMS)    |
+| `--batch-size`  | `16`                                             | 추론 배치 크기                         |
+| `--workers`     | `4`                                              | DataLoader 워커 수                     |
+| `--device`      | 자동                                             | torch device (예: `cuda:0`, `cpu`)     |
 
 ## 결과 저장
 
-실행마다 `data/results/`에 덮어쓴다:
+실행마다 `data/results/<target-mode>/<model-type>/`에 덮어쓴다:
 
 ```text
-data/results/
+data/results/<target-mode>/<model-type>/
 ├── summary.json
 └── per_tip.csv
 ```
@@ -65,7 +67,9 @@ data/results/
 ```json
 {
   "timestamp": "20260625_143022",
-  "model_path": "data/model/best.pt",
+  "model_type": "monai",
+  "target_mode": "gradient-seg",
+  "model_path": "data/models/gradient-seg/monai/best.pt",
   "threshold": 0.5,
   "nms_radius": 20,
   "data_root": "data/dataset",
@@ -149,9 +153,11 @@ doctor_250620_084707_00000042,doctor_250620_084707,186,240,,,,1
 
 ```text
 Device      : cuda
-Model       : data/model/best.pt
+Model type  : monai
+Target mode : gradient-seg
+Model       : data/models/gradient-seg/monai/best.pt
 Threshold   : 0.5   NMS radius: 20 px
-Results dir : data/results
+Results dir : data/results/gradient-seg/monai
 Test frames : 36,142
 
   36000/36142  gt_tips_seen=30921  missed=312
@@ -160,7 +166,8 @@ Test frames : 36,142
 ==========================================================
   Evaluation Results
 ==========================================================
-  Model                              data/model/best.pt
+  Model                              data/models/gradient-seg/monai/best.pt
+  Target mode                        gradient-seg
   Threshold / NMS radius             0.5  /  20 px
 ----------------------------------------------------------
   Frames with tools                      30,930
@@ -180,8 +187,8 @@ Test frames : 36,142
     ...
 ==========================================================
 
-  summary.json  → data/results/summary.json
-  per_tip.csv   → data/results/per_tip.csv  (31,005 rows)
+  summary.json  → data/results/gradient-seg/monai/summary.json
+  per_tip.csv   → data/results/gradient-seg/monai/per_tip.csv  (31,005 rows)
 ```
 
 ## 임계값 튜닝

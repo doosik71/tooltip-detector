@@ -20,12 +20,15 @@ Controls
 
 Usage
 -----
-    uv run python ttd/tooltip-detector.py
-    uv run python ttd/tooltip-detector.py --model-type monai_mini
-    uv run python ttd/tooltip-detector.py --model data/models/monai/best.pt --data-root data/dataset
+    uv run python scripts/tooltip-detector.py
+    uv run python scripts/tooltip-detector.py --model-type monai_mini
+    uv run python scripts/tooltip-detector.py --target-mode gaussian-tip
+    uv run python scripts/tooltip-detector.py --model data/models/gradient-seg/monai/best.pt --data-root data/dataset
 
 The model architecture can also be switched at runtime via the GUI's "Model"
-dropdown, which loads data/models/<model-type>/best.pt for the selected type.
+dropdown, which reloads data/models/<target-mode>/<model-type>/best.pt for the
+selected type (--target-mode is fixed for the session; use the CLI flag to
+compare a different target-mode's checkpoints).
 """
 import argparse
 import json
@@ -41,10 +44,12 @@ from PIL import Image, ImageDraw, ImageTk
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from ttd.checkpoints import default_model_path as _default_model_path
+from ttd.dataset import DEFAULT_TARGET_MODE, TARGET_MODES
 from ttd.model import REGISTRY as MODEL_REGISTRY
 from ttd.model import build as build_model
-from ttd.train import _eval_transform
-from ttd.eval import find_peaks
+from ttd.transforms import _eval_transform
+from ttd.peaks import find_peaks
 from ttd.dataset import SurgicalToolDataset
 
 
@@ -67,10 +72,6 @@ _SEG_OVERLAY_RGB = np.array([0, 220, 120], dtype=np.uint8)
 # ---------------------------------------------------------------------------
 # Model helpers
 # ---------------------------------------------------------------------------
-
-def _default_model_path(model_type: str) -> str:
-    return os.path.join("data", "models", model_type, "best.pt")
-
 
 def _infer_model_type_from_path(model_path: str) -> str | None:
     norm = os.path.normpath(model_path)
@@ -181,13 +182,15 @@ def _to_photo(arr: np.ndarray) -> ImageTk.PhotoImage:
 # ---------------------------------------------------------------------------
 
 class TooltipDetectorApp(tk.Tk):
-    def __init__(self, model_type: str, model_path: str, data_root: str):
+    def __init__(self, model_type: str, model_path: str, data_root: str,
+                 target_mode: str = DEFAULT_TARGET_MODE):
         super().__init__()
         self.title("Tooltip Detector")
         self.resizable(True, True)
 
         self._data_root  = data_root
         self._model_type = model_type
+        self._target_mode = target_mode
         self._model_path = model_path
         self._device     = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._transform  = _eval_transform()
@@ -572,7 +575,7 @@ class TooltipDetectorApp(tk.Tk):
 
     def _on_model_change(self, _=None):
         model_type = self._model_var.get()
-        model_path = _default_model_path(model_type)
+        model_path = _default_model_path(model_type, self._target_mode)
         self._apply_model(model_type, model_path, show_error=True)
         self._stats_reset()
         self._refresh_stats_display()
@@ -773,14 +776,18 @@ def main():
     parser.add_argument("--model-type", default="monai",
                         choices=list(MODEL_REGISTRY),
                         help="Model architecture to load (default: monai)")
+    parser.add_argument("--target-mode", default=DEFAULT_TARGET_MODE,
+                        choices=list(TARGET_MODES),
+                        help="Which trained checkpoint variant to load "
+                             f"(default: {DEFAULT_TARGET_MODE})")
     parser.add_argument("--model",     default=None,
                         help="Path to trained model weights "
-                             "(default: data/models/<model-type>/best.pt)")
+                             "(default: data/models/<target-mode>/<model-type>/best.pt)")
     parser.add_argument("--data-root", default="data/dataset",
                         help="Path to data/dataset/ directory (default: data/dataset)")
     args = parser.parse_args()
 
-    model_path = args.model or _default_model_path(args.model_type)
+    model_path = args.model or _default_model_path(args.model_type, args.target_mode)
     model_type = args.model_type
     inferred_model_type = _infer_model_type_from_path(model_path)
     if args.model is not None and inferred_model_type is not None:
@@ -790,6 +797,7 @@ def main():
         model_type=model_type,
         model_path=model_path,
         data_root=args.data_root,
+        target_mode=args.target_mode,
     )
     app.mainloop()
 

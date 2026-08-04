@@ -5,7 +5,7 @@ is treated as a distance-based heatmap.  Peaks above a configurable threshold
 are taken as candidate tip locations.  For each GT tip the nearest candidate
 is selected and the Euclidean pixel distance is reported.
 
-Results are saved to  data/results/YYYYMMDD_HHMMSS/
+Results are saved to  data/results/<target-mode>/<model-type>/
   summary.json  — overall and per-session metrics + run parameters
   per_tip.csv   — one row per GT tip (coordinates, matched prediction, distance)
 
@@ -18,72 +18,32 @@ Metrics reported
 
 Usage
 -----
-    uv run python -m ttd.eval
-    uv run python -m ttd.eval --threshold 0.4 --nms-radius 15
+    uv run python scripts/eval-model.py
+    uv run python scripts/eval-model.py --threshold 0.4 --nms-radius 15
 """
 
 import argparse
 import csv
 import json
 import os
+import sys
 import time
 from collections import defaultdict
 
 import numpy as np
 import torch
-from scipy.ndimage import label as ndi_label
 from torch.utils.data import DataLoader
 
-from ttd.dataset import SurgicalToolDataset
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from ttd.checkpoints import default_model_path, default_results_dir
+from ttd.dataset import DEFAULT_TARGET_MODE, TARGET_MODES, SurgicalToolDataset
 from ttd.model import REGISTRY as MODEL_REGISTRY
 from ttd.model import build as build_model
-from ttd.train import _eval_transform
+from ttd.peaks import find_peaks
+from ttd.transforms import _eval_transform
 
 _HIT_THRESHOLDS = (10, 20, 50)
-
-
-# ---------------------------------------------------------------------------
-# Peak detection
-# ---------------------------------------------------------------------------
-
-def find_peaks(
-    heatmap: np.ndarray,
-    threshold: float,
-    min_distance: int,
-) -> list[tuple[int, int, float]]:
-    """Return (x, y, value) peaks in *heatmap* above *threshold*.
-
-    Algorithm
-    ---------
-    1. Threshold the map → binary mask.
-    2. Label connected components.
-    3. Take the maximum-value pixel within each component as the peak.
-    4. Apply NMS: discard any peak within *min_distance* pixels of a
-       higher-valued peak already retained.
-
-    Returns peaks sorted by value descending.
-    """
-    binary = heatmap >= threshold
-    if not binary.any():
-        return []
-
-    labeled, n_components = ndi_label(binary)
-    peaks: list[tuple[int, int, float]] = []
-    for i in range(1, n_components + 1):
-        masked_vals = np.where(labeled == i, heatmap, 0.0)
-        flat_idx = int(np.argmax(masked_vals))
-        y, x = divmod(flat_idx, heatmap.shape[1])
-        peaks.append((x, y, float(heatmap[y, x])))
-
-    peaks.sort(key=lambda p: -p[2])
-
-    # NMS
-    kept: list[tuple[int, int, float]] = []
-    for p in peaks:
-        if all(np.hypot(p[0] - k[0], p[1] - k[1]) >= min_distance for k in kept):
-            kept.append(p)
-
-    return kept
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +60,7 @@ def _session_id(ann_path: str) -> str:
 def evaluate(
     model_path: str,
     model_type: str,
+    target_mode: str,
     data_root: str,
     threshold: float,
     nms_radius: int,
@@ -119,6 +80,7 @@ def evaluate(
 
     print(f"Device      : {device}")
     print(f"Model type  : {model_type}")
+    print(f"Target mode : {target_mode}")
     print(f"Model       : {model_path}")
     print(f"Threshold   : {threshold}   NMS radius: {nms_radius} px")
     print(f"Results dir : {results_dir}")
@@ -130,7 +92,11 @@ def evaluate(
     model.eval()
 
     # ── Dataset ──────────────────────────────────────────────────────────
-    ds = SurgicalToolDataset(data_root, "test", transform=_eval_transform())
+    # target_mode only controls whether a segmentation mask is loaded per
+    # frame; the GT tips used below are read directly from the annotation
+    # JSON, not from the dataset's generated target heatmap.
+    ds = SurgicalToolDataset(data_root, "test", transform=_eval_transform(),
+                              target_mode=target_mode)
     loader = DataLoader(
         ds,
         batch_size=batch_size,
@@ -233,6 +199,7 @@ def evaluate(
     stats: dict = {
         "timestamp":            run_ts,
         "model_type":           model_type,
+        "target_mode":          target_mode,
         "model_path":           model_path,
         "threshold":            threshold,
         "nms_radius":           nms_radius,
@@ -301,6 +268,7 @@ def _print_results(s: dict) -> None:
     print(f"  Evaluation Results")
     print("=" * W)
     row("Model",            s["model_path"])
+    row("Target mode",      s["target_mode"])
     row("Threshold / NMS radius",
         f"{s['threshold']}  /  {s['nms_radius']} px")
     print("-" * W)
@@ -341,13 +309,17 @@ def main() -> None:
     parser.add_argument("--model-type",  default="monai",
                         choices=list(MODEL_REGISTRY),
                         help="Model architecture (default: monai)")
+    parser.add_argument("--target-mode", default=DEFAULT_TARGET_MODE,
+                        choices=list(TARGET_MODES),
+                        help="Training target generation method the model "
+                             f"was trained with (default: {DEFAULT_TARGET_MODE})")
     parser.add_argument("--model",       default=None,
                         help="Path to model weights "
-                             "(default: data/models/<model-type>/best.pt)")
+                             "(default: data/models/<target-mode>/<model-type>/best.pt)")
     parser.add_argument("--data-root",   default="data/dataset")
     parser.add_argument("--results-dir", default=None,
                         help="Directory for results "
-                             "(default: data/results/<model-type>)")
+                             "(default: data/results/<target-mode>/<model-type>)")
     parser.add_argument("--threshold",   type=float, default=0.5,
                         help="Heatmap value threshold for peak detection (default: 0.5)")
     parser.add_argument("--nms-radius",  type=int,   default=20,
@@ -359,13 +331,14 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.model is None:
-        args.model = f"data/models/{args.model_type}/best.pt"
+        args.model = default_model_path(args.model_type, args.target_mode)
     if args.results_dir is None:
-        args.results_dir = f"data/results/{args.model_type}"
+        args.results_dir = default_results_dir(args.model_type, args.target_mode)
 
     evaluate(
         model_path=args.model,
         model_type=args.model_type,
+        target_mode=args.target_mode,
         data_root=args.data_root,
         threshold=args.threshold,
         nms_radius=args.nms_radius,

@@ -59,8 +59,9 @@ is a GUI control, not its internal tuning.
 
 Usage
 -----
-    uv run python ttd/tooltip-tracker.py
-    uv run python ttd/tooltip-tracker.py --model-type monai_mini
+    uv run python scripts/tooltip-tracker.py
+    uv run python scripts/tooltip-tracker.py --model-type monai_mini
+    uv run python scripts/tooltip-tracker.py --target-mode gaussian-tip
 """
 import argparse
 import os
@@ -90,8 +91,10 @@ if True:
         DEFAULT_PROCESS_VAR_GROW,
         DEFAULT_MEASUREMENT_VAR,
     )
-    from ttd.eval import find_peaks
-    from ttd.train import _eval_transform
+    from ttd.checkpoints import default_model_path as _default_model_path
+    from ttd.dataset import DEFAULT_TARGET_MODE, TARGET_MODES
+    from ttd.peaks import find_peaks
+    from ttd.transforms import _eval_transform
     from ttd.model import build as build_model
     from ttd.model import REGISTRY as MODEL_REGISTRY
 
@@ -260,10 +263,6 @@ class ArrowState:
 # Model helpers
 # ---------------------------------------------------------------------------
 
-def _default_model_path(model_type: str) -> str:
-    return os.path.join("data", "models", model_type, "best.pt")
-
-
 # ---------------------------------------------------------------------------
 # Drawing helpers
 # ---------------------------------------------------------------------------
@@ -364,12 +363,14 @@ def _to_photo(arr: np.ndarray) -> ImageTk.PhotoImage:
 # ---------------------------------------------------------------------------
 
 class TooltipTrackerApp(tk.Tk):
-    def __init__(self, model_type: str, model_path: str):
+    def __init__(self, model_type: str, model_path: str,
+                 target_mode: str = DEFAULT_TARGET_MODE):
         super().__init__()
         self.title("Tooltip Tracker")
         self.resizable(True, True)
 
         self._model_type = model_type
+        self._target_mode = target_mode
         self._model_path = model_path
         self._device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu")
@@ -418,7 +419,7 @@ class TooltipTrackerApp(tk.Tk):
 
     def _on_model_change(self, _=None):
         model_type = self._model_var.get()
-        model_path = _default_model_path(model_type)
+        model_path = _default_model_path(model_type, self._target_mode)
         self._model_type = model_type
         self._model_path = model_path
         self._model = self._load_model(model_type, model_path)
@@ -796,14 +797,19 @@ def main():
     parser.add_argument("--model-type", default="monai",
                         choices=list(MODEL_REGISTRY),
                         help="Model architecture to load (default: monai)")
+    parser.add_argument("--target-mode", default=DEFAULT_TARGET_MODE,
+                        choices=list(TARGET_MODES),
+                        help="Which trained checkpoint variant to load "
+                             f"(default: {DEFAULT_TARGET_MODE})")
     parser.add_argument("--model", default=None,
                         help="Path to trained model weights "
-                             "(default: data/models/<model-type>/best.pt)")
+                             "(default: data/models/<target-mode>/<model-type>/best.pt)")
     args = parser.parse_args()
 
-    model_path = args.model or _default_model_path(args.model_type)
+    model_path = args.model or _default_model_path(args.model_type, args.target_mode)
 
-    app = TooltipTrackerApp(model_type=args.model_type, model_path=model_path)
+    app = TooltipTrackerApp(model_type=args.model_type, model_path=model_path,
+                             target_mode=args.target_mode)
     app.mainloop()
 
 

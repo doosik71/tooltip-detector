@@ -100,11 +100,11 @@ segmentation_head: Conv2d(16 → 2, 3×3)
 
 ```bash
 # 경량 모델 학습
-uv run python -m ttd.train --model-type monai_mini --epochs 30
+run train-model --model-type monai_mini --epochs 30
 
 # 경량 모델 평가
-uv run python -m ttd.eval --model-type monai_mini
+run eval-model --model-type monai_mini
 ```
 
-모델 가중치는 `data/models/monai_mini/best.pt`, `data/models/monai_mini/last.pt`에 저장된다.
-평가 결과는 `data/results/monai_mini/`에 저장된다.
+모델 가중치는 `data/models/<target-mode>/monai_mini/best.pt`, `data/models/<target-mode>/monai_mini/last.pt`에 저장된다 (기본 `--target-mode gradient-seg`).
+평가 결과는 `data/results/<target-mode>/monai_mini/`에 저장된다.

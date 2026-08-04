@@ -24,32 +24,37 @@ data/dataset/
 ## 실행
 
 ```bash
-bin/train-model          # Linux / macOS
-bin\train-model.bat      # Windows
-```
-
-직접 실행:
-
-```bash
-uv run python -m ttd.train
+run train-model          # Linux / macOS
+run.bat train-model      # Windows
 ```
 
 ## 인수
 
-| 인수           | 기본값         | 설명                                  |
-| -------------- | -------------- | ------------------------------------- |
-| `--data-root`  | `data/dataset` | 데이터셋 루트 디렉터리                |
-| `--model-dir`  | `data/model`   | 체크포인트 저장 디렉터리              |
-| `--epochs`     | `30`           | 총 에포크 수                          |
-| `--batch-size` | `16`           | 배치 크기                             |
-| `--lr`         | `1e-4`         | 초기 학습률 (Adam optimizer)          |
-| `--workers`    | `4`            | DataLoader 워커 수                    |
-| `--resume`     | off            | `<model-dir>/last.pt`에서 이어서 학습 |
+| 인수               | 기본값                                   | 설명                                                            |
+| ------------------ | ---------------------------------------- | --------------------------------------------------------------- |
+| `--model-type`     | `monai`                                  | 모델 아키텍처 (`monai` / `monai_mini`)                          |
+| `--target-mode`    | `gradient-seg`                           | 학습 타겟 생성 방식 (`gradient-seg` / `gaussian-tip`)           |
+| `--gaussian-sigma` | `15.0`                                   | gaussian 표준편차(px). `--target-mode gaussian-tip`일 때만 사용 |
+| `--data-root`      | `data/dataset`                           | 데이터셋 루트 디렉터리                                          |
+| `--model-dir`      | `data/models/<target-mode>/<model-type>` | 체크포인트 저장 디렉터리                                        |
+| `--epochs`         | `30`                                     | 총 에포크 수                                                    |
+| `--batch-size`     | `16`                                     | 배치 크기                                                       |
+| `--lr`             | `1e-4`                                   | 초기 학습률 (Adam optimizer)                                    |
+| `--workers`        | `4`                                      | DataLoader 워커 수                                              |
+| `--resume`         | off                                      | `<model-dir>/last.pt`에서 이어서 학습                           |
+
+타겟 생성 방식(`gradient-seg`/`gaussian-tip`)의 차이는 [dataset-guide.md](dataset-guide.md)의 "학습 타겟 생성 방법"을 참고한다.
 
 예시 — 에포크·배치 크기 변경:
 
 ```bash
-uv run python -m ttd.train --epochs 60 --batch-size 8
+run train-model --epochs 60 --batch-size 8
+```
+
+예시 — segmentation mask 없이 팁 좌표만으로 학습:
+
+```bash
+run train-model --target-mode gaussian-tip --gaussian-sigma 15
 ```
 
 ## 데이터 증강
@@ -87,22 +92,22 @@ loss = MSE(sigmoid(pred[:, 1]), target)
 
 ## 체크포인트
 
-각 에포크 종료 시 두 개의 파일이 저장된다.
+각 에포크 종료 시 두 개의 파일이 `data/models/<target-mode>/<model-type>/`에 저장된다.
 
-| 파일                 | 저장 조건        | 설명                              |
-| -------------------- | ---------------- | --------------------------------- |
-| `data/model/last.pt` | 매 에포크        | 가장 최근 에포크의 모델 가중치    |
-| `data/model/best.pt` | val loss 개선 시 | 검증 손실이 가장 낮은 모델 가중치 |
+| 파일       | 저장 조건        | 설명                              |
+| ---------- | ---------------- | --------------------------------- |
+| `last.pt`  | 매 에포크        | 가장 최근 에포크의 모델 가중치    |
+| `best.pt`  | val loss 개선 시 | 검증 손실이 가장 낮은 모델 가중치 |
 
-`data/model/` 디렉터리는 없으면 자동으로 생성된다.
+`data/models/<target-mode>/<model-type>/` 디렉터리는 없으면 자동으로 생성된다. 모델 타입과 타겟 생성 방식이 다르면 서로 다른 디렉터리에 저장되므로 체크포인트가 덮어써지지 않는다.
 
 학습 재개:
 
 ```bash
-bin/train-model --resume
+run train-model --resume
 ```
 
-`--resume` 플래그를 사용하면 `data/model/last.pt`를 불러와 이어서 학습한다. 파일이 없으면 처음부터 시작한다.
+`--resume` 플래그를 사용하면 (같은 `--model-type`/`--target-mode`의) `last.pt`를 불러와 이어서 학습한다. 파일이 없으면 처음부터 시작한다.
 
 ## 진행 상태 출력
 
@@ -110,10 +115,12 @@ bin/train-model --resume
 
 ```text
 Device     : cuda
+Model type : monai
+Target mode: gradient-seg
 Train      : 108,424 samples  (6,777 batches)
 Val        : 36,140 samples  (2,259 batches)
 Epochs     : 30   batch=16   lr=1.00e-04
-Checkpoints: data/model/best.pt  /  data/model/last.pt
+Checkpoints: data/models/gradient-seg/monai/best.pt  /  data/models/gradient-seg/monai/last.pt
 
 Epoch   1/30  lr=1.00e-04
   [train] |████████████░░░░░░░░░░░░░░░░░░|  800/6777  loss=0.021345  00:48<05:43

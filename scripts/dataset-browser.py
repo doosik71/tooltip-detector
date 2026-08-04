@@ -5,7 +5,7 @@ Shows the original image alongside the distance-based heatmap overlay.
 Navigate with ← → arrow keys or buttons.
 
 Usage:
-    uv run python ttd/dataset-browser.py [--data-root PATH] [--split SPLIT]
+    uv run python scripts/dataset-browser.py [--data-root PATH] [--split SPLIT]
 """
 import argparse
 import json

@@ -4,7 +4,7 @@
 
 ## 개요
 
-`ttd/tooltip-detector.py`는 두 가지 모드를 지원한다.
+`scripts/tooltip-detector.py`는 두 가지 모드를 지원한다.
 
 | 모드        | 설명                                                                                                                                              |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -14,28 +14,30 @@
 ## 실행
 
 ```bash
-bin/tooltip-detector          # Linux / macOS
-bin\tooltip-detector.bat      # Windows
-```
-
-직접 실행:
-
-```bash
-uv run python ttd/tooltip-detector.py
+run tooltip-detector          # Linux / macOS
+run.bat tooltip-detector      # Windows
 ```
 
 모델 경로 지정:
 
 ```bash
-uv run python ttd/tooltip-detector.py --model data/model/best.pt --data-root data/dataset
+run tooltip-detector --model data/models/gradient-seg/monai/best.pt --data-root data/dataset
+```
+
+`gaussian-tip`으로 학습한 모델 로드:
+
+```bash
+run tooltip-detector --target-mode gaussian-tip
 ```
 
 ## 인수
 
-| 인수          | 기본값               | 설명                         |
-| ------------- | -------------------- | ---------------------------- |
-| `--model`     | `data/model/best.pt` | 학습된 모델 가중치 파일 경로 |
-| `--data-root` | `data/dataset`       | 데이터셋 루트 디렉터리       |
+| 인수            | 기본값                                           | 설명                                                                           |
+| --------------- | ------------------------------------------------ | ------------------------------------------------------------------------------ |
+| `--model-type`  | `monai`                                          | 모델 아키텍처 (`monai` / `monai_mini`), GUI의 `Model` 드롭다운으로도 전환 가능 |
+| `--target-mode` | `gradient-seg`                                   | 로드할 체크포인트의 타겟 생성 방식. 세션 중 고정(드롭다운 없음)                |
+| `--model`       | `data/models/<target-mode>/<model-type>/best.pt` | 학습된 모델 가중치 파일 경로                                                   |
+| `--data-root`   | `data/dataset`                                   | 데이터셋 루트 디렉터리                                                         |
 
 ## 화면 구성
 
@@ -251,5 +253,5 @@ file 모드에서는 열린 이미지를 먼저 736 × 480으로 리사이즈한
 ## 주의 사항
 
 - 모델 파일이 없거나 로드에 실패하면 경고 메시지를 출력하고 히트맵 없이(0 값) 실행된다. GUI는 정상 표시되나 추론 결과는 없다.
-- dataset 모드 누적 통계는 탐색한 프레임만 집계한다. 스플릿 전체를 평가하려면 `bin/eval-model`을 사용한다.
+- dataset 모드 누적 통계는 탐색한 프레임만 집계한다. 스플릿 전체를 평가하려면 `run eval-model`을 사용한다.
 - file 모드에서는 GT 어노테이션 없이 예측만 표시되므로 누적 통계 패널이 갱신되지 않는다.

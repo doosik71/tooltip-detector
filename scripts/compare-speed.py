@@ -2,7 +2,8 @@
 """Compare test-set inference speed between tooltip-detector models.
 
 Runs the same test split through each selected model and writes a compact speed
-comparison report to ``data/results/speed-comparison.json`` by default.
+comparison report to ``data/results/<target-mode>/speed-comparison.json`` by
+default.
 """
 
 import argparse
@@ -16,14 +17,11 @@ from torch.utils.data import DataLoader, Subset
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from ttd.dataset import SurgicalToolDataset
+from ttd.checkpoints import default_model_path
+from ttd.dataset import DEFAULT_TARGET_MODE, TARGET_MODES, SurgicalToolDataset
 from ttd.model import REGISTRY as MODEL_REGISTRY
 from ttd.model import build as build_model
-from ttd.train import _eval_transform
-
-
-def _default_model_path(model_type: str) -> str:
-    return os.path.join("data", "models", model_type, "best.pt")
+from ttd.transforms import _eval_transform
 
 
 def _synchronize(device: torch.device) -> None:
@@ -48,12 +46,14 @@ def _build_sample_indices(dataset_size: int, num_samples: int, seed: int) -> lis
 
 def _build_loader(
     data_root: str,
+    target_mode: str,
     sample_indices: list[int],
     batch_size: int,
     workers: int,
     device: torch.device,
 ):
-    full_ds = SurgicalToolDataset(data_root, "test", transform=_eval_transform())
+    full_ds = SurgicalToolDataset(data_root, "test", transform=_eval_transform(),
+                                    target_mode=target_mode)
     ds = Subset(full_ds, sample_indices) if sample_indices else Subset(full_ds, [])
     loader = DataLoader(
         ds,
@@ -86,6 +86,7 @@ def _warmup_model(
 def benchmark_model(
     model_type: str,
     model_path: str,
+    target_mode: str,
     data_root: str,
     sample_indices: list[int],
     batch_size: int,
@@ -99,6 +100,7 @@ def benchmark_model(
 
     full_dataset, dataset, loader = _build_loader(
         data_root,
+        target_mode,
         sample_indices,
         batch_size,
         workers,
@@ -127,6 +129,7 @@ def benchmark_model(
 
     return {
         "model_type": model_type,
+        "target_mode": target_mode,
         "model_path": model_path,
         "parameter_count": _count_parameters(model),
         "n_test_frames_total": len(full_dataset),
@@ -185,6 +188,12 @@ def main() -> None:
         choices=list(MODEL_REGISTRY),
         help="Model types to benchmark (default: monai monai_mini)",
     )
+    parser.add_argument(
+        "--target-mode",
+        default=DEFAULT_TARGET_MODE,
+        choices=list(TARGET_MODES),
+        help=f"Which trained checkpoint variant to load (default: {DEFAULT_TARGET_MODE})",
+    )
     parser.add_argument("--data-root", default="data/dataset")
     parser.add_argument("--num-samples", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=42)
@@ -197,10 +206,13 @@ def main() -> None:
     )
     parser.add_argument(
         "--output",
-        default="data/results/speed-comparison.json",
-        help="Output JSON path (default: data/results/speed-comparison.json)",
+        default=None,
+        help="Output JSON path (default: data/results/<target-mode>/speed-comparison.json)",
     )
     args = parser.parse_args()
+
+    if args.output is None:
+        args.output = os.path.join("data", "results", args.target_mode, "speed-comparison.json")
 
     device = torch.device(
         args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")
@@ -208,6 +220,7 @@ def main() -> None:
 
     print(f"Device      : {device}")
     print(f"Data root    : {args.data_root}")
+    print(f"Target mode  : {args.target_mode}")
     print(f"Samples      : {args.num_samples}")
     print(f"Seed         : {args.seed}")
     print(f"Batch size   : {args.batch_size}")
@@ -215,17 +228,19 @@ def main() -> None:
     print(f"Output       : {args.output}")
     print()
 
-    base_dataset = SurgicalToolDataset(args.data_root, "test", transform=_eval_transform())
+    base_dataset = SurgicalToolDataset(args.data_root, "test", transform=_eval_transform(),
+                                        target_mode=args.target_mode)
     sample_indices = _build_sample_indices(len(base_dataset), args.num_samples, args.seed)
 
     results: list[dict] = []
     for model_type in args.model_types:
-        model_path = _default_model_path(model_type)
+        model_path = default_model_path(model_type, args.target_mode)
         print(f"[Benchmark] {model_type}")
         print(f"  model: {model_path}")
         result = benchmark_model(
             model_type=model_type,
             model_path=model_path,
+            target_mode=args.target_mode,
             data_root=args.data_root,
             sample_indices=sample_indices,
             batch_size=args.batch_size,
@@ -245,6 +260,7 @@ def main() -> None:
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "device": str(device),
         "data_root": args.data_root,
+        "target_mode": args.target_mode,
         "split": "test",
         "num_samples_requested": args.num_samples,
         "num_samples_used": len(sample_indices),

@@ -5,20 +5,14 @@
 ## 실행
 
 ```bash
-bin/dataset-browser          # Linux / macOS
-bin\dataset-browser.bat      # Windows
-```
-
-직접 실행:
-
-```bash
-uv run python ttd/dataset-browser.py
+run dataset-browser          # Linux / macOS
+run.bat dataset-browser      # Windows
 ```
 
 다른 스플릿으로 시작:
 
 ```bash
-uv run python ttd/dataset-browser.py --split val
+run dataset-browser --split val
 ```
 
 ## 인수

@@ -10,6 +10,7 @@ dependencies = [
     "pillow>=12.2.0",
     "torch>=2.7.1",
     "torchvision==0.22.1",
+    "tqdm>=4.70.0",
 ]
 
 [tool.uv.sources]

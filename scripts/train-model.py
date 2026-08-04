@@ -1,16 +1,25 @@
 """Training script for TooltipDetector.
 
 Usage:
-    uv run python -m ttd.train [--epochs N] [--batch-size N] [--lr F] [--data-root PATH]
+    uv run python scripts/train-model.py [--epochs N] [--batch-size N] [--lr F] [--data-root PATH]
+    uv run python scripts/train-model.py --target-mode gaussian-tip --gaussian-sigma 15
+
+Target modes (--target-mode)
+-----------------------------
+  gradient-seg  (default) — needs segmentation masks. Per-tool distance
+                 gradient over the masked tool area.
+  gaussian-tip            — needs only tip coordinates, no segmentation
+                 masks. Gaussian centered on each tip (--gaussian-sigma px).
 
 Checkpoints
 -----------
-  data/model/best.pt  — lowest validation-loss model seen so far
-  data/model/last.pt  — model state at the end of the most recent epoch
+  data/models/<target-mode>/<model-type>/best.pt  — lowest validation-loss model seen so far
+  data/models/<target-mode>/<model-type>/last.pt  — model state at the end of the most recent epoch
 """
 
 import argparse
 import os
+import sys
 import time
 
 import albumentations as A
@@ -18,10 +27,15 @@ import torch
 import torch.nn.functional as F
 from albumentations.pytorch import ToTensorV2
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
-from ttd.dataset import SurgicalToolDataset
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from ttd.checkpoints import model_dir as default_model_dir
+from ttd.dataset import DEFAULT_GAUSSIAN_SIGMA, DEFAULT_TARGET_MODE, TARGET_MODES, SurgicalToolDataset
 from ttd.model import REGISTRY as MODEL_REGISTRY
 from ttd.model import build as build_model
+from ttd.transforms import _eval_transform
 
 # ---------------------------------------------------------------------------
 # Augmentation pipelines
@@ -56,15 +70,6 @@ def _train_transform(image_size=(480, 736)):
     ])
 
 
-def _eval_transform(image_size=(480, 736)):
-    h, w = image_size
-    return A.Compose([
-        A.Resize(h, w),
-        A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-        ToTensorV2(),
-    ])
-
-
 # ---------------------------------------------------------------------------
 # Loss
 # ---------------------------------------------------------------------------
@@ -82,18 +87,10 @@ def tip_loss(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
 # Progress helpers
 # ---------------------------------------------------------------------------
 
-_BAR_WIDTH = 30
-
-
 def _fmt_time(secs: float) -> str:
     m, s = divmod(int(secs), 60)
     h, m = divmod(m, 60)
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
-
-
-def _bar(step: int, total: int) -> str:
-    filled = int(_BAR_WIDTH * step / total)
-    return "█" * filled + "░" * (_BAR_WIDTH - filled)
 
 
 # ---------------------------------------------------------------------------
@@ -108,14 +105,13 @@ def _run_epoch(
     train: bool,
 ) -> float:
     model.train(train)
-    phase = "train" if train else "val  "
+    phase = "train" if train else "val"
     total_loss = 0.0
     total_n = 0
-    n_steps = len(loader)
-    t0 = time.time()
 
     with torch.set_grad_enabled(train):
-        for step, (images, targets) in enumerate(loader, 1):
+        pbar = tqdm(loader, desc=f"  [{phase}]", ascii=True, dynamic_ncols=True)
+        for images, targets in pbar:
             images = images.to(device,  dtype=torch.float32)
             targets = targets.to(device, dtype=torch.float32)
 
@@ -129,21 +125,8 @@ def _run_epoch(
 
             total_loss += loss.item() * images.size(0)
             total_n += images.size(0)
+            pbar.set_postfix(loss=f"{total_loss / total_n:.6f}")
 
-            elapsed = time.time() - t0
-            eta = elapsed / step * (n_steps - step)
-            avg = total_loss / total_n
-
-            print(
-                f"\r  [{phase}] |{_bar(step, n_steps)}|"
-                f" {step:4d}/{n_steps}"
-                f"  loss={avg:.6f}"
-                f"  {_fmt_time(elapsed)}<{_fmt_time(eta)}",
-                end="", flush=True,
-            )
-
-    # Clear the progress line
-    print()
     return total_loss / total_n
 
 
@@ -156,10 +139,17 @@ def main() -> None:
     parser.add_argument("--model-type", default="monai",
                         choices=list(MODEL_REGISTRY),
                         help="Model architecture to train (default: monai)")
+    parser.add_argument("--target-mode", default=DEFAULT_TARGET_MODE,
+                        choices=list(TARGET_MODES),
+                        help="Training target generation method "
+                             f"(default: {DEFAULT_TARGET_MODE})")
+    parser.add_argument("--gaussian-sigma", type=float, default=DEFAULT_GAUSSIAN_SIGMA,
+                        help="Gaussian std-dev in px, only used when "
+                             f"--target-mode=gaussian-tip (default: {DEFAULT_GAUSSIAN_SIGMA})")
     parser.add_argument("--data-root",  default="data/dataset")
     parser.add_argument("--model-dir",  default=None,
                         help="Directory for best.pt and last.pt "
-                             "(default: data/models/<model-type>)")
+                             "(default: data/models/<target-mode>/<model-type>)")
     parser.add_argument("--epochs",     type=int,   default=30)
     parser.add_argument("--batch-size", type=int,   default=16)
     parser.add_argument("--lr",         type=float, default=1e-4)
@@ -169,7 +159,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.model_dir is None:
-        args.model_dir = f"data/models/{args.model_type}"
+        args.model_dir = default_model_dir(args.model_type, args.target_mode)
 
     best_path = os.path.join(args.model_dir, "best.pt")
     last_path = os.path.join(args.model_dir, "last.pt")
@@ -179,9 +169,11 @@ def main() -> None:
 
     # ── Datasets & loaders ───────────────────────────────────────────────
     train_ds = SurgicalToolDataset(
-        args.data_root, "train", transform=_train_transform())
+        args.data_root, "train", transform=_train_transform(),
+        target_mode=args.target_mode, gaussian_sigma=args.gaussian_sigma)
     val_ds = SurgicalToolDataset(
-        args.data_root, "val",   transform=_eval_transform())
+        args.data_root, "val",   transform=_eval_transform(),
+        target_mode=args.target_mode, gaussian_sigma=args.gaussian_sigma)
 
     train_loader = DataLoader(
         train_ds, batch_size=args.batch_size, shuffle=True,
@@ -206,6 +198,8 @@ def main() -> None:
     # ── Header ───────────────────────────────────────────────────────────
     print(f"Device     : {device}")
     print(f"Model type : {args.model_type}")
+    print(f"Target mode: {args.target_mode}"
+          + (f"  (gaussian_sigma={args.gaussian_sigma})" if args.target_mode == "gaussian-tip" else ""))
     print(
         f"Train      : {len(train_ds):,} samples  ({len(train_loader)} batches)")
     print(f"Val        : {len(val_ds):,} samples  ({len(val_loader)} batches)")
