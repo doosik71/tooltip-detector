@@ -1,6 +1,7 @@
 import glob
 import json
 import os
+import random
 from collections import defaultdict
 
 import numpy as np
@@ -194,28 +195,41 @@ class SurgicalToolDataset(Dataset):
 
         return target
 
-    def __getitem__(self, idx: int):
+    def _load_sample(self, idx: int):
         ann_path = self.samples[idx]
         stem = os.path.splitext(os.path.basename(ann_path))[0]
 
-        try:
-            with open(ann_path) as f:
-                ann = json.load(f)
+        with open(ann_path) as f:
+            ann = json.load(f)
 
-            image = np.array(Image.open(os.path.join(self.img_dir, stem + ".png")))
+        image = np.array(Image.open(os.path.join(self.img_dir, stem + ".png")))
 
-            if self.target_mode == "gradient-seg":
-                seg = np.array(Image.open(os.path.join(self.seg_dir, stem + ".png")))
-                target = self._build_target_gradient_seg(seg, ann["annotations"])
-            else:  # "gaussian-tip"
-                target = self._build_target_gaussian_tip(
-                    image.shape[:2], ann["annotations"], self.gaussian_sigma)
+        if self.target_mode == "gradient-seg":
+            seg = np.array(Image.open(os.path.join(self.seg_dir, stem + ".png")))
+            target = self._build_target_gradient_seg(seg, ann["annotations"])
+        else:  # "gaussian-tip"
+            target = self._build_target_gaussian_tip(
+                image.shape[:2], ann["annotations"], self.gaussian_sigma)
 
-            if self.transform is not None:
-                out = self.transform(image=image, mask=target)
-                image, target = out["image"], out["mask"]
+        if self.transform is not None:
+            out = self.transform(image=image, mask=target)
+            image, target = out["image"], out["mask"]
 
-            return image, target
-        except Exception as e:
-            print(f"Error: {stem}.png - {e}")
-            raise
+        return image, target
+
+    def __getitem__(self, idx: int):
+        # A handful of frames/annotations in this dataset are known to be
+        # corrupt (e.g. truncated PNGs). Skip them by falling back to a
+        # random other sample instead of letting one bad file kill an
+        # unattended multi-hour training run.
+        n = len(self.samples)
+        for attempt in range(n):
+            sample_idx = idx if attempt == 0 else random.randrange(n)
+            try:
+                return self._load_sample(sample_idx)
+            except Exception as e:
+                stem = os.path.splitext(os.path.basename(self.samples[sample_idx]))[0]
+                print(f"Warning: {stem}.png - {e} (skipping corrupt sample)")
+
+        raise RuntimeError(
+            f"SurgicalToolDataset: all {n} samples in '{self.ann_dir}' failed to load")
