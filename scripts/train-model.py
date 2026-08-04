@@ -110,7 +110,7 @@ def _run_epoch(
     total_n = 0
 
     with torch.set_grad_enabled(train):
-        pbar = tqdm(loader, desc=f"  [{phase}]", ascii=True, dynamic_ncols=True)
+        pbar = tqdm(loader, desc=f"  [{phase}]", ascii=True, ncols=100)
         for images, targets in pbar:
             images = images.to(device,  dtype=torch.float32)
             targets = targets.to(device, dtype=torch.float32)

@@ -327,6 +327,7 @@ run compare-speed --num-samples 1000
 | [docs/model-monai.md](docs/model-monai.md)                         | EfficientNet-B2 + U-Net 풀 모델 아키텍처 상세 설명                   |
 | [docs/model-monai-mini.md](docs/model-monai-mini.md)               | EfficientNet-B2 + U-Net 경량 모델 아키텍처 상세 설명                 |
 | [docs/dataset-guide.md](docs/dataset-guide.md)                     | 데이터셋 디렉터리 구조, 파일 포맷, 어노테이션 스펙, 히트맵 타겟 수식 |
+| [docs/commands.md](docs/commands.md)                               | 실험 재현용 실행 명령 모음                                           |
 | [docs/train-guide.md](docs/train-guide.md)                         | 학습 실행 방법, 인수 설명, 증강 파이프라인, 체크포인트, 출력 예시    |
 | [docs/eval-guide.md](docs/eval-guide.md)                           | 평가 실행 방법, 피크 탐지 알고리즘, 지표 정의, 결과 파일 구조        |
 | [docs/tooltip-detector.md](docs/tooltip-detector.md)               | 탐지 GUI 화면 구성, 추론 흐름, 조작 방법, 설계 상세                  |
