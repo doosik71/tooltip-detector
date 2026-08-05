@@ -42,7 +42,7 @@ run.bat train-model --dataset cholec80      # Windows
 | `--batch-size`     | `16`                                               | 배치 크기                                                  |
 | `--lr`             | `1e-4`                                             | 초기 학습률 (Adam optimizer)                                |
 | `--workers`        | `4`                                                | DataLoader 워커 수                                        |
-| `--resume`         | off                                                 | `<model-dir>/last.pt`에서 이어서 학습                         |
+| `--no-resume`      | off (기본값은 재개)                                 | `<model-dir>`의 기존 체크포인트를 무시하고 처음부터 학습          |
 
 타겟 생성 방식(`gradient-seg`/`gaussian-tip`)의 차이는 [dataset-guide.md](dataset-guide.md)의 "학습 타겟 생성 방법"을 참고한다.
 
@@ -93,22 +93,57 @@ loss = MSE(sigmoid(pred[:, 1]), target)
 
 ## 체크포인트
 
-각 에포크 종료 시 두 개의 파일이 `data/models/<dataset>/<target-mode>/<model-type>/`에 저장된다.
+각 에포크 종료 시 세 개의 파일이 `data/models/<dataset>/<target-mode>/<model-type>/`에 저장된다.
 
-| 파일       | 저장 조건        | 설명                              |
-| ---------- | ---------------- | --------------------------------- |
-| `last.pt`  | 매 에포크        | 가장 최근 에포크의 모델 가중치    |
-| `best.pt`  | val loss 개선 시 | 검증 손실이 가장 낮은 모델 가중치 |
+| 파일                  | 저장 조건        | 설명                                                        |
+| --------------------- | ---------------- | ----------------------------------------------------------- |
+| `last.pt`             | 매 에포크        | 가장 최근 에포크의 모델 가중치                               |
+| `best.pt`             | val loss 개선 시 | 검증 손실이 가장 낮은 모델 가중치                            |
+| `train-status.json`   | 매 에포크        | 재개용 진행 기록 (완료 에포크 수, best val loss, 실행 하이퍼파라미터, 누적 학습 시간) |
+| `metric.csv`          | 매 에포크        | 에포크별 학습 곡선 기록 (아래 "학습 곡선" 항목 참고), 재개 시 이어서 추가(append)됨 |
 
 `data/models/<dataset>/<target-mode>/<model-type>/` 디렉터리는 없으면 자동으로 생성된다. 데이터셋·모델 타입·타겟 생성 방식이 다르면 서로 다른 디렉터리에 저장되므로 체크포인트가 덮어써지지 않는다.
 
-학습 재개:
+### 학습 재개 (기본 동작, `--no-resume`으로 끄기)
+
+외부 요인(서버 재부팅, OOM, 타임아웃 등)으로 학습이 중단돼도 **같은 명령을 그대로 다시 실행하면** 이어서 학습한다 — 재개가 기본 동작이며 별도 플래그가 필요 없다.
 
 ```bash
-run train-model --dataset cholec80 --resume
+run train-model --dataset cholec80              # 최초 실행
+run train-model --dataset cholec80              # 중단 후 다시 실행하면 자동으로 이어서 학습
 ```
 
-`--resume` 플래그를 사용하면 (같은 `--dataset`/`--model-type`/`--target-mode`의) `last.pt`를 불러와 이어서 학습한다. 파일이 없으면 처음부터 시작한다.
+동작 방식:
+
+- `<model-dir>`에 `train-status.json`이 있으면 그 안의 `completed_epochs + 1` 에포크부터, 기록된 `best_val_loss`와 학습률 스케줄(`CosineAnnealingLR`) 진행 위치를 그대로 이어서 학습한다. `best.pt`를 재개 이전보다 더 나쁜 모델로 덮어쓰지 않도록 `best_val_loss`도 함께 복원된다.
+- optimizer(Adam)의 momentum·분산 추정치는 저장하지 않으므로 재개 시 새로 초기화된다 — 학습률 스케줄만 정확히 이어지고, 옵티마이저 내부 상태는 근사적으로만 복원된다.
+- 재개 명령의 `--epochs`가 새로운 총 목표 에포크 수가 된다. 이전 실행의 `--epochs`와 달라도 되며(예: 30 → 50), 학습률 스케줄은 새 `--epochs` 기준으로 재계산된다.
+- 이미 `--epochs` 목표를 달성한 상태에서 재개하면 아무 것도 하지 않고 안내 메시지만 출력한다. 더 학습시키려면 더 큰 `--epochs`를 지정한다.
+- `train-status.json`이 없고 `last.pt`만 있는 경우(이 기능이 추가되기 전에 저장된 체크포인트 등)는 가중치만 불러오고 에포크 카운트는 1부터 다시 시작한다.
+- `metric.csv`도 이어서 기록된다(기존 행 뒤에 새 행을 추가) — 재개 여부와 무관하게 전체 학습 과정의 학습 곡선을 한 파일로 볼 수 있다.
+
+`--no-resume`을 지정하면 `<model-dir>`에 있는 `last.pt`·`best.pt`·`train-status.json`·`metric.csv`를 전부 무시하고 처음부터 새로 학습한다(에포크가 진행되면서 이 파일들은 덮어써진다).
+
+```bash
+run train-model --dataset cholec80 --no-resume
+```
+
+## 학습 곡선 (`metric.csv`)
+
+각 에포크 종료 시 `metric.csv`에 한 행씩 추가된다. train/val 각각에 대해, 모델 출력 히트맵 `sigmoid(pred[:, 1])`과 타겟 히트맵의 픽셀별 오차(`pred - target`)로부터 계산한 통계다 — GT 팁 좌표를 이용한 탐지 기반 오차가 아니라 히트맵 회귀 자체의 오차이므로 매 에포크 계산해도 비용이 거의 들지 않는다.
+
+| 컬럼                              | 설명                                                  |
+| --------------------------------- | ----------------------------------------------------- |
+| `epoch`                           | 에포크 번호                                            |
+| `train_loss` / `val_loss`         | `MSE(sigmoid(pred[:, 1]), target)`                     |
+| `train_mae` / `val_mae`           | 평균 절대 오차 `mean(\|pred - target\|)`               |
+| `train_me` / `val_me`             | 평균 신호 오차(편향) `mean(pred - target)`             |
+| `train_std` / `val_std`           | 오차의 표준편차                                        |
+| `lr`                              | 해당 에포크 시작 시점의 학습률                         |
+| `epoch_sec`                       | 해당 에포크 소요 시간(초)                              |
+| `elapsed_sec`                     | 누적 학습 시간(초), 재개 이전 세션 포함                |
+
+팁 탐지 정확도(hit-rate, 픽셀 거리 등)를 보려면 학습이 끝난 뒤 `run eval-model`을 사용한다 ([eval-guide.md](eval-guide.md) 참고).
 
 ## 진행 상태 출력
 
@@ -123,6 +158,7 @@ Train      : 108,424 samples  (6,777 batches)
 Val        : 36,140 samples  (2,259 batches)
 Epochs     : 30   batch=16   lr=1.00e-04
 Checkpoints: data/models/erop/gradient-seg/monai/best.pt  /  data/models/erop/gradient-seg/monai/last.pt
+Metrics    : data/models/erop/gradient-seg/monai/metric.csv
 
 Epoch   1/30  lr=1.00e-04
   [train] |████████████░░░░░░░░░░░░░░░░░░|  800/6777  loss=0.021345  00:48<05:43

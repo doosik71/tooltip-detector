@@ -142,7 +142,9 @@ run.bat train-model --dataset cholec80      # Windows
 - 에포크마다 validation 실행
 - `data/models/<dataset>/<target-mode>/<model-type>/best.pt` — 검증 손실 최저 모델 자동 저장
 - `data/models/<dataset>/<target-mode>/<model-type>/last.pt` — 최종 에포크 모델 자동 저장
-- `--resume` 플래그로 해당 데이터셋·모델 타입·타겟 모드의 `last.pt`에서 이어서 학습 가능
+- `data/models/<dataset>/<target-mode>/<model-type>/train-status.json` — 매 에포크 기록되는 재개용 진행 상황(완료 에포크 수·best val loss 등)
+- `data/models/<dataset>/<target-mode>/<model-type>/metric.csv` — 에포크별 학습 곡선(train/val loss, mae, me, std, lr 등), 재개해도 이어서 기록됨
+- 학습 재개가 기본 동작이다. 외부 요인으로 학습이 중단돼도 같은 명령을 다시 실행하면 `train-status.json`을 읽어 마지막으로 완료한 에포크 다음부터, 학습률 스케줄과 best val loss를 그대로 이어간다 (optimizer momentum은 재초기화됨). `--no-resume`을 지정하면 기존 체크포인트를 무시하고 처음부터 새로 학습한다. 자세한 동작은 [docs/train-guide.md](docs/train-guide.md)의 "학습 재개" 항목을 참고한다.
 
 #### 학습 타겟 생성 (`--target-mode`)
 
@@ -265,7 +267,7 @@ run.bat tooltip-tracker --dataset cholec80      # Windows
 
 | 스크립트               | 설명                   | 주요 인수                                                                                                       |
 | ---------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `run train-model`      | 모델 학습              | `--dataset`(필수), `--model-type`, `--target-mode`, `--gaussian-sigma`, `--epochs`, `--batch-size`, `--lr`, `--resume` |
+| `run train-model`      | 모델 학습              | `--dataset`(필수), `--model-type`, `--target-mode`, `--gaussian-sigma`, `--epochs`, `--batch-size`, `--lr`, `--no-resume` |
 | `run eval-model`       | 팁 탐지 정확도 평가    | `--dataset`(필수), `--model-type`, `--target-mode`, `--threshold`, `--nms-radius`, `--model`                    |
 | `run compare-speed`    | 모델 추론 속도 비교    | `--dataset`(필수), `--model-types`, `--target-mode`, `--num-samples`, `--batch-size`, `--workers`               |
 | `run tooltip-detector` | 탐지 결과 시각화 GUI   | `--dataset`(필수), `--model-type`, `--target-mode`, `--model`, `--data-root`                                    |
