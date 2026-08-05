@@ -1,20 +1,57 @@
-import os
+from __future__ import annotations
+
+import argparse
 import subprocess
 from pathlib import Path
 
+from tooltip.dataset_paths import dataset_src_dir, progressive_dir, resolve_path
 
-def convert_to_progressive(input_dir, output_dir):
-    # 1. 경로 객체 생성 및 출력 폴더 자동 생성
-    input_path = Path(input_dir)
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
 
-    # 2. 변환할 대상 동영상 확장자 정의
-    valid_extensions = {".mp4", ".avi", ".mkv", ".mov", ".MP4", ".AVI", ".MKV", ".MOV"}
+VALID_EXTENSIONS = {".mp4", ".avi", ".mkv", ".mov", ".MP4", ".AVI", ".MKV", ".MOV"}
 
-    # 3. 입력 폴더에서 동영상 파일 목록 수집
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Deinterlace and reencode source videos into a progressive format "
+            "suitable for frame extraction."
+        )
+    )
+    parser.add_argument(
+        "--dataset",
+        default=None,
+        help=(
+            "Dataset name under data/dataset-src, e.g. 'erop' or 'cholec80'. "
+            "Used to resolve default --input/--output when not given explicitly."
+        ),
+    )
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=None,
+        help="Directory containing source videos. Defaults to data/dataset-src/<dataset>.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Directory where progressive videos will be saved. Defaults to data/dataset/<dataset>/progressive.",
+    )
+    return parser.parse_args()
+
+
+def validate_args(args: argparse.Namespace) -> None:
+    if not args.input.exists():
+        raise FileNotFoundError(f"Input directory does not exist: {args.input}")
+    if not args.input.is_dir():
+        raise NotADirectoryError(f"Input path is not a directory: {args.input}")
+
+
+def convert_to_progressive(input_dir: Path, output_dir: Path) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     video_files = [
-        f for f in input_path.iterdir() if f.is_file() and f.suffix in valid_extensions
+        f for f in input_dir.iterdir() if f.is_file() and f.suffix in VALID_EXTENSIONS
     ]
 
     total_files = len(video_files)
@@ -25,7 +62,7 @@ def convert_to_progressive(input_dir, output_dir):
     print(f"Found {total_files} video(s). Starting conversion...\n")
 
     for idx, video_file in enumerate(video_files, start=1):
-        output_file = output_path / video_file.name
+        output_file = output_dir / video_file.name
 
         if output_file.exists():
             print(f"==> [{idx}/{total_files}] Skip: {video_file.name} (output already exists)")
@@ -63,8 +100,15 @@ def convert_to_progressive(input_dir, output_dir):
     print("All conversions complete.")
 
 
-if __name__ == "__main__":
-    INPUT_FOLDER = "./data/video"
-    OUTPUT_FOLDER = "./data/progressive"
+def main() -> int:
+    args = parse_args()
+    args.input = resolve_path(args.input, args.dataset, dataset_src_dir, "--input")
+    args.output = resolve_path(args.output, args.dataset, progressive_dir, "--output")
+    validate_args(args)
 
-    convert_to_progressive(INPUT_FOLDER, OUTPUT_FOLDER)
+    convert_to_progressive(args.input, args.output)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -5,6 +5,8 @@ from pathlib import Path
 
 from tqdm import tqdm
 
+from tooltip.dataset_paths import images_dir, resolve_path, segmentation_dir
+
 try:
     import cv2
 except ImportError as exc:  # pragma: no cover - depends on runtime environment
@@ -53,16 +55,24 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument(
+        "--dataset",
+        default=None,
+        help=(
+            "Dataset name, e.g. 'erop' or 'cholec80'. Used to resolve default "
+            "--input/--output when not given explicitly."
+        ),
+    )
+    parser.add_argument(
         "--input",
         type=Path,
-        default=Path("./data/dataset/images"),
-        help="Root directory containing train/val/test image folders.",
+        default=None,
+        help="Root directory containing train/val/test image folders. Defaults to data/dataset/<dataset>/images.",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("./data/dataset/segmentation"),
-        help="Root directory where train/val/test mask folders will be saved.",
+        default=None,
+        help="Root directory where train/val/test mask folders will be saved. Defaults to data/dataset/<dataset>/segmentation.",
     )
     parser.add_argument(
         "--model",
@@ -220,7 +230,7 @@ def process_split(
     saved_count = 0
     skipped_count = 0
 
-    for image_path in tqdm(image_paths, desc=split_name, unit="image"):
+    for image_path in tqdm(image_paths, desc=split_name, unit="image", ascii=True, ncols=100):
         output_path = output_dir / f"{image_path.stem}{MASK_SUFFIX}"
         if output_path.exists() and not overwrite:
             skipped_count += 1
@@ -239,6 +249,8 @@ def process_split(
 
 def main() -> int:
     args = parse_args()
+    args.input = resolve_path(args.input, args.dataset, images_dir, "--input")
+    args.output = resolve_path(args.output, args.dataset, segmentation_dir, "--output")
     validate_args(args)
 
     device = resolve_device(args.device)

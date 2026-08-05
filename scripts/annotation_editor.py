@@ -6,6 +6,8 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from tooltip.dataset_paths import annotation_dir, images_dir, resolve_path, segmentation_dir
+
 try:
     import cv2
 except ImportError as exc:  # pragma: no cover - depends on runtime environment
@@ -872,22 +874,30 @@ def parse_args() -> argparse.Namespace:
         description="GUI editor for bbox/tip annotations generated from segmentation masks."
     )
     parser.add_argument(
+        "--dataset",
+        default=None,
+        help=(
+            "Dataset name, e.g. 'erop' or 'cholec80'. Used to resolve default "
+            "--images/--segmentation/--annotation when not given explicitly."
+        ),
+    )
+    parser.add_argument(
         "--images",
         type=Path,
-        default=Path("./data/dataset/images"),
-        help="Root directory containing train/val/test source images.",
+        default=None,
+        help="Root directory containing train/val/test source images. Defaults to data/dataset/<dataset>/images.",
     )
     parser.add_argument(
         "--segmentation",
         type=Path,
-        default=Path("./data/dataset/segmentation"),
-        help="Root directory containing train/val/test segmentation masks.",
+        default=None,
+        help="Root directory containing train/val/test segmentation masks. Defaults to data/dataset/<dataset>/segmentation.",
     )
     parser.add_argument(
         "--annotation",
         type=Path,
-        default=Path("./data/dataset/annotation"),
-        help="Root directory containing train/val/test annotation JSON files.",
+        default=None,
+        help="Root directory containing train/val/test annotation JSON files. Defaults to data/dataset/<dataset>/annotation.",
     )
     return parser.parse_args()
 
@@ -926,6 +936,9 @@ def validate_args(args: argparse.Namespace) -> None:
 
 def main() -> int:
     args = parse_args()
+    args.images = resolve_path(args.images, args.dataset, images_dir, "--images")
+    args.segmentation = resolve_path(args.segmentation, args.dataset, segmentation_dir, "--segmentation")
+    args.annotation = resolve_path(args.annotation, args.dataset, annotation_dir, "--annotation")
     validate_args(args)
     editor = AnnotationEditor(args)
     editor.run()

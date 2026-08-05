@@ -8,6 +8,8 @@ import random
 
 from tqdm import tqdm
 
+from tooltip.dataset_paths import images_dir, resolve_path, resolve_video_input
+
 try:
     import cv2
 except ImportError as exc:  # pragma: no cover - depends on runtime environment
@@ -27,16 +29,28 @@ def parse_args() -> argparse.Namespace:
         description="Extract frames from videos and split them into train/val/test datasets."
     )
     parser.add_argument(
+        "--dataset",
+        default=None,
+        help=(
+            "Dataset name, e.g. 'erop' or 'cholec80'. Used to resolve default "
+            "--input/--output when not given explicitly."
+        ),
+    )
+    parser.add_argument(
         "--input",
         type=Path,
-        default=Path("./data/progressive"),
-        help="Directory containing input video files.",
+        default=None,
+        help=(
+            "Directory containing input video files. Defaults to "
+            "data/dataset/<dataset>/progressive if it exists and is non-empty, "
+            "otherwise data/dataset-src/<dataset>."
+        ),
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("./data/dataset/images"),
-        help="Directory where extracted frames will be saved.",
+        default=None,
+        help="Directory where extracted frames will be saved. Defaults to data/dataset/<dataset>/images.",
     )
     parser.add_argument(
         "--frame",
@@ -315,6 +329,8 @@ def save_frames_for_video(
             desc=video_path.name,
             unit="frame",
             leave=False,
+            ascii=True,
+            ncols=100,
         )
 
         frame_number = 0
@@ -349,6 +365,8 @@ def ensure_output_dirs(output_dir: Path) -> None:
 
 def main() -> int:
     args = parse_args()
+    args.input = resolve_video_input(args.input, args.dataset)
+    args.output = resolve_path(args.output, args.dataset, images_dir, "--output")
     validate_args(args)
 
     ensure_output_dirs(args.output)
@@ -363,7 +381,7 @@ def main() -> int:
     ratios = (args.train, args.val, args.test)
     full_verify = args.verify == "full"
 
-    for video_path in tqdm(video_files, desc="Videos", unit="video"):
+    for video_path in tqdm(video_files, desc="Videos", unit="video", ascii=True, ncols=100):
         saved_counts, skipped_counts = save_frames_for_video(
             video_path=video_path,
             output_dir=args.output,

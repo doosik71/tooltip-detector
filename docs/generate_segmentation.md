@@ -2,7 +2,7 @@
 
 `scripts/generate_segmentation.py`는 다운로드한 MONAI segmentation 모델로 데이터셋 이미지마다 binary segmentation mask를 추론해 PNG로 저장하는 스크립트다.
 
-기본 입력은 `./data/dataset/images`, 기본 출력은 `./data/dataset/segmentation`이며, 입력과 출력 모두 `train`, `val`, `test` 세 분할 구조를 그대로 따른다.
+`--dataset <name>` 옵션을 주면 기본 입력은 `data/dataset/<name>/images`, 기본 출력은 `data/dataset/<name>/segmentation`이며, 입력과 출력 모두 `train`, `val`, `test` 세 분할 구조를 그대로 따른다.
 
 ## 사용자 문서
 
@@ -12,11 +12,11 @@
 
 이 프로젝트의 기본 작업 순서에서 이 스크립트의 위치는 다음과 같다.
 
-1. `scripts/generate_dataset.py`로 `./data/dataset/images` 준비
-2. `scripts/download_model.py`로 `./temp/models/model.pt` 준비
+1. `scripts/generate_dataset.py --dataset <name>`로 `data/dataset/<name>/images` 준비
+2. `scripts/download_model.py`로 `./temp/models/model.pt` 준비(데이터셋과 무관한 공용 모델)
 3. (GPU 사용 시) `scripts/check_gpu.py`로 CUDA/cuDNN 환경 점검
-4. `scripts/generate_segmentation.py`로 mask 생성
-5. `scripts/generate_annotation.py`로 bbox/tip annotation 생성
+4. `scripts/generate_segmentation.py --dataset <name>`로 mask 생성
+5. `scripts/generate_annotation.py --dataset <name>`로 bbox/tip annotation 생성
 
 ### 실행 전 요구 사항
 
@@ -42,29 +42,31 @@
 프로젝트 루트에서 실행한다.
 
 ```bash
-python -m scripts.generate_segmentation
+python -m scripts.generate_segmentation --dataset erop
 ```
 
 `uv`를 사용 중이면 다음처럼 실행할 수 있다.
 
 ```bash
-uv run python -m scripts.generate_segmentation
+uv run python -m scripts.generate_segmentation --dataset erop
 ```
 
-기본값을 그대로 쓰면 아래를 사용한다.
+`--dataset`을 주면 아래를 사용한다.
 
-- 입력 디렉터리: `./data/dataset/images`
-- 출력 디렉터리: `./data/dataset/segmentation`
+- 입력 디렉터리: `data/dataset/<dataset>/images`
+- 출력 디렉터리: `data/dataset/<dataset>/segmentation`
 - 모델 체크포인트: `./temp/models/model.pt`
 - 디바이스: CUDA 사용 가능 시 `cuda:0`, 아니면 `cpu`
 - 덮어쓰기: 비활성화 (기존 mask는 건너뜀)
 
 ### CLI 옵션
 
+- `--dataset`
+  - 데이터셋 이름(예: `erop`, `cholec80`). `--input`/`--output`을 명시하지 않았을 때 기본 경로를 계산하는 데 쓰인다.
 - `--input`
-  - `train/val/test` 이미지 폴더가 들어 있는 루트 디렉터리. 기본값은 `./data/dataset/images`.
+  - `train/val/test` 이미지 폴더가 들어 있는 루트 디렉터리. 기본값은 `data/dataset/<dataset>/images`. 명시하면 `--dataset` 기본값보다 항상 우선한다.
 - `--output`
-  - `train/val/test` mask 폴더를 저장할 루트 디렉터리. 기본값은 `./data/dataset/segmentation`.
+  - `train/val/test` mask 폴더를 저장할 루트 디렉터리. 기본값은 `data/dataset/<dataset>/segmentation`. 명시하면 `--dataset` 기본값보다 항상 우선한다.
 - `--model`
   - MONAI 체크포인트 경로. 기본값은 `./temp/models/model.pt`.
 - `--device`
@@ -74,35 +76,35 @@ uv run python -m scripts.generate_segmentation
 
 ### 실행 예시
 
-기본 경로로 mask를 생성하는 예시:
+`--dataset`으로 기본 경로를 사용해 mask를 생성하는 예시:
 
 ```bash
-python -m scripts.generate_segmentation
+python -m scripts.generate_segmentation --dataset cholec80
 ```
 
 특정 GPU를 지정하는 예시:
 
 ```bash
-python -m scripts.generate_segmentation --device cuda:0
+python -m scripts.generate_segmentation --dataset cholec80 --device cuda:0
 ```
 
 CPU로 추론하는 예시:
 
 ```bash
-python -m scripts.generate_segmentation --device cpu
+python -m scripts.generate_segmentation --dataset cholec80 --device cpu
 ```
 
 기존 mask를 모두 다시 생성하는 예시:
 
 ```bash
-python -m scripts.generate_segmentation --overwrite
+python -m scripts.generate_segmentation --dataset cholec80 --overwrite
 ```
 
-입력/출력/모델 경로를 직접 지정하는 예시:
+입력/출력/모델 경로를 직접 지정하는 예시(`--dataset` 기본값을 무시):
 
 ```bash
 python -m scripts.generate_segmentation \
-    --input ./data/dataset/images \
+    --input ./data/dataset/erop/images \
     --output ./data/dataset_v2/segmentation \
     --model ./temp/models/model.pt
 ```
@@ -125,7 +127,7 @@ python -m scripts.generate_segmentation \
 실행 시 출력 디렉터리 아래에 다음 하위 폴더가 생성된다.
 
 ```text
-./data/dataset/
+./data/dataset/<dataset>/
 └── segmentation/
     ├── train/
     ├── val/
@@ -179,7 +181,11 @@ GPU 환경이 의심스러우면 먼저 `python -m scripts.check_gpu --device cu
 
 #### `Input directory does not exist` 에러
 
-`--input` 경로가 실제로 존재하는지 확인한다. 기본 경로를 쓴다면 `./data/dataset/images`가 준비되어 있어야 한다.
+`--input` 경로가 실제로 존재하는지 확인한다. `--dataset`만 썼다면 `data/dataset/<dataset>/images`가 준비되어 있어야 한다(`generate_dataset.py`를 먼저 실행).
+
+#### `Either --dataset or --input must be provided.` 에러
+
+`--dataset`도 `--input`도 주지 않은 경우다. 둘 중 하나는 반드시 지정해야 한다. `--output`도 마찬가지다.
 
 #### `Model checkpoint does not exist` 에러
 
@@ -208,9 +214,9 @@ GPU 환경이 의심스러우면 먼저 `python -m scripts.check_gpu --device cu
 스크립트는 다음 함수들로 구성된다.
 
 - `parse_args()`
-  - CLI 인자(`--input`, `--output`, `--model`, `--device`, `--overwrite`)를 정의하고 파싱한다.
+  - CLI 인자(`--dataset`, `--input`, `--output`, `--model`, `--device`, `--overwrite`)를 정의하고 파싱한다.
 - `validate_args(args)`
-  - 의존성 import, 입력 루트, 모델 파일, split 디렉터리 존재 여부를 검증한다.
+  - 의존성 import, 입력 루트, 모델 파일, split 디렉터리 존재 여부를 검증한다. `--dataset` 기반 기본 경로 해석은 `main()`에서 이 함수 호출 전에 끝난다.
 - `resolve_device(device_arg)`
   - 사용할 `torch.device`를 결정한다.
 - `list_images(image_dir)`
@@ -230,9 +236,20 @@ GPU 환경이 의심스러우면 먼저 `python -m scripts.check_gpu --device cu
 - `process_split(...)`
   - 한 split을 처리하고 `(saved, skipped)` 개수를 반환한다.
 - `main()`
-  - 전체 파이프라인을 조합하고 종료 코드 `0`을 반환한다.
+  - `tooltip.dataset_paths.resolve_path()`로 `--input`/`--output`을 확정한 뒤 전체 파이프라인을 조합하고 종료 코드 `0`을 반환한다.
 
 ### 핵심 구현 세부 사항
+
+#### 0. `--dataset` 경로 해석
+
+`main()`은 `parse_args()` 직후 다음을 수행한다.
+
+```python
+args.input = resolve_path(args.input, args.dataset, images_dir, "--input")
+args.output = resolve_path(args.output, args.dataset, segmentation_dir, "--output")
+```
+
+`resolve_path()`(`tooltip/dataset_paths.py`)는 명시적으로 준 경로가 있으면 그대로 쓰고, 없으면 `--dataset` 이름으로 기본 경로를 계산한다. 둘 다 없으면 어떤 플래그가 필요한지 알려주는 `ValueError`를 즉시 던진다.
 
 #### 1. 의존성 지연 import
 
@@ -361,7 +378,7 @@ from scripts.generate_segmentation import build_model, infer_image, resolve_devi
 device = resolve_device("cuda:0")
 model = build_model(Path("./temp/models/model.pt"), device)
 infer_image(
-    image_path=Path("./data/dataset/images/train/sample01_00000030.png"),
+    image_path=Path("./data/dataset/erop/images/train/sample01_00000030.png"),
     output_path=Path("./out/sample01_00000030.png"),
     model=model,
     device=device,

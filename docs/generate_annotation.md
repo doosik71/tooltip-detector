@@ -2,7 +2,7 @@
 
 `scripts/generate_annotation.py`는 binary segmentation mask에서 도구(tool) 영역의 contour를 찾아, 각 영역의 bounding box와 tool tip 좌표를 계산하고 그 결과를 이미지별 annotation JSON 파일로 저장하는 스크립트다.
 
-기본 입력은 `./data/dataset/segmentation`, 기본 출력은 `./data/dataset/annotation`이며, 입력과 출력 모두 `train`, `val`, `test` 세 분할 구조를 그대로 따른다.
+`--dataset <name>` 옵션을 주면 기본 입력은 `data/dataset/<name>/segmentation`, 기본 출력은 `data/dataset/<name>/annotation`이며, 입력과 출력 모두 `train`, `val`, `test` 세 분할 구조를 그대로 따른다.
 
 ## 사용자 문서
 
@@ -15,9 +15,9 @@ segmentation 단계에서 생성된 binary mask로부터 학습용 레이블을 
 
 이 프로젝트의 기본 작업 순서에서 이 스크립트의 위치는 다음과 같다.
 
-1. `scripts/generate_segmentation.py`로 `./data/dataset/segmentation` 준비
-2. `scripts/generate_annotation.py`로 bbox/tip annotation JSON 자동 생성
-3. `scripts/annotation_editor.py`로 생성된 annotation 수동 보정
+1. `scripts/generate_segmentation.py --dataset <name>`로 `data/dataset/<name>/segmentation` 준비
+2. `scripts/generate_annotation.py --dataset <name>`로 bbox/tip annotation JSON 자동 생성
+3. `scripts/annotation_editor.py --dataset <name>`로 생성된 annotation 수동 보정
 
 즉, 이 스크립트의 출력은 완성된 정답이 아니라 **수동 보정의 출발점이 되는 초안 레이블**이다.
 
@@ -41,48 +41,50 @@ segmentation 단계에서 생성된 binary mask로부터 학습용 레이블을 
 프로젝트 루트에서 실행한다.
 
 ```bash
-python -m scripts.generate_annotation
+python -m scripts.generate_annotation --dataset erop
 ```
 
 `uv`를 사용 중이면 다음처럼 실행할 수 있다.
 
 ```bash
-uv run python -m scripts.generate_annotation
+uv run python -m scripts.generate_annotation --dataset erop
 ```
 
-기본값을 그대로 쓰면 아래 경로를 사용한다.
+`--dataset`을 주면 아래 경로를 사용한다.
 
-- 입력 디렉터리: `./data/dataset/segmentation`
-- 출력 디렉터리: `./data/dataset/annotation`
+- 입력 디렉터리: `data/dataset/<dataset>/segmentation`
+- 출력 디렉터리: `data/dataset/<dataset>/annotation`
 - 덮어쓰기: 비활성화 (기존 JSON은 건너뜀)
 
 ### CLI 옵션
 
+- `--dataset`
+  - 데이터셋 이름(예: `erop`, `cholec80`). `--input`/`--output`을 명시하지 않았을 때 기본 경로를 계산하는 데 쓰인다.
 - `--input`
-  - `train/val/test` segmentation mask가 들어 있는 루트 디렉터리. 기본값은 `./data/dataset/segmentation`.
+  - `train/val/test` segmentation mask가 들어 있는 루트 디렉터리. 기본값은 `data/dataset/<dataset>/segmentation`. 명시하면 `--dataset` 기본값보다 항상 우선한다.
 - `--output`
-  - `train/val/test` annotation JSON을 저장할 루트 디렉터리. 기본값은 `./data/dataset/annotation`.
+  - `train/val/test` annotation JSON을 저장할 루트 디렉터리. 기본값은 `data/dataset/<dataset>/annotation`. 명시하면 `--dataset` 기본값보다 항상 우선한다.
 - `--overwrite`
   - 지정하면 기존 JSON 파일을 건너뛰지 않고 다시 생성해 덮어쓴다. 지정하지 않으면 이미 존재하는 JSON은 건너뛴다.
 
 ### 실행 예시
 
-기본 경로로 annotation을 생성하는 예시:
+`--dataset`으로 기본 경로를 사용해 annotation을 생성하는 예시:
 
 ```bash
-python -m scripts.generate_annotation
+python -m scripts.generate_annotation --dataset cholec80
 ```
 
-입력과 출력 경로를 직접 지정하는 예시:
+입력과 출력 경로를 직접 지정하는 예시(`--dataset` 기본값을 무시):
 
 ```bash
-python -m scripts.generate_annotation --input ./data/dataset/segmentation --output ./data/dataset_v2/annotation
+python -m scripts.generate_annotation --input ./data/dataset/erop/segmentation --output ./data/dataset_v2/annotation
 ```
 
 기존 JSON을 모두 다시 생성하는 예시:
 
 ```bash
-python -m scripts.generate_annotation --overwrite
+python -m scripts.generate_annotation --dataset cholec80 --overwrite
 ```
 
 ### 입력 대상 파일
@@ -105,7 +107,7 @@ python -m scripts.generate_annotation --overwrite
 실행 시 출력 디렉터리 아래에 다음 하위 폴더가 생성된다.
 
 ```text
-./data/dataset/
+./data/dataset/<dataset>/
 └── annotation/
     ├── train/
     ├── val/
@@ -204,7 +206,11 @@ numpy가 설치되지 않은 상태다. 프로젝트 의존성을 설치한 뒤 
 
 #### `Input directory does not exist` 에러가 나는 경우
 
-`--input` 경로가 실제로 존재하는지 확인해야 한다. 기본 경로를 쓴다면 `./data/dataset/segmentation`이 준비되어 있어야 한다.
+`--input` 경로가 실제로 존재하는지 확인해야 한다. `--dataset`만 썼다면 `data/dataset/<dataset>/segmentation`이 준비되어 있어야 한다.
+
+#### `Either --dataset or --input must be provided.` 에러가 나는 경우
+
+`--dataset`도 `--input`도 주지 않은 경우다. 둘 중 하나는 반드시 지정해야 한다. `--output`도 마찬가지다.
 
 #### `Split directory does not exist` 에러가 나는 경우
 
@@ -229,9 +235,9 @@ tip 추정은 휴리스틱이므로 항상 정확하지 않다. `annotation_edit
 스크립트는 다음 함수들로 구성된다.
 
 - `parse_args()`
-  - CLI 인자(`--input`, `--output`, `--overwrite`)를 정의하고 파싱한다.
+  - CLI 인자(`--dataset`, `--input`, `--output`, `--overwrite`)를 정의하고 파싱한다.
 - `validate_args(args)`
-  - OpenCV/numpy 의존성, 입력 루트, split 디렉터리 존재 여부를 검증한다.
+  - OpenCV/numpy 의존성, 입력 루트, split 디렉터리 존재 여부를 검증한다. `--dataset` 기반 기본 경로 해석은 `main()`에서 이 함수 호출 전에 끝난다.
 - `ensure_output_dirs(output_root)`
   - 출력 루트 아래 `train`, `val`, `test` 디렉터리를 생성한다.
 - `_all_outputs_exist(input_root, output_root)`
@@ -255,9 +261,20 @@ tip 추정은 휴리스틱이므로 항상 정확하지 않다. `annotation_edit
 - `process_split(...)`
   - 한 split을 처리하고 `(saved, skipped)` 개수를 반환한다.
 - `main()`
-  - 전체 파이프라인을 조합하고 종료 코드 `0`을 반환한다.
+  - `tooltip.dataset_paths.resolve_path()`로 `--input`/`--output`을 확정한 뒤 전체 파이프라인을 조합하고 종료 코드 `0`을 반환한다.
 
 ### 핵심 구현 세부 사항
+
+#### 0. `--dataset` 경로 해석
+
+`main()`은 `parse_args()` 직후 다음을 수행한다.
+
+```python
+args.input = resolve_path(args.input, args.dataset, segmentation_dir, "--input")
+args.output = resolve_path(args.output, args.dataset, annotation_dir, "--output")
+```
+
+`resolve_path()`(`tooltip/dataset_paths.py`)는 명시적으로 준 경로가 있으면 그대로 쓰고, 없으면 `--dataset` 이름으로 기본 경로를 계산한다. 둘 다 없으면 어떤 플래그가 필요한지 알려주는 `ValueError`를 즉시 던진다.
 
 #### 1. 의존성 지연 import
 
@@ -354,7 +371,7 @@ skip은 두 단계로 동작한다.
 import cv2
 from scripts.generate_annotation import extract_annotations, load_binary_mask
 
-mask = load_binary_mask(Path("./data/dataset/segmentation/train/sample01_00000030.png"))
+mask = load_binary_mask(Path("./data/dataset/erop/segmentation/train/sample01_00000030.png"))
 annotations = extract_annotations(mask)
 ```
 

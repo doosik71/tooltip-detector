@@ -11,6 +11,8 @@ from pathlib import Path
 from tkinter import font as tkfont
 from tkinter import scrolledtext, ttk
 
+from tooltip.dataset_paths import list_datasets
+
 
 _ANSI_RE = re.compile(r'\x1b\[[0-9;]*[A-Za-z]|\r')
 
@@ -104,13 +106,20 @@ STEPS: list[dict] = [
 ]
 
 
-def _step_progress(step_id: str) -> tuple[str, str]:
-    """Return (status, detail). status ∈ done | partial | pending | waiting | ready."""
+def _step_progress(step_id: str, dataset: str) -> tuple[str, str]:
+    """Return (status, detail) for the given dataset. status ∈ done | partial | pending | waiting | ready."""
+    if step_id == "download_model":
+        if (TEMP / "models" / "model.pt").exists():
+            return "done", "model.pt"
+        return "pending", "not downloaded"
+
+    dataset_root = DATA / "dataset" / dataset
+
     if step_id == "generate_progressive":
-        src = _count(DATA / "video", VIDEO_EXTS)
-        dst = _count(DATA / "progressive", VIDEO_EXTS)
+        src = _count(DATA / "dataset-src" / dataset, VIDEO_EXTS)
+        dst = _count(dataset_root / "progressive", VIDEO_EXTS)
         if src == 0:
-            return "waiting", "no source videos in data/video"
+            return "waiting", f"no source videos in data/dataset-src/{dataset}"
         if dst >= src:
             return "done", f"{dst}/{src} videos"
         if dst > 0:
@@ -118,19 +127,14 @@ def _step_progress(step_id: str) -> tuple[str, str]:
         return "pending", f"0/{src} videos"
 
     if step_id == "generate_dataset":
-        counts = [_count(DATA / "dataset" / "images" / s, IMAGE_EXTS) for s in SPLITS]
+        counts = [_count(dataset_root / "images" / s, IMAGE_EXTS) for s in SPLITS]
         if sum(counts):
             return "done", "  ".join(f"{s}:{n}" for s, n in zip(SPLITS, counts))
         return "pending", "no images"
 
-    if step_id == "download_model":
-        if (TEMP / "models" / "model.pt").exists():
-            return "done", "model.pt"
-        return "pending", "not downloaded"
-
     if step_id == "generate_segmentation":
-        img = [_count(DATA / "dataset" / "images" / s, IMAGE_EXTS) for s in SPLITS]
-        seg = [_count(DATA / "dataset" / "segmentation" / s, MASK_EXTS) for s in SPLITS]
+        img = [_count(dataset_root / "images" / s, IMAGE_EXTS) for s in SPLITS]
+        seg = [_count(dataset_root / "segmentation" / s, MASK_EXTS) for s in SPLITS]
         detail = "  ".join(f"{s}:{n}" for s, n in zip(SPLITS, seg))
         if sum(seg) == 0:
             return "pending", "no masks"
@@ -139,8 +143,8 @@ def _step_progress(step_id: str) -> tuple[str, str]:
         return "partial", detail
 
     if step_id == "generate_annotation":
-        seg = [_count(DATA / "dataset" / "segmentation" / s, MASK_EXTS) for s in SPLITS]
-        ann = [_count(DATA / "dataset" / "annotation" / s, JSON_EXTS) for s in SPLITS]
+        seg = [_count(dataset_root / "segmentation" / s, MASK_EXTS) for s in SPLITS]
+        ann = [_count(dataset_root / "annotation" / s, JSON_EXTS) for s in SPLITS]
         detail = "  ".join(f"{s}:{n}" for s, n in zip(SPLITS, ann))
         if sum(ann) == 0:
             return "pending", "no annotations"
@@ -149,7 +153,7 @@ def _step_progress(step_id: str) -> tuple[str, str]:
         return "partial", detail
 
     if step_id == "annotation_editor":
-        total = sum(_count(DATA / "dataset" / "annotation" / s, JSON_EXTS) for s in SPLITS)
+        total = sum(_count(dataset_root / "annotation" / s, JSON_EXTS) for s in SPLITS)
         if total:
             return "ready", f"{total} annotations"
         return "waiting", "run step 5 first"
@@ -194,11 +198,32 @@ class PipelineApp:
         self._log_queue: queue.Queue[str | None] = queue.Queue()
         self._proc: subprocess.Popen | None = None
         self._running_idx: int | None = None
+        self.dataset_var = tk.StringVar()
         self._build_ui()
         self._refresh()
         self._poll()
 
     def _build_ui(self) -> None:
+        dataset_frame = ttk.Frame(self.root, padding=(12, 10, 12, 0))
+        dataset_frame.pack(fill="x")
+
+        ttk.Label(dataset_frame, text="Dataset", font=_pick_ui_font(12, "bold")).pack(
+            side="left", padx=(0, 8)
+        )
+        self.dataset_combobox = ttk.Combobox(
+            dataset_frame,
+            textvariable=self.dataset_var,
+            state="readonly",
+            width=24,
+        )
+        self.dataset_combobox.pack(side="left")
+        self.dataset_combobox.bind("<<ComboboxSelected>>", self._on_dataset_changed)
+
+        self.dataset_hint_lbl = ttk.Label(
+            dataset_frame, text="", font=_pick_ui_font(10), foreground="#9e9e9e"
+        )
+        self.dataset_hint_lbl.pack(side="left", padx=(12, 0))
+
         steps_frame = ttk.LabelFrame(self.root, text="Pipeline Steps", padding=10)
         steps_frame.pack(fill="x", padx=12, pady=(10, 2))
 
@@ -265,11 +290,36 @@ class PipelineApp:
         )
         self._log.pack(fill="both", expand=True)
 
+    def _reload_datasets(self) -> None:
+        datasets = list_datasets()
+        self.dataset_combobox["values"] = datasets
+        current = self.dataset_var.get()
+        if datasets:
+            if current not in datasets:
+                self.dataset_var.set(datasets[0])
+            self.dataset_hint_lbl.config(text="")
+        else:
+            self.dataset_var.set("")
+            self.dataset_hint_lbl.config(
+                text="No datasets found under data/dataset-src or data/dataset."
+            )
+
+    def _on_dataset_changed(self, _event: tk.Event[tk.Misc]) -> None:
+        self._refresh()
+
     def _refresh(self) -> None:
         if self._running_idx is not None:
             return
+        self._reload_datasets()
+        dataset = self.dataset_var.get()
         for i, step in enumerate(STEPS):
-            status, detail = _step_progress(step["id"])
+            requires_dataset = step["id"] != "download_model"
+            if requires_dataset and not dataset:
+                status, detail = "waiting", "no dataset selected"
+                self._rows[i]["btn"].config(state="disabled")
+            else:
+                status, detail = _step_progress(step["id"], dataset)
+                self._rows[i]["btn"].config(state="normal")
             icon, color = self._status_style.get(status, ("?", "#616161"))
             self._rows[i]["status"].config(text=icon, foreground=color)
             self._rows[i]["detail"].config(text=detail)
@@ -287,12 +337,24 @@ class PipelineApp:
     def _run(self, idx: int) -> None:
         step = STEPS[idx]
         script = BIN / step["script"]
-        self._append_log(f"\n{'=' * 60}\n▶ {step['label']}\n{'=' * 60}\n")
+        dataset = self.dataset_var.get()
+        requires_dataset = step["id"] != "download_model"
+
+        if requires_dataset and not dataset:
+            self._append_log("\n✗ No dataset selected.\n")
+            return
+
+        args = [str(script)]
+        if requires_dataset:
+            args += ["--dataset", dataset]
+
+        label = f"{step['label']} [{dataset}]" if requires_dataset else step["label"]
+        self._append_log(f"\n{'=' * 60}\n▶ {label}\n{'=' * 60}\n")
         self._set_running(idx)
 
         if step["editor"]:
             try:
-                subprocess.Popen([str(script)], cwd=str(ROOT))
+                subprocess.Popen(args, cwd=str(ROOT))
                 self._log_queue.put("annotation_editor launched\n")
             except Exception as exc:
                 self._log_queue.put(f"✗ launch failed: {exc}\n")
@@ -303,7 +365,7 @@ class PipelineApp:
             env = {**os.environ, "PYTHONUNBUFFERED": "1"}
             try:
                 proc = subprocess.Popen(
-                    [str(script)],
+                    args,
                     cwd=str(ROOT),
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
