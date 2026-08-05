@@ -2,7 +2,7 @@
 
 `scripts/pipeline.py`는 tooltip-annotator의 전체 작업 흐름(progressive 변환 → 데이터셋 생성 → 모델 다운로드 → segmentation → annotation → 수동 편집)을 하나의 GUI 창에서 순서대로 실행하고, 각 단계의 진행 상태와 실행 로그를 함께 보여주는 통합 파이프라인 GUI다.
 
-각 단계는 `bin/` 디렉터리의 런처 스크립트를 호출해 실행되며, 런처는 내부적으로 `uv run python -m scripts.<단계>`를 수행한다.
+각 단계는 현재 GUI 프로세스와 동일한 파이썬 인터프리터로 `python -m scripts.<단계>`를 자식 프로세스로 실행한다(`sys.executable` 사용).
 
 ## 사용자 문서
 
@@ -22,7 +22,6 @@
 - 프로젝트 의존성 설치
 - `tkinter` (GUI)
 - 각 단계 스크립트가 요구하는 의존성(예: `ffmpeg`, `opencv-python`, `torch`, `monai` 등)
-- `uv` (런처 스크립트가 `uv run`을 사용한다)
 
 각 단계 자체의 요구 사항은 해당 단계 문서를 참고한다.
 
@@ -40,13 +39,13 @@ python -m scripts.pipeline
 uv run python -m scripts.pipeline
 ```
 
-런처 스크립트로도 실행할 수 있다.
+`run`/`run.bat` 런처로도 실행할 수 있다.
 
 ```bash
-bin/pipeline
+./run pipeline
 ```
 
-이 GUI는 별도의 CLI 옵션을 받지 않는다. 모든 경로는 프로젝트 루트 기준으로 고정되어 있다(`data/`, `temp/`, `bin/`).
+이 GUI는 별도의 CLI 옵션을 받지 않는다. 모든 경로는 프로젝트 루트 기준으로 고정되어 있다(`data/`, `temp/`).
 
 ### 화면 구성
 
@@ -143,7 +142,7 @@ uv run python -m scripts.generate_annotation --dataset erop --overwrite
 
 #### `Run`을 눌렀는데 `launch failed`가 로그에 뜨는 경우
 
-`bin/<단계>` 런처가 없거나 실행 권한이 없을 수 있다. `bin/` 디렉터리의 스크립트에 실행 권한이 있는지, `uv`가 설치되어 있는지 확인한다.
+현재 파이썬 인터프리터(`sys.executable`)로 `python -m scripts.<단계>`를 실행하지 못한 경우다. 해당 단계 스크립트의 의존성이 설치되어 있는지, `scripts/<단계>.py`가 실제로 존재하는지 확인한다.
 
 #### 상태가 갱신되지 않는 경우
 
@@ -196,7 +195,6 @@ uv run python -m scripts.generate_annotation --dataset erop --overwrite
 
 ```python
 ROOT = Path(__file__).resolve().parent.parent
-BIN = ROOT / "bin"
 DATA = ROOT / "data"
 TEMP = ROOT / "temp"
 ```
@@ -205,7 +203,7 @@ TEMP = ROOT / "temp"
 
 #### 2. 단계 실행 방식 (Run vs Launch)
 
-`_run(idx)`는 먼저 `STEPS[idx]["id"] != "download_model"`이면 데이터셋이 선택되어 있는지 확인하고(없으면 로그에 에러만 남기고 종료), 실행할 인자 목록에 `--dataset <name>`을 붙인다. 이후 `STEPS[idx]["editor"]` 값으로 분기한다.
+`_run(idx)`는 먼저 `STEPS[idx]["id"] != "download_model"`이면 데이터셋이 선택되어 있는지 확인하고(없으면 로그에 에러만 남기고 종료), `[sys.executable, "-m", f"scripts.{step['script']}"]`을 기본 인자로 구성한 뒤 `--dataset <name>`을 붙인다. `bin/` 런처를 거치지 않고 현재 GUI 프로세스와 같은 인터프리터로 직접 모듈을 실행하므로 `tooltip` 같은 프로젝트 루트의 패키지도 그대로 import된다. 이후 `STEPS[idx]["editor"]` 값으로 분기한다.
 
 - **편집기(editor=True)**: `subprocess.Popen(args, cwd=ROOT)`로 별도 창을 띄우고, 출력은 캡처하지 않는다. 곧바로 큐에 `None`(완료 신호)을 넣어 GUI 잠금을 해제한다.
 - **일반 단계(editor=False)**: 데몬 스레드에서 `subprocess.Popen(args, ...)`을 `stdout=PIPE, stderr=STDOUT, text=True, bufsize=1`로 실행하고, 출력 라인을 하나씩 `_log_queue`에 넣는다. 프로세스가 끝나면 종료 코드에 따라 `✓ done`/`✗ error` 메시지와 완료 신호(`None`)를 큐에 넣는다.

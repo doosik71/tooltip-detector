@@ -5,6 +5,7 @@ import os
 import queue
 import re
 import subprocess
+import sys
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -43,7 +44,6 @@ def _pick_log_font(size: int) -> tuple[str, int]:
 
 
 ROOT = Path(__file__).resolve().parent.parent
-BIN = ROOT / "bin"
 DATA = ROOT / "data"
 TEMP = ROOT / "temp"
 
@@ -336,7 +336,6 @@ class PipelineApp:
 
     def _run(self, idx: int) -> None:
         step = STEPS[idx]
-        script = BIN / step["script"]
         dataset = self.dataset_var.get()
         requires_dataset = step["id"] != "download_model"
 
@@ -344,7 +343,7 @@ class PipelineApp:
             self._append_log("\n✗ No dataset selected.\n")
             return
 
-        args = [str(script)]
+        args = [sys.executable, "-m", f"scripts.{step['script']}"]
         if requires_dataset:
             args += ["--dataset", dataset]
 

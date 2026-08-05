@@ -1,9 +1,0 @@
-#!/usr/bin/env sh
-set -e
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
-cd "$PROJECT_ROOT"
-
-exec uv run python -m scripts.download_model "$@"

@@ -34,8 +34,8 @@ uv run python -m scripts.annotation_editor --dataset erop
 # 8) cholec80 원본 비디오를 progressive로 변환
 uv run python scripts/generate_progressive.py --dataset cholec80
 
-# 9) cholec80 프레임 추출(10초마다) 및 train/val/test 분할
-uv run python -m scripts.generate_dataset --dataset cholec80 --frame 250
+# 9) cholec80 프레임 추출(1초마다) 및 train/val/test 분할
+uv run python -m scripts.generate_dataset --dataset cholec80 --frame 25
 
 # 10) cholec80 분할 마스크 생성
 uv run python -m scripts.generate_segmentation --dataset cholec80 --device cuda:0

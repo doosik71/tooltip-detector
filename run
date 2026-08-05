@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # run -- dispatch to a project Python script under scripts/.
 #
-#   run <script-name> [args...]   =>  uv run python scripts/<script-name>.py [args...]
+#   run <script-name> [args...]   =>  uv run python -m scripts.<script-name> [args...]
 #
-# The trailing ".py" is optional, so "run eval-model" and "run eval-model.py"
-# are equivalent. With no arguments, the available scripts are listed.
+# The trailing ".py" is optional, so "run generate_dataset" and
+# "run generate_dataset.py" are equivalent. With no arguments, the available
+# scripts are listed. Invoked as a module (-m) rather than a file path so
+# scripts can import sibling packages at the project root (e.g. tooltip/).
 #
 # Examples:
-#   run eval-calib-model --help
-#   run train-wcrc-model --dataset-dir data/dataset-v2 --models-dir data/models-v2
-#   run eval-continuous-model data/models/vitaldb/mtae_wcrc
+#   run generate_dataset --dataset erop
+#   run generate_segmentation --dataset erop --device cuda:0
+#   run pipeline
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -42,4 +44,4 @@ if [ ! -f "$target" ]; then
     exit 1
 fi
 
-exec uv run python "$target" "$@"
+exec uv run python -m "scripts.$name" "$@"
