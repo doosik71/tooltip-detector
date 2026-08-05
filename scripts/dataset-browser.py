@@ -2,10 +2,11 @@
 """Interactive dataset browser for SurgicalToolDataset.
 
 Shows the original image alongside the distance-based heatmap overlay.
-Navigate with ← → arrow keys or buttons.
+Navigate with ← → arrow keys or buttons. The "Dataset" dropdown switches
+between data/dataset/<dataset-name>/ directories at runtime.
 
 Usage:
-    uv run python scripts/dataset-browser.py [--data-root PATH] [--split SPLIT]
+    uv run python scripts/dataset-browser.py --dataset cholec80 [--split SPLIT]
 """
 import argparse
 import json
@@ -18,7 +19,7 @@ from tkinter import ttk
 from PIL import Image, ImageDraw, ImageTk
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from ttd.dataset import SurgicalToolDataset
+from ttd.dataset import DATASETS, SurgicalToolDataset
 
 
 SPLITS = ["train", "val", "test"]
@@ -83,12 +84,13 @@ def _to_photo(arr: np.ndarray) -> ImageTk.PhotoImage:
 # ---------------------------------------------------------------------------
 
 class DatasetBrowser(tk.Tk):
-    def __init__(self, data_root: str, split: str):
+    def __init__(self, data_root: str, dataset_name: str, split: str):
         super().__init__()
         self.title("Dataset Browser — SurgicalToolDataset")
         self.resizable(False, False)
 
         self._data_root = data_root
+        self._dataset_name = dataset_name
         self._ds: SurgicalToolDataset | None = None
         self._idx = 0
         # Hold references so GC does not delete PhotoImages
@@ -107,6 +109,13 @@ class DatasetBrowser(tk.Tk):
         # ── Controls row ─────────────────────────────────────────────────
         ctrl = tk.Frame(self, pady=6, padx=8)
         ctrl.pack(fill=tk.X)
+
+        tk.Label(ctrl, text="Dataset:").pack(side=tk.LEFT)
+        self._dataset_var = tk.StringVar(value=self._dataset_name)
+        dataset_cb = ttk.Combobox(ctrl, textvariable=self._dataset_var,
+                                  values=list(DATASETS), width=10, state="readonly")
+        dataset_cb.pack(side=tk.LEFT, padx=(2, 12))
+        dataset_cb.bind("<<ComboboxSelected>>", self._on_dataset_change)
 
         tk.Label(ctrl, text="Split:").pack(side=tk.LEFT)
         self._split_var = tk.StringVar()
@@ -182,9 +191,14 @@ class DatasetBrowser(tk.Tk):
 
     # ── Dataset operations ───────────────────────────────────────────────
 
+    def _on_dataset_change(self, _=None):
+        self._dataset_name = self._dataset_var.get()
+        self._load_split(self._split_var.get() or "train")
+
     def _load_split(self, split: str):
         self._split_var.set(split)
-        self._ds = SurgicalToolDataset(self._data_root, split)
+        dataset_root = os.path.join(self._data_root, self._dataset_name)
+        self._ds = SurgicalToolDataset(dataset_root, split)
         n = len(self._ds)
         self._total_lbl.config(text=f"/ {n}")
         self._seekbar.config(to=max(1, n - 1))
@@ -273,13 +287,17 @@ def main():
     parser = argparse.ArgumentParser(
         description="Browse SurgicalToolDataset with distance-based heatmap overlay"
     )
+    parser.add_argument("--dataset", required=True,
+                        choices=list(DATASETS),
+                        help="Dataset name under --data-root (e.g. cholec80)")
     parser.add_argument("--data-root", default="data/dataset",
-                        help="Path to data/dataset/ directory")
+                        help="Root directory containing <dataset>/ subdirectories "
+                             "(default: data/dataset)")
     parser.add_argument("--split", default="train", choices=SPLITS,
                         help="Dataset split to open initially")
     args = parser.parse_args()
 
-    app = DatasetBrowser(data_root=args.data_root, split=args.split)
+    app = DatasetBrowser(data_root=args.data_root, dataset_name=args.dataset, split=args.split)
     app.mainloop()
 
 

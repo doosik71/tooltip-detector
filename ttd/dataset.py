@@ -20,6 +20,12 @@ TARGET_MODES = ("gradient-seg", "gaussian-tip")
 DEFAULT_TARGET_MODE = "gradient-seg"
 DEFAULT_GAUSSIAN_SIGMA = 15.0
 
+# Known subdirectory names under data/dataset/ (each is a separate, independently
+# split train/val/test dataset). Used by CLI --dataset choices and GUI dropdowns;
+# SurgicalToolDataset itself only ever sees the resolved `root` path below and
+# does not reference this list.
+DATASETS = ("cholec80", "erop")
+
 
 class SurgicalToolDataset(Dataset):
     """Surgical tool dataset with distance-based tip heatmap targets.
@@ -42,7 +48,7 @@ class SurgicalToolDataset(Dataset):
       does not require a segmentation mask, only the tip point.
 
     Args:
-        root:           path to data/dataset/
+        root:           path to data/dataset/<dataset-name>/
         split:          one of "train", "val", "test"
         transform:      albumentations transform applied to both image and target mask
         target_mode:    one of TARGET_MODES (default: "gradient-seg")
@@ -157,7 +163,8 @@ class SurgicalToolDataset(Dataset):
 
             dists = np.hypot(all_xs - tip_x, all_ys - tip_y)
             max_dist = dists.max()
-            values = 1.0 - dists / max_dist if max_dist > 0 else np.ones_like(dists)
+            values = 1.0 - dists / \
+                max_dist if max_dist > 0 else np.ones_like(dists)
 
             target[all_ys.astype(int), all_xs.astype(int)] = values
 
@@ -205,7 +212,8 @@ class SurgicalToolDataset(Dataset):
         image = np.array(Image.open(os.path.join(self.img_dir, stem + ".png")))
 
         if self.target_mode == "gradient-seg":
-            seg = np.array(Image.open(os.path.join(self.seg_dir, stem + ".png")))
+            seg = np.array(Image.open(
+                os.path.join(self.seg_dir, stem + ".png")))
             target = self._build_target_gradient_seg(seg, ann["annotations"])
         else:  # "gaussian-tip"
             target = self._build_target_gaussian_tip(
@@ -228,7 +236,8 @@ class SurgicalToolDataset(Dataset):
             try:
                 return self._load_sample(sample_idx)
             except Exception as e:
-                stem = os.path.splitext(os.path.basename(self.samples[sample_idx]))[0]
+                stem = os.path.splitext(
+                    os.path.basename(self.samples[sample_idx]))[0]
                 print(f"Warning: {stem}.png - {e} (skipping corrupt sample)")
 
         raise RuntimeError(

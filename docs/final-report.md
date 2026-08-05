@@ -186,7 +186,7 @@ loss = MSE(sigmoid(pred[:, 1]), target)
 | GaussNoise        | 0.3  | —                                      |
 | Normalize         | 항상 | ImageNet mean/std                      |
 
-**최적화 설정:** 옵티마이저는 Adam(lr=1e-4), 학습률 스케줄러는 CosineAnnealingLR(T_max=epochs)을 에포크 종료 시 step한다. 기본 학습 설정은 30 에포크, 배치 크기 16이다. 매 에포크 종료 시 검증 손실이 개선되면 `best.pt`, 항상 `last.pt`를 모델 타입별 디렉터리(`data/models/<model-type>/`)에 저장한다. 두 모델은 동일한 손실 함수·데이터셋·증강 파이프라인·최적화 설정으로 학습되어 공정한 비교가 가능하다.
+**최적화 설정:** 옵티마이저는 Adam(lr=1e-4), 학습률 스케줄러는 CosineAnnealingLR(T_max=epochs)을 에포크 종료 시 step한다. 기본 학습 설정은 30 에포크, 배치 크기 16이다. 매 에포크 종료 시 검증 손실이 개선되면 `best.pt`, 항상 `last.pt`를 데이터셋·타겟 모드·모델 타입별 디렉터리(`data/models/<dataset>/<target-mode>/<model-type>/`, 이 보고서의 결과는 `erop`/`gradient-seg`)에 저장한다. 두 모델은 동일한 손실 함수·데이터셋·증강 파이프라인·최적화 설정으로 학습되어 공정한 비교가 가능하다.
 
 > **가정:** 평가 결과 파일에는 실행 시각만 기록되어 있고 학습에 실제 사용한 에포크 수는 명시되어 있지 않다. 본 보고서는 학습 가이드에 정의된 기본 설정(30 에포크, 배치 16, Adam lr=1e-4, CosineAnnealingLR)을 기준 학습 구성으로 간주한다.
 
@@ -376,11 +376,11 @@ CPU 환경에서 테스트 세트 임의 샘플 1,000건(seed=42, batch=16, work
 
 ## 부록 B. 결과 데이터 출처
 
-| 파일                                   | 내용                             |
-| -------------------------------------- | -------------------------------- |
-| `data/results/monai/summary.json`      | 풀 모델 평가 결과 (2026-06-29)   |
-| `data/results/monai_mini/summary.json` | 경량 모델 평가 결과 (2026-06-30) |
-| `data/results/speed-comparison.json`   | 추론 속도 비교 (2026-06-30)      |
-| `data/results/<model>/per_tip.csv`     | GT 팁 단위 상세 기록             |
+| 파일                                                | 내용                             |
+| ---------------------------------------------------- | -------------------------------- |
+| `data/results/erop/gradient-seg/monai/summary.json`      | 풀 모델 평가 결과 (2026-06-29)   |
+| `data/results/erop/gradient-seg/monai_mini/summary.json` | 경량 모델 평가 결과 (2026-06-30) |
+| `data/results/erop/gradient-seg/speed-comparison.json`   | 추론 속도 비교 (2026-06-30)      |
+| `data/results/erop/gradient-seg/<model>/per_tip.csv`     | GT 팁 단위 상세 기록             |
 
 상세 분석 문서: `docs/eval-results-monai.md`, `docs/eval-results-monai_mini.md`, `docs/model-monai.md`, `docs/model-monai_mini.md`, `docs/dataset-guide.md`, `docs/train-guide.md`, `docs/eval-guide.md`.

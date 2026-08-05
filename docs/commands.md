@@ -12,57 +12,57 @@ uv sync
 ## 데이터셋 확인 (선택)
 
 ```bash
-run dataset-browser
+run dataset-browser --dataset cholec80
 ```
 
 ## 학습
 
 ```bash
 # monai / gradient-seg
-run train-model
+run train-model --dataset cholec80
 
 # monai / gaussian-tip
-run train-model --target-mode gaussian-tip
+run train-model --dataset cholec80 --target-mode gaussian-tip
 
 # monai_mini / gradient-seg
-run train-model --model-type monai_mini
+run train-model --dataset cholec80 --model-type monai_mini
 
 # monai_mini / gaussian-tip
-run train-model --model-type monai_mini --target-mode gaussian-tip
+run train-model --dataset cholec80 --model-type monai_mini --target-mode gaussian-tip
 ```
 
 ## 평가
 
 ```bash
 # monai / gradient-seg
-run eval-model
+run eval-model --dataset cholec80
 
 # monai / gaussian-tip
-run eval-model --target-mode gaussian-tip
+run eval-model --dataset cholec80 --target-mode gaussian-tip
 
 # monai_mini / gradient-seg
-run eval-model --model-type monai_mini
+run eval-model --dataset cholec80 --model-type monai_mini
 
 # monai_mini / gaussian-tip
-run eval-model --model-type monai_mini --target-mode gaussian-tip
+run eval-model --dataset cholec80 --model-type monai_mini --target-mode gaussian-tip
 ```
 
 ## 속도 비교
 
 ```bash
-run compare-speed
+run compare-speed --dataset cholec80
 ```
 
 ## 탐지 결과 시각화 (GUI)
 
 ```bash
-run tooltip-detector
-run tooltip-detector --target-mode gaussian-tip
+run tooltip-detector --dataset cholec80
+run tooltip-detector --dataset cholec80 --target-mode gaussian-tip
 ```
 
 ## 동영상 실시간 추적 (GUI)
 
 ```bash
-run tooltip-tracker
-run tooltip-tracker --target-mode gaussian-tip
+run tooltip-tracker --dataset cholec80
+run tooltip-tracker --dataset cholec80 --target-mode gaussian-tip
 ```

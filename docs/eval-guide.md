@@ -6,73 +6,75 @@
 
 모델이 출력한 2채널 히트맵의 채널 1(tool channel)에 sigmoid를 적용하여 팁 위치 후보(피크)를 추출한다. 추출된 후보와 정답(GT) 팁 좌표를 매칭하여 픽셀 거리 기반 정확도 지표를 계산한다.
 
-평가 결과는 `data/results/<target-mode>/<model-type>/`에 자동 저장된다. 실행마다 덮어쓴다.
+평가 결과는 `data/results/<dataset>/<target-mode>/<model-type>/`에 자동 저장된다. 실행마다 덮어쓴다.
 
 ## 사전 준비
 
 학습이 완료된 가중치 파일이 필요하다:
 
 ```text
-data/models/<target-mode>/<model-type>/best.pt   ← 기본 경로 (예: data/models/gradient-seg/monai/best.pt)
+data/models/<dataset>/<target-mode>/<model-type>/best.pt   ← 기본 경로 (예: data/models/cholec80/gradient-seg/monai/best.pt)
 ```
 
 ## 실행
 
 ```bash
-run eval-model          # Linux / macOS
-run.bat eval-model      # Windows
+run eval-model --dataset cholec80          # Linux / macOS
+run.bat eval-model --dataset cholec80      # Windows
 ```
 
 임계값 조정:
 
 ```bash
-run eval-model --threshold 0.3 --nms-radius 15
+run eval-model --dataset cholec80 --threshold 0.3 --nms-radius 15
 ```
 
 `gaussian-tip`으로 학습한 모델 평가 (GT 팁 좌표는 annotation에서 직접 읽으므로 segmentation mask 없는 테스트 세트도 가능):
 
 ```bash
-run eval-model --target-mode gaussian-tip
+run eval-model --dataset cholec80 --target-mode gaussian-tip
 ```
 
 ## 인수
 
-| 인수            | 기본값                                           | 설명                                   |
-| --------------- | ------------------------------------------------ | -------------------------------------- |
-| `--model-type`  | `monai`                                          | 모델 아키텍처 (`monai` / `monai_mini`) |
-| `--target-mode` | `gradient-seg`                                   | 평가 대상 모델이 학습된 타겟 생성 방식 |
-| `--model`       | `data/models/<target-mode>/<model-type>/best.pt` | 모델 가중치 파일 경로                  |
-| `--data-root`   | `data/dataset`                                   | 데이터셋 루트 디렉터리                 |
-| `--results-dir` | `data/results/<target-mode>/<model-type>`        | 결과 저장 루트 디렉터리                |
-| `--threshold`   | `0.5`                                            | 피크 탐지 임계값 (히트맵 값 기준)      |
-| `--nms-radius`  | `20`                                             | 두 피크 사이의 최소 픽셀 거리 (NMS)    |
-| `--batch-size`  | `16`                                             | 추론 배치 크기                         |
-| `--workers`     | `4`                                              | DataLoader 워커 수                     |
-| `--device`      | 자동                                             | torch device (예: `cuda:0`, `cpu`)     |
+| 인수             | 기본값                                              | 설명                                   |
+| --------------- | -------------------------------------------------- | -------------------------------------- |
+| `--dataset`     | (필수)                                              | `data/dataset/` 아래 데이터셋 이름 (`erop` / `cholec80`) |
+| `--model-type`  | `monai`                                             | 모델 아키텍처 (`monai` / `monai_mini`) |
+| `--target-mode` | `gradient-seg`                                      | 평가 대상 모델이 학습된 타겟 생성 방식 |
+| `--model`       | `data/models/<dataset>/<target-mode>/<model-type>/best.pt` | 모델 가중치 파일 경로           |
+| `--data-root`   | `data/dataset`                                      | `<dataset-name>/` 서브디렉터리를 담는 루트 디렉터리 |
+| `--results-dir` | `data/results/<dataset>/<target-mode>/<model-type>` | 결과 저장 루트 디렉터리                |
+| `--threshold`   | `0.5`                                               | 피크 탐지 임계값 (히트맵 값 기준)      |
+| `--nms-radius`  | `20`                                                | 두 피크 사이의 최소 픽셀 거리 (NMS)    |
+| `--batch-size`  | `16`                                                | 추론 배치 크기                         |
+| `--workers`     | `4`                                                 | DataLoader 워커 수                     |
+| `--device`      | 자동                                                | torch device (예: `cuda:0`, `cpu`)     |
 
 ## 결과 저장
 
-실행마다 `data/results/<target-mode>/<model-type>/`에 덮어쓴다:
+실행마다 `data/results/<dataset>/<target-mode>/<model-type>/`에 덮어쓴다:
 
 ```text
-data/results/<target-mode>/<model-type>/
+data/results/<dataset>/<target-mode>/<model-type>/
 ├── summary.json
 └── per_tip.csv
 ```
 
 ### summary.json
 
-전체 지표, 세션별 지표, 실행 파라미터를 포함한다.
+전체 지표, 세션별 지표, 실행 파라미터를 포함한다. 아래는 `erop` 데이터셋 평가의 실제 결과 예시다.
 
 ```json
 {
   "timestamp": "20260625_143022",
+  "dataset": "erop",
   "model_type": "monai",
   "target_mode": "gradient-seg",
-  "model_path": "data/models/gradient-seg/monai/best.pt",
+  "model_path": "data/models/erop/gradient-seg/monai/best.pt",
   "threshold": 0.5,
   "nms_radius": 20,
-  "data_root": "data/dataset",
+  "data_root": "data/dataset/erop",
   "n_frames_with_tools": 30930,
   "n_gt_tips": 31005,
   "n_missed": 318,
@@ -151,13 +153,16 @@ doctor_250620_084707_00000042,doctor_250620_084707,186,240,,,,1
 
 ## 터미널 출력 예시
 
+아래는 `erop` 데이터셋(`--dataset erop`)으로 평가했을 때의 실제 출력 예시다.
+
 ```text
 Device      : cuda
+Dataset     : erop
 Model type  : monai
 Target mode : gradient-seg
-Model       : data/models/gradient-seg/monai/best.pt
+Model       : data/models/erop/gradient-seg/monai/best.pt
 Threshold   : 0.5   NMS radius: 20 px
-Results dir : data/results/gradient-seg/monai
+Results dir : data/results/erop/gradient-seg/monai
 Test frames : 36,142
 
   36000/36142  gt_tips_seen=30921  missed=312
@@ -166,7 +171,8 @@ Test frames : 36,142
 ==========================================================
   Evaluation Results
 ==========================================================
-  Model                              data/models/gradient-seg/monai/best.pt
+  Dataset                            erop
+  Model                              data/models/erop/gradient-seg/monai/best.pt
   Target mode                        gradient-seg
   Threshold / NMS radius             0.5  /  20 px
 ----------------------------------------------------------
@@ -187,8 +193,8 @@ Test frames : 36,142
     ...
 ==========================================================
 
-  summary.json  → data/results/gradient-seg/monai/summary.json
-  per_tip.csv   → data/results/gradient-seg/monai/per_tip.csv  (31,005 rows)
+  summary.json  → data/results/erop/gradient-seg/monai/summary.json
+  per_tip.csv   → data/results/erop/gradient-seg/monai/per_tip.csv  (31,005 rows)
 ```
 
 ## 임계값 튜닝

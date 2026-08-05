@@ -1,12 +1,12 @@
 # 평가 결과 분석서
 
-`data/results/monai_mini/summary.json` 기준 (실행 시각: 2026-06-30 15:28:49)
+`data/results/erop/gradient-seg/monai_mini/summary.json` 기준 (실행 시각: 2026-06-30 15:28:49)
 
 ## 평가 조건
 
-| 항목       | 값                               |
-| ---------- | -------------------------------- |
-| 모델       | `data/models/monai_mini/best.pt` |
+| 항목       | 값                                          |
+| ---------- | -------------------------------------------- |
+| 모델       | `data/models/erop/gradient-seg/monai_mini/best.pt` |
 | 스플릿     | test (36,142 프레임)             |
 | Threshold  | 0.5                              |
 | NMS radius | 20 px                            |

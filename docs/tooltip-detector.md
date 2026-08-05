@@ -8,36 +8,37 @@
 
 | 모드        | 설명                                                                                                                                              |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **dataset** | `data/dataset/` 내 train / val / test 스플릿의 프레임을 순서대로 탐색. GT 어노테이션과 예측 결과를 비교하고 누적 평가 지표를 실시간으로 확인한다. |
+| **dataset** | `data/dataset/<dataset-name>/` 내 train / val / test 스플릿의 프레임을 순서대로 탐색. GT 어노테이션과 예측 결과를 비교하고 누적 평가 지표를 실시간으로 확인한다. |
 | **file**    | 임의의 이미지 파일을 직접 열어 팁 탐지 결과만 확인한다. GT 어노테이션 없음.                                                                       |
 
 ## 실행
 
 ```bash
-run tooltip-detector          # Linux / macOS
-run.bat tooltip-detector      # Windows
+run tooltip-detector --dataset cholec80          # Linux / macOS
+run.bat tooltip-detector --dataset cholec80      # Windows
 ```
 
 모델 경로 지정:
 
 ```bash
-run tooltip-detector --model data/models/gradient-seg/monai/best.pt --data-root data/dataset
+run tooltip-detector --dataset cholec80 --model data/models/cholec80/gradient-seg/monai/best.pt
 ```
 
 `gaussian-tip`으로 학습한 모델 로드:
 
 ```bash
-run tooltip-detector --target-mode gaussian-tip
+run tooltip-detector --dataset cholec80 --target-mode gaussian-tip
 ```
 
 ## 인수
 
-| 인수            | 기본값                                           | 설명                                                                                |
-| --------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `--model-type`  | `monai`                                          | 모델 아키텍처 (`monai` / `monai_mini`), GUI의 `Model` 드롭다운으로도 전환 가능      |
-| `--target-mode` | `gradient-seg`                                   | 로드할 체크포인트의 타겟 생성 방식(초기값). GUI의 `Target` 드롭다운으로도 전환 가능 |
-| `--model`       | `data/models/<target-mode>/<model-type>/best.pt` | 학습된 모델 가중치 파일 경로                                                        |
-| `--data-root`   | `data/dataset`                                   | 데이터셋 루트 디렉터리                                                              |
+| 인수            | 기본값                                                      | 설명                                                                                |
+| --------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `--dataset`     | (필수)                                                        | 데이터셋 이름(초기값, `erop` / `cholec80`). GUI의 `Dataset` 드롭다운으로도 전환 가능 |
+| `--model-type`  | `monai`                                                       | 모델 아키텍처 (`monai` / `monai_mini`), GUI의 `Model` 드롭다운으로도 전환 가능      |
+| `--target-mode` | `gradient-seg`                                                | 로드할 체크포인트의 타겟 생성 방식(초기값). GUI의 `Target` 드롭다운으로도 전환 가능 |
+| `--model`       | `data/models/<dataset>/<target-mode>/<model-type>/best.pt`    | 학습된 모델 가중치 파일 경로                                                        |
+| `--data-root`   | `data/dataset`                                                | `<dataset-name>/` 서브디렉터리를 담는 루트 디렉터리                                 |
 
 ## 화면 구성
 
@@ -45,7 +46,7 @@ run tooltip-detector --target-mode gaussian-tip
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ Mode: [dataset▼]  Split: [test▼]  [Open Image…]  [<-] [->] [Rand]  [  42  ] / 36142  ← → : navigate   R : random │
 ├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ Threshold: ──●──── 0.50   NMS radius: ──●──── 20px   Model: monai/gradient-seg (best.pt) [cuda]                  │
+│ Threshold: ──●──── 0.50   NMS radius: ──●──── 20px   Model: erop/monai/gradient-seg (best.pt) [cuda]             │
 ├────────────────────────────────────────────────────────┬─────────────────────────────────────────────────────────┤
 │ Original                                               │   Heatmap (hot colormap) + Predicted peaks              │
 │ [ GT: colored o                                        │                                                         │
@@ -72,6 +73,7 @@ run tooltip-detector --target-mode gaussian-tip
 | --------------------- | ------------------------------------------------------------------------- |
 | `Mode` 드롭다운       | `dataset` / `file` 모드 전환                                              |
 | `Split` 드롭다운      | 스플릿 전환 (dataset 모드에서만 활성)                                     |
+| `Dataset` 드롭다운    | `erop` / `cholec80` 전환. dataset 모드에서는 탐색 중인 프레임도 함께 바뀌며, 선택한 데이터셋·모델 타입·타겟 모드 조합의 `best.pt`를 재로드 |
 | `Model` 드롭다운      | `monai` / `monai_mini` 전환, 선택한 타입의 `best.pt` 재로드               |
 | `Target` 드롭다운     | `gradient-seg` / `gaussian-tip` 전환, 선택한 타겟 모드의 `best.pt` 재로드 |
 | `Open Image…` 버튼    | 임의 이미지 파일 열기 (file 모드에서만 활성)                              |

@@ -1,8 +1,8 @@
 """Training script for TooltipDetector.
 
 Usage:
-    uv run python scripts/train-model.py [--epochs N] [--batch-size N] [--lr F] [--data-root PATH]
-    uv run python scripts/train-model.py --target-mode gaussian-tip --gaussian-sigma 15
+    uv run python scripts/train-model.py --dataset cholec80 [--epochs N] [--batch-size N] [--lr F]
+    uv run python scripts/train-model.py --dataset cholec80 --target-mode gaussian-tip --gaussian-sigma 15
 
 Target modes (--target-mode)
 -----------------------------
@@ -13,8 +13,8 @@ Target modes (--target-mode)
 
 Checkpoints
 -----------
-  data/models/<target-mode>/<model-type>/best.pt  — lowest validation-loss model seen so far
-  data/models/<target-mode>/<model-type>/last.pt  — model state at the end of the most recent epoch
+  data/models/<dataset>/<target-mode>/<model-type>/best.pt  — lowest validation-loss model seen so far
+  data/models/<dataset>/<target-mode>/<model-type>/last.pt  — model state at the end of the most recent epoch
 """
 
 import argparse
@@ -32,7 +32,7 @@ from tqdm import tqdm
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from ttd.checkpoints import model_dir as default_model_dir
-from ttd.dataset import DEFAULT_GAUSSIAN_SIGMA, DEFAULT_TARGET_MODE, TARGET_MODES, SurgicalToolDataset
+from ttd.dataset import DATASETS, DEFAULT_GAUSSIAN_SIGMA, DEFAULT_TARGET_MODE, TARGET_MODES, SurgicalToolDataset
 from ttd.model import REGISTRY as MODEL_REGISTRY
 from ttd.model import build as build_model
 from ttd.transforms import _eval_transform
@@ -136,6 +136,9 @@ def _run_epoch(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset", required=True,
+                        choices=list(DATASETS),
+                        help="Dataset name under --data-root (e.g. cholec80)")
     parser.add_argument("--model-type", default="monai",
                         choices=list(MODEL_REGISTRY),
                         help="Model architecture to train (default: monai)")
@@ -146,10 +149,12 @@ def main() -> None:
     parser.add_argument("--gaussian-sigma", type=float, default=DEFAULT_GAUSSIAN_SIGMA,
                         help="Gaussian std-dev in px, only used when "
                              f"--target-mode=gaussian-tip (default: {DEFAULT_GAUSSIAN_SIGMA})")
-    parser.add_argument("--data-root",  default="data/dataset")
+    parser.add_argument("--data-root",  default="data/dataset",
+                        help="Root directory containing <dataset>/ subdirectories "
+                             "(default: data/dataset)")
     parser.add_argument("--model-dir",  default=None,
                         help="Directory for best.pt and last.pt "
-                             "(default: data/models/<target-mode>/<model-type>)")
+                             "(default: data/models/<dataset>/<target-mode>/<model-type>)")
     parser.add_argument("--epochs",     type=int,   default=30)
     parser.add_argument("--batch-size", type=int,   default=16)
     parser.add_argument("--lr",         type=float, default=1e-4)
@@ -159,7 +164,9 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.model_dir is None:
-        args.model_dir = default_model_dir(args.model_type, args.target_mode)
+        args.model_dir = default_model_dir(
+            model_type=args.model_type, dataset_name=args.dataset,
+            target_mode=args.target_mode)
 
     best_path = os.path.join(args.model_dir, "best.pt")
     last_path = os.path.join(args.model_dir, "last.pt")
@@ -168,11 +175,12 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # ── Datasets & loaders ───────────────────────────────────────────────
+    dataset_root = os.path.join(args.data_root, args.dataset)
     train_ds = SurgicalToolDataset(
-        args.data_root, "train", transform=_train_transform(),
+        dataset_root, "train", transform=_train_transform(),
         target_mode=args.target_mode, gaussian_sigma=args.gaussian_sigma)
     val_ds = SurgicalToolDataset(
-        args.data_root, "val",   transform=_eval_transform(),
+        dataset_root, "val",   transform=_eval_transform(),
         target_mode=args.target_mode, gaussian_sigma=args.gaussian_sigma)
 
     train_loader = DataLoader(
@@ -197,6 +205,7 @@ def main() -> None:
 
     # ── Header ───────────────────────────────────────────────────────────
     print(f"Device     : {device}")
+    print(f"Dataset    : {args.dataset}")
     print(f"Model type : {args.model_type}")
     print(f"Target mode: {args.target_mode}"
           + (f"  (gaussian_sigma={args.gaussian_sigma})" if args.target_mode == "gaussian-tip" else ""))

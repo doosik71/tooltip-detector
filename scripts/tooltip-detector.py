@@ -20,14 +20,15 @@ Controls
 
 Usage
 -----
-    uv run python scripts/tooltip-detector.py
-    uv run python scripts/tooltip-detector.py --model-type monai_mini
-    uv run python scripts/tooltip-detector.py --target-mode gaussian-tip
-    uv run python scripts/tooltip-detector.py --model data/models/gradient-seg/monai/best.pt --data-root data/dataset
+    uv run python scripts/tooltip-detector.py --dataset cholec80
+    uv run python scripts/tooltip-detector.py --dataset cholec80 --model-type monai_mini
+    uv run python scripts/tooltip-detector.py --dataset cholec80 --target-mode gaussian-tip
+    uv run python scripts/tooltip-detector.py --dataset cholec80 --model data/models/cholec80/gradient-seg/monai/best.pt
 
-The model architecture and target-mode can also be switched at runtime via the
-GUI's "Model" and "Target" dropdowns, which reload
-data/models/<target-mode>/<model-type>/best.pt for the selected combination.
+The dataset, model architecture, and target-mode can also be switched at
+runtime via the GUI's "Dataset", "Model", and "Target" dropdowns, which
+reload data/models/<dataset>/<target-mode>/<model-type>/best.pt for the
+selected combination.
 """
 
 import argparse
@@ -57,7 +58,7 @@ if True:
     from ttd.transforms import _eval_transform
     from ttd.model import build as build_model
     from ttd.model import REGISTRY as MODEL_REGISTRY
-    from ttd.dataset import DEFAULT_TARGET_MODE, TARGET_MODES
+    from ttd.dataset import DATASETS, DEFAULT_TARGET_MODE, TARGET_MODES
     from ttd.checkpoints import default_model_path as _default_model_path
 
 
@@ -194,12 +195,13 @@ def _to_photo(arr: np.ndarray) -> ImageTk.PhotoImage:
 
 class TooltipDetectorApp(tk.Tk):
     def __init__(self, model_type: str, model_path: str, data_root: str,
-                 target_mode: str = DEFAULT_TARGET_MODE):
+                 dataset_name: str, target_mode: str = DEFAULT_TARGET_MODE):
         super().__init__()
         self.title("Tooltip Detector")
         self.resizable(True, True)
 
         self._data_root = data_root
+        self._dataset_name = dataset_name
         self._model_type = model_type
         self._target_mode = target_mode
         self._model_path = model_path
@@ -265,10 +267,10 @@ class TooltipDetectorApp(tk.Tk):
 
         model_name = os.path.basename(self._model_path)
         if self._model:
-            text = f"Model: {self._model_type}/{self._target_mode} ({model_name})  [{self._device}]"
+            text = f"Model: {self._dataset_name}/{self._model_type}/{self._target_mode} ({model_name})  [{self._device}]"
             color = "#005500"
         else:
-            text = f"Model NOT loaded: {self._model_type}/{self._target_mode} ({model_name})"
+            text = f"Model NOT loaded: {self._dataset_name}/{self._model_type}/{self._target_mode} ({model_name})"
             color = "#aa0000"
 
         self._model_status_var.set(text)
@@ -391,6 +393,18 @@ class TooltipDetectorApp(tk.Tk):
         self._split_cb.pack(side=tk.LEFT, padx=(2, 8))
         self._split_cb.bind("<<ComboboxSelected>>",
                             lambda _: self._load_split(self._split_var.get()))
+
+        tk.Label(ctrl, text="Dataset:").pack(side=tk.LEFT)
+        self._dataset_var = tk.StringVar(value=self._dataset_name)
+        self._dataset_cb = ttk.Combobox(
+            ctrl,
+            textvariable=self._dataset_var,
+            values=list(DATASETS),
+            width=10,
+            state="readonly",
+        )
+        self._dataset_cb.pack(side=tk.LEFT, padx=(2, 8))
+        self._dataset_cb.bind("<<ComboboxSelected>>", self._on_dataset_change)
 
         tk.Label(ctrl, text="Target:").pack(side=tk.LEFT)
         self._target_mode_var = tk.StringVar(value=self._target_mode)
@@ -608,7 +622,9 @@ class TooltipDetectorApp(tk.Tk):
 
     def _on_model_change(self, _=None):
         model_type = self._model_var.get()
-        model_path = _default_model_path(model_type, self._target_mode)
+        model_path = _default_model_path(
+            model_type=model_type, dataset_name=self._dataset_name,
+            target_mode=self._target_mode)
         self._apply_model(model_type, model_path, show_error=True)
         self._stats_reset()
         self._refresh_stats_display()
@@ -616,11 +632,27 @@ class TooltipDetectorApp(tk.Tk):
 
     def _on_target_mode_change(self, _=None):
         self._target_mode = self._target_mode_var.get()
-        model_path = _default_model_path(self._model_type, self._target_mode)
+        model_path = _default_model_path(
+            model_type=self._model_type, dataset_name=self._dataset_name,
+            target_mode=self._target_mode)
         self._apply_model(self._model_type, model_path, show_error=True)
         self._stats_reset()
         self._refresh_stats_display()
         self._rerender_current_view()
+
+    def _on_dataset_change(self, _=None):
+        self._dataset_name = self._dataset_var.get()
+        model_path = _default_model_path(
+            model_type=self._model_type, dataset_name=self._dataset_name,
+            target_mode=self._target_mode)
+        self._apply_model(self._model_type, model_path, show_error=True)
+        self._stats_reset()
+        self._refresh_stats_display()
+        if self._mode_var.get() == "dataset":
+            # Reloads self._ds from the new dataset root and re-renders.
+            self._load_split(self._split_var.get() or "test")
+        else:
+            self._rerender_current_view()
 
     def _on_param_change(self):
         """Slider moved — update labels and re-render current frame (no stat update)."""
@@ -635,7 +667,8 @@ class TooltipDetectorApp(tk.Tk):
 
     def _load_split(self, split: str):
         self._split_var.set(split)
-        self._ds = SurgicalToolDataset(self._data_root, split)
+        dataset_root = os.path.join(self._data_root, self._dataset_name)
+        self._ds = SurgicalToolDataset(dataset_root, split)
         n = len(self._ds)
         self._total_lbl.config(text=f"/ {n}")
         self._seekbar.config(to=max(1, n - 1))
@@ -817,6 +850,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="Interactive GUI for surgical tool tip detection"
     )
+    parser.add_argument("--dataset", required=True,
+                        choices=list(DATASETS),
+                        help="Dataset name under --data-root (e.g. cholec80)")
     parser.add_argument("--model-type", default="monai",
                         choices=list(MODEL_REGISTRY),
                         help="Model architecture to load (default: monai)")
@@ -826,13 +862,15 @@ def main():
                              f"(default: {DEFAULT_TARGET_MODE})")
     parser.add_argument("--model",     default=None,
                         help="Path to trained model weights "
-                             "(default: data/models/<target-mode>/<model-type>/best.pt)")
+                             "(default: data/models/<dataset>/<target-mode>/<model-type>/best.pt)")
     parser.add_argument("--data-root", default="data/dataset",
-                        help="Path to data/dataset/ directory (default: data/dataset)")
+                        help="Root directory containing <dataset>/ subdirectories "
+                             "(default: data/dataset)")
     args = parser.parse_args()
 
     model_path = args.model or _default_model_path(
-        args.model_type, args.target_mode)
+        model_type=args.model_type, dataset_name=args.dataset,
+        target_mode=args.target_mode)
     model_type = args.model_type
     inferred_model_type = _infer_model_type_from_path(model_path)
     if args.model is not None and inferred_model_type is not None:
@@ -842,6 +880,7 @@ def main():
         model_type=model_type,
         model_path=model_path,
         data_root=args.data_root,
+        dataset_name=args.dataset,
         target_mode=args.target_mode,
     )
     app.mainloop()

@@ -5,7 +5,7 @@ is treated as a distance-based heatmap.  Peaks above a configurable threshold
 are taken as candidate tip locations.  For each GT tip the nearest candidate
 is selected and the Euclidean pixel distance is reported.
 
-Results are saved to  data/results/<target-mode>/<model-type>/
+Results are saved to  data/results/<dataset>/<target-mode>/<model-type>/
   summary.json  — overall and per-session metrics + run parameters
   per_tip.csv   — one row per GT tip (coordinates, matched prediction, distance)
 
@@ -18,8 +18,8 @@ Metrics reported
 
 Usage
 -----
-    uv run python scripts/eval-model.py
-    uv run python scripts/eval-model.py --threshold 0.4 --nms-radius 15
+    uv run python scripts/eval-model.py --dataset cholec80
+    uv run python scripts/eval-model.py --dataset cholec80 --threshold 0.4 --nms-radius 15
 """
 
 import argparse
@@ -37,7 +37,7 @@ from torch.utils.data import DataLoader
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from ttd.checkpoints import default_model_path, default_results_dir
-from ttd.dataset import DEFAULT_TARGET_MODE, TARGET_MODES, SurgicalToolDataset
+from ttd.dataset import DATASETS, DEFAULT_TARGET_MODE, TARGET_MODES, SurgicalToolDataset
 from ttd.model import REGISTRY as MODEL_REGISTRY
 from ttd.model import build as build_model
 from ttd.peaks import find_peaks
@@ -60,6 +60,7 @@ def _session_id(ann_path: str) -> str:
 def evaluate(
     model_path: str,
     model_type: str,
+    dataset_name: str,
     target_mode: str,
     data_root: str,
     threshold: float,
@@ -79,6 +80,7 @@ def evaluate(
     os.makedirs(results_dir, exist_ok=True)
 
     print(f"Device      : {device}")
+    print(f"Dataset     : {dataset_name}")
     print(f"Model type  : {model_type}")
     print(f"Target mode : {target_mode}")
     print(f"Model       : {model_path}")
@@ -198,6 +200,7 @@ def evaluate(
 
     stats: dict = {
         "timestamp":            run_ts,
+        "dataset":              dataset_name,
         "model_type":           model_type,
         "target_mode":          target_mode,
         "model_path":           model_path,
@@ -267,6 +270,7 @@ def _print_results(s: dict) -> None:
     print("=" * W)
     print(f"  Evaluation Results")
     print("=" * W)
+    row("Dataset",          s["dataset"])
     row("Model",            s["model_path"])
     row("Target mode",      s["target_mode"])
     row("Threshold / NMS radius",
@@ -306,6 +310,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Evaluate TooltipDetector tip-prediction accuracy on the test set"
     )
+    parser.add_argument("--dataset",     required=True,
+                        choices=list(DATASETS),
+                        help="Dataset name under --data-root (e.g. cholec80)")
     parser.add_argument("--model-type",  default="monai",
                         choices=list(MODEL_REGISTRY),
                         help="Model architecture (default: monai)")
@@ -315,11 +322,13 @@ def main() -> None:
                              f"was trained with (default: {DEFAULT_TARGET_MODE})")
     parser.add_argument("--model",       default=None,
                         help="Path to model weights "
-                             "(default: data/models/<target-mode>/<model-type>/best.pt)")
-    parser.add_argument("--data-root",   default="data/dataset")
+                             "(default: data/models/<dataset>/<target-mode>/<model-type>/best.pt)")
+    parser.add_argument("--data-root",   default="data/dataset",
+                        help="Root directory containing <dataset>/ subdirectories "
+                             "(default: data/dataset)")
     parser.add_argument("--results-dir", default=None,
                         help="Directory for results "
-                             "(default: data/results/<target-mode>/<model-type>)")
+                             "(default: data/results/<dataset>/<target-mode>/<model-type>)")
     parser.add_argument("--threshold",   type=float, default=0.5,
                         help="Heatmap value threshold for peak detection (default: 0.5)")
     parser.add_argument("--nms-radius",  type=int,   default=20,
@@ -331,15 +340,20 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.model is None:
-        args.model = default_model_path(args.model_type, args.target_mode)
+        args.model = default_model_path(
+            model_type=args.model_type, dataset_name=args.dataset,
+            target_mode=args.target_mode)
     if args.results_dir is None:
-        args.results_dir = default_results_dir(args.model_type, args.target_mode)
+        args.results_dir = default_results_dir(
+            model_type=args.model_type, dataset_name=args.dataset,
+            target_mode=args.target_mode)
 
     evaluate(
         model_path=args.model,
         model_type=args.model_type,
+        dataset_name=args.dataset,
         target_mode=args.target_mode,
-        data_root=args.data_root,
+        data_root=os.path.join(args.data_root, args.dataset),
         threshold=args.threshold,
         nms_radius=args.nms_radius,
         batch_size=args.batch_size,

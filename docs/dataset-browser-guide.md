@@ -5,28 +5,29 @@
 ## 실행
 
 ```bash
-run dataset-browser          # Linux / macOS
-run.bat dataset-browser      # Windows
+run dataset-browser --dataset cholec80          # Linux / macOS
+run.bat dataset-browser --dataset cholec80      # Windows
 ```
 
 다른 스플릿으로 시작:
 
 ```bash
-run dataset-browser --split val
+run dataset-browser --dataset cholec80 --split val
 ```
 
 ## 인수
 
-| 인수          | 기본값         | 설명                                   |
-| ------------- | -------------- | -------------------------------------- |
-| `--data-root` | `data/dataset` | 데이터셋 루트 디렉터리                 |
-| `--split`     | `train`        | 시작 스플릿 (`train` / `val` / `test`) |
+| 인수          | 기본값         | 설명                                                      |
+| ------------- | -------------- | --------------------------------------------------------- |
+| `--dataset`   | (필수)         | 시작 데이터셋 이름 (`erop` / `cholec80`). GUI의 `Dataset` 드롭다운으로도 전환 가능 |
+| `--data-root` | `data/dataset` | `<dataset-name>/` 서브디렉터리를 담는 루트 디렉터리        |
+| `--split`     | `train`        | 시작 스플릿 (`train` / `val` / `test`)                     |
 
 ## 화면 구성
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
-│ Split: [train▼]  ◄  ►  Rand  [   42   ] / 108424                │
+│ Dataset: [erop▼]  Split: [train▼]  ◄  ►  Rand  [   42   ] / 108424 │
 ├───────────────────────────┬─────────────────────────────────────┤
 │  Original + Annotations   │  Distance Heatmap  (hot colormap)   │
 │                           │                                     │
@@ -95,6 +96,7 @@ tip[0]=(154, 176)  tip[1]=(186, 240)
 
 | 컨트롤              | 동작                             |
 | ------------------- | -------------------------------- |
+| `Dataset` 드롭다운  | 데이터셋 전환 (`erop` / `cholec80`), 전환 시 현재 스플릿을 새 데이터셋에서 다시 로드 |
 | `Split` 드롭다운    | 스플릿 전환 (train / val / test) |
 | `◄` / `►` 버튼      | 이전 / 다음 프레임               |
 | `Rand` 버튼         | 무작위 프레임 이동               |
@@ -111,7 +113,9 @@ tip[0]=(154, 176)  tip[1]=(186, 240)
 
 ## 스플릿 전환
 
-`Split` 드롭다운에서 스플릿을 선택하면 해당 스플릿의 첫 번째 프레임(인덱스 0)으로 이동한다. 인덱스와 슬라이더 범위가 선택된 스플릿의 샘플 수에 맞게 갱신된다.
+`Split` 드롭다운에서 스플릿을 선택하면 해당 스플릿의 첫 번째 프레임(인덱스 0)으로 이동한다. `Dataset` 드롭다운을 전환해도 마찬가지로 현재 스플릿의 0번 프레임으로 이동한다. 인덱스와 슬라이더 범위가 선택된 데이터셋·스플릿의 샘플 수에 맞게 갱신된다.
+
+`erop` 데이터셋 기준 스플릿별 샘플 수 (`cholec80`은 구축 완료 후 별도 기재):
 
 | 스플릿 | 샘플 수 |
 | ------ | ------- |

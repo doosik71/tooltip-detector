@@ -1,6 +1,6 @@
 # 평가 결과 분석서
 
-`data/results/summary.json` 기준 (실행 시각: 2026-06-29 10:54:59)
+`data/results/erop/gradient-seg/monai/summary.json` 기준 (실행 시각: 2026-06-29 10:54:59)
 
 ## 평가 조건
 

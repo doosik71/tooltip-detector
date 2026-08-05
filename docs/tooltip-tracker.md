@@ -16,22 +16,23 @@
 ## 실행
 
 ```bash
-run tooltip-tracker          # Linux / macOS
-run.bat tooltip-tracker      # Windows
+run tooltip-tracker --dataset cholec80          # Linux / macOS
+run.bat tooltip-tracker --dataset cholec80      # Windows
 ```
 
 ```bash
-run tooltip-tracker --model-type monai_mini
-run tooltip-tracker --target-mode gaussian-tip
+run tooltip-tracker --dataset cholec80 --model-type monai_mini
+run tooltip-tracker --dataset cholec80 --target-mode gaussian-tip
 ```
 
 ## 인수
 
-| 인수            | 기본값                                           | 설명                                                                                |
-| --------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `--target-mode` | `gradient-seg`                                   | 로드할 체크포인트의 타겟 생성 방식(초기값). GUI의 `Target` 드롭다운으로도 전환 가능 |
-| `--model-type`  | `monai`                                          | 모델 아키텍처 (`monai` / `monai_mini`), GUI의 `Model` 드롭다운으로도 전환 가능      |
-| `--model`       | `data/models/<target-mode>/<model-type>/best.pt` | 학습된 모델 가중치 파일 경로                                                        |
+| 인수            | 기본값                                                     | 설명                                                                                |
+| --------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `--dataset`     | (필수)                                                        | 어떤 데이터셋으로 학습한 체크포인트를 로드할지(초기값, `erop` / `cholec80`). GUI의 `Dataset` 드롭다운으로도 전환 가능 — 이 GUI는 동영상만 처리하므로 모델 경로 선택에만 영향을 준다 |
+| `--target-mode` | `gradient-seg`                                                | 로드할 체크포인트의 타겟 생성 방식(초기값). GUI의 `Target` 드롭다운으로도 전환 가능 |
+| `--model-type`  | `monai`                                                       | 모델 아키텍처 (`monai` / `monai_mini`), GUI의 `Model` 드롭다운으로도 전환 가능      |
+| `--model`       | `data/models/<dataset>/<target-mode>/<model-type>/best.pt`    | 학습된 모델 가중치 파일 경로                                                        |
 
 동영상 파일은 커맨드라인 인수가 아니라 GUI의 `Open Video...` 버튼으로 선택한다.
 
@@ -39,10 +40,10 @@ run tooltip-tracker --target-mode gaussian-tip
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Model: [monai▼]  Target: [gradient-seg▼]  Method: [CameraMotionVectorMagnitudeBlend▼]  [Open Video…]  [<-] [->]  [Play] [Pause]│
+│ Dataset: [erop▼]  Target: [gradient-seg▼]  Model: [monai▼]  Method: [CameraMotionVectorMagnitudeBlend▼]  [Open Video…]  [<-] [->]  [Play] [Pause]│
 │  12 / 4523        <- -> : step one frame                                                                                │
 ├────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ Threshold: ──●──── 0.50  NMS radius: ──●──── 20px                    Model: monai/gradient-seg (best.pt)                │
+│ Threshold: ──●──── 0.50  NMS radius: ──●──── 20px                    Model: erop/monai/gradient-seg (best.pt)           │
 ├────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
 │ Video [ green arrow: >=1 tip detected  pink arrow: 0 tips  blue o: raw tip candidates                │
 │         red polygon: >3 tips (n-gon, capped at pentagon)   red X: 2 tips, >90° apart ]               │
@@ -62,6 +63,7 @@ run tooltip-tracker --target-mode gaussian-tip
 
 | 요소              | 설명                                                                                                                                                                                                                                |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Dataset` 드롭다운 | `erop` / `cholec80` 전환. 이 GUI는 동영상만 처리하므로 데이터셋 프레임과는 무관하며, 로드할 모델 체크포인트의 경로만 바뀐다                                                                                                        |
 | `Target` 드롭다운 | `gradient-seg` / `gaussian-tip` 전환, 선택한 타겟 모드의 `best.pt`를 다시 로드                                                                                                                                                      |
 | `Model` 드롭다운  | `monai` / `monai_mini` 전환, 선택한 타입의 `best.pt`를 다시 로드                                                                                                                                                                    |
 | `Method` 드롭다운 | 화살표 스무딩 구현 전환 (`CameraMotionVectorMagnitudeBlend` / `CameraMotionVectorBlend` / `CameraMotionVectorKalman`). 전환 시 화살표가 0으로 초기화된다 — 구현마다 내부 상태(칼만 필터의 공분산 등)가 서로 호환되지 않기 때문이다. |

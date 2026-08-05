@@ -106,5 +106,5 @@ run train-model --model-type monai_mini --epochs 30
 run eval-model --model-type monai_mini
 ```
 
-모델 가중치는 `data/models/<target-mode>/monai_mini/best.pt`, `data/models/<target-mode>/monai_mini/last.pt`에 저장된다 (기본 `--target-mode gradient-seg`).
-평가 결과는 `data/results/<target-mode>/monai_mini/`에 저장된다.
+모델 가중치는 `data/models/<dataset>/<target-mode>/monai_mini/best.pt`, `data/models/<dataset>/<target-mode>/monai_mini/last.pt`에 저장된다 (기본 `--target-mode gradient-seg`, `--dataset`은 필수).
+평가 결과는 `data/results/<dataset>/<target-mode>/monai_mini/`에 저장된다.
