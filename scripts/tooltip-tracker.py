@@ -62,6 +62,10 @@ Usage
     uv run python scripts/tooltip-tracker.py
     uv run python scripts/tooltip-tracker.py --model-type monai_mini
     uv run python scripts/tooltip-tracker.py --target-mode gaussian-tip
+
+The model architecture and target-mode can also be switched at runtime via the
+GUI's "Model" and "Target" dropdowns, which reload
+data/models/<target-mode>/<model-type>/best.pt for the selected combination.
 """
 import argparse
 import os
@@ -420,6 +424,14 @@ class TooltipTrackerApp(tk.Tk):
     def _on_model_change(self, _=None):
         model_type = self._model_var.get()
         model_path = _default_model_path(model_type, self._target_mode)
+        self._apply_model(model_type, model_path)
+
+    def _on_target_mode_change(self, _=None):
+        self._target_mode = self._target_mode_var.get()
+        model_path = _default_model_path(self._model_type, self._target_mode)
+        self._apply_model(self._model_type, model_path)
+
+    def _apply_model(self, model_type: str, model_path: str):
         self._model_type = model_type
         self._model_path = model_path
         self._model = self._load_model(model_type, model_path)
@@ -439,10 +451,10 @@ class TooltipTrackerApp(tk.Tk):
     def _refresh_model_status(self):
         name = os.path.basename(self._model_path)
         if self._model:
-            text = f"Model: {self._model_type} ({name})  [{self._device}]"
+            text = f"Model: {self._model_type}/{self._target_mode} ({name})  [{self._device}]"
             color = "#005500"
         else:
-            text = f"Model NOT loaded: {self._model_type} ({name})"
+            text = f"Model NOT loaded: {self._model_type}/{self._target_mode} ({name})"
             color = "#aa0000"
         self._model_status_var.set(text)
         self._model_status_lbl.config(fg=color)
@@ -476,6 +488,14 @@ class TooltipTrackerApp(tk.Tk):
     def _build_ui(self):
         ctrl = tk.Frame(self, pady=6, padx=8)
         ctrl.pack(fill=tk.X)
+
+        tk.Label(ctrl, text="Target:").pack(side=tk.LEFT)
+        self._target_mode_var = tk.StringVar(value=self._target_mode)
+        target_mode_cb = ttk.Combobox(ctrl, textvariable=self._target_mode_var,
+                                      values=list(TARGET_MODES), width=12, state="readonly")
+        target_mode_cb.pack(side=tk.LEFT, padx=(2, 8))
+        target_mode_cb.bind("<<ComboboxSelected>>",
+                            self._on_target_mode_change)
 
         tk.Label(ctrl, text="Model:").pack(side=tk.LEFT)
         self._model_var = tk.StringVar(value=self._model_type)
@@ -806,10 +826,11 @@ def main():
                              "(default: data/models/<target-mode>/<model-type>/best.pt)")
     args = parser.parse_args()
 
-    model_path = args.model or _default_model_path(args.model_type, args.target_mode)
+    model_path = args.model or _default_model_path(
+        args.model_type, args.target_mode)
 
     app = TooltipTrackerApp(model_type=args.model_type, model_path=model_path,
-                             target_mode=args.target_mode)
+                            target_mode=args.target_mode)
     app.mainloop()
 
 

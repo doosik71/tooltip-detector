@@ -222,8 +222,7 @@ run.bat tooltip-detector      # Windows
 ```
 
 학습된 모델로 데이터셋 프레임 또는 임의 이미지를 추론하고 결과를 인터랙티브하게 시각화한다.
-GUI 상단의 `Model` 드롭다운으로 `monai`와 `monai_mini`를 전환할 수 있으며, 선택한 모델 타입의 `best.pt`를 다시 로드한다.
-어떤 타겟 모드(`gradient-seg`/`gaussian-tip`)의 체크포인트를 로드할지는 실행 시 `--target-mode`로 지정하며, 실행 중에는 고정된다(드롭다운 없음). 다른 타겟 모드의 체크포인트를 보려면 `--target-mode`를 바꿔 다시 실행한다.
+GUI 상단의 `Target` 드롭다운으로 `gradient-seg`와 `gaussian-tip`을, `Model` 드롭다운으로 `monai`와 `monai_mini`를 전환할 수 있으며, 선택한 조합의 `data/models/<target-mode>/<model-type>/best.pt`를 다시 로드한다. 실행 시 `--target-mode`는 초기 선택값만 지정한다.
 
 ![Tooltip Detector GUI](images/tooltip-detector.png)
 
@@ -242,11 +241,12 @@ run.bat tooltip-tracker      # Windows
 
 사용자가 선택한 동영상 파일을 프레임 단위로 순차 처리하며, 화면 중앙에서 탐지된 수술도구 팁 방향으로 화살표를 그려 내시경 카메라가 이동해야 할 방향을 안내한다. 화살표의 방향·길이는 프레임 간 급격히 바뀌지 않도록 스무딩되며, 오탐지(팁 미탐지·개수 이상·방향 모순)는 별도의 색상·경고 도형으로 표시된다.
 
+- **`Target` 드롭다운**: `gradient-seg` / `gaussian-tip` 전환, 선택한 조합의 `best.pt`를 다시 로드
 - **`Model` 드롭다운**: `monai` / `monai_mini` 전환
 - **`Method` 드롭다운**: 화살표 스무딩 구현 전환 (`CameraMotionVectorMagnitudeBlend` 기본값 / `CameraMotionVectorBlend` / `CameraMotionVectorKalman`)
 - **Play / Pause, 탐색 바**: 벽시계 기준 재생(필요 시 프레임 드롭) 및 임의 프레임 이동
 - **Threshold / NMS radius 슬라이더**: `tooltip-detector`와 동일한 피크 탐지 파라미터
-- 로드할 타겟 모드(`gradient-seg`/`gaussian-tip`)는 `tooltip-detector`와 마찬가지로 실행 시 `--target-mode`로 지정하며 세션 중에는 고정된다.
+- 실행 시 `--target-mode`는 초기 선택값만 지정하며, GUI의 `Target` 드롭다운으로 실행 중에도 전환할 수 있다.
 
 상세 설계와 스무딩 로직, 오탐지 판정 규칙: [docs/tooltip-tracker.md](docs/tooltip-tracker.md)
 

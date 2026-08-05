@@ -25,11 +25,11 @@ Usage
     uv run python scripts/tooltip-detector.py --target-mode gaussian-tip
     uv run python scripts/tooltip-detector.py --model data/models/gradient-seg/monai/best.pt --data-root data/dataset
 
-The model architecture can also be switched at runtime via the GUI's "Model"
-dropdown, which reloads data/models/<target-mode>/<model-type>/best.pt for the
-selected type (--target-mode is fixed for the session; use the CLI flag to
-compare a different target-mode's checkpoints).
+The model architecture and target-mode can also be switched at runtime via the
+GUI's "Model" and "Target" dropdowns, which reload
+data/models/<target-mode>/<model-type>/best.pt for the selected combination.
 """
+
 import argparse
 import json
 import os
@@ -42,15 +42,23 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageDraw, ImageTk
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from ttd.checkpoints import default_model_path as _default_model_path
-from ttd.dataset import DEFAULT_TARGET_MODE, TARGET_MODES
-from ttd.model import REGISTRY as MODEL_REGISTRY
-from ttd.model import build as build_model
-from ttd.transforms import _eval_transform
-from ttd.peaks import find_peaks
-from ttd.dataset import SurgicalToolDataset
+# NOTE: deliberately not top-level imports. `ttd.*` requires the project
+# root on sys.path, which only exists after the insert() below runs.
+# Editor/linter "organize imports" actions only reorder top-level import
+# statements, so nesting these under `if True:` keeps them pinned after the
+# sys.path fix-up instead of being hoisted back above it on every save.
+if True:
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+    from ttd.dataset import SurgicalToolDataset
+    from ttd.peaks import find_peaks
+    from ttd.transforms import _eval_transform
+    from ttd.model import build as build_model
+    from ttd.model import REGISTRY as MODEL_REGISTRY
+    from ttd.dataset import DEFAULT_TARGET_MODE, TARGET_MODES
+    from ttd.checkpoints import default_model_path as _default_model_path
 
 
 SPLITS = ["train", "val", "test"]
@@ -62,8 +70,8 @@ _TOOL_COLORS = [
     "#00FF00", "#FF8800", "#00AAFF", "#FF00FF",
     "#FFFF00", "#FF4444", "#44FFFF", "#FF44FF",
 ]
-_PRED_COLOR  = "#FF3333"  # predicted tip X marker
-_LINE_COLOR  = "#FFFF00"  # GT → prediction error line
+_PRED_COLOR = "#FF3333"  # predicted tip X marker
+_LINE_COLOR = "#FFFF00"  # GT → prediction error line
 
 _HIT_THRESHOLDS = (10, 20, 50)
 _SEG_OVERLAY_RGB = np.array([0, 220, 120], dtype=np.uint8)
@@ -135,7 +143,8 @@ def _draw_gt(image: np.ndarray, annotations: list) -> np.ndarray:
         )
         tx, ty = ann["tip"]["x"], ann["tip"]["y"]
         r = 8
-        draw.ellipse([tx - r, ty - r, tx + r, ty + r], fill=color, outline="white")
+        draw.ellipse([tx - r, ty - r, tx + r, ty + r],
+                     fill=color, outline="white")
         draw.line([tx - 12, ty, tx + 12, ty], fill="white", width=1)
         draw.line([tx, ty - 12, tx, ty + 12], fill="white", width=1)
     return np.array(pil)
@@ -162,8 +171,10 @@ def _draw_predictions(image: np.ndarray,
 
         if draw_X_markers:
             r = 10
-            draw.line([px - r, py - r, px + r, py + r], fill=_PRED_COLOR, width=6)
-            draw.line([px + r, py - r, px - r, py + r], fill=_PRED_COLOR, width=6)
+            draw.line([px - r, py - r, px + r, py + r],
+                      fill=_PRED_COLOR, width=6)
+            draw.line([px + r, py - r, px - r, py + r],
+                      fill=_PRED_COLOR, width=6)
 
         # Small white dot at center
         s = 4
@@ -188,12 +199,13 @@ class TooltipDetectorApp(tk.Tk):
         self.title("Tooltip Detector")
         self.resizable(True, True)
 
-        self._data_root  = data_root
+        self._data_root = data_root
         self._model_type = model_type
         self._target_mode = target_mode
         self._model_path = model_path
-        self._device     = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self._transform  = _eval_transform()
+        self._device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
+        self._transform = _eval_transform()
 
         self._ds: SurgicalToolDataset | None = None
         self._idx = 0
@@ -215,22 +227,24 @@ class TooltipDetectorApp(tk.Tk):
         self.update_idletasks()
         self.minsize(self.winfo_width(), self.winfo_height())
 
-        self.bind("<Left>",  lambda _: self._navigate(-1))
+        self.bind("<Left>", lambda _: self._navigate(-1))
         self.bind("<Right>", lambda _: self._navigate(+1))
-        self.bind("<r>",     lambda _: self._random())
+        self.bind("<r>", lambda _: self._random())
 
     # ── Model ────────────────────────────────────────────────────────────
 
     def _load_model(self, model_type: str, path: str) -> torch.nn.Module | None:
         try:
             model = build_model(model_type, num_classes=2).to(self._device)
-            state = torch.load(path, map_location=self._device, weights_only=False)
+            state = torch.load(
+                path, map_location=self._device, weights_only=False)
             model.load_state_dict(state)
             model.eval()
             print(f"Model loaded: {model_type}  {path}  [{self._device}]")
             return model
         except Exception as exc:
-            print(f"WARNING: could not load model '{model_type}' from {path} — {exc}")
+            print(
+                f"WARNING: could not load model '{model_type}' from {path} — {exc}")
             return None
 
     def _apply_model(self, model_type: str, model_path: str, *, show_error: bool):
@@ -251,10 +265,10 @@ class TooltipDetectorApp(tk.Tk):
 
         model_name = os.path.basename(self._model_path)
         if self._model:
-            text = f"Model: {self._model_type} ({model_name})  [{self._device}]"
+            text = f"Model: {self._model_type}/{self._target_mode} ({model_name})  [{self._device}]"
             color = "#005500"
         else:
-            text = f"Model NOT loaded: {self._model_type} ({model_name})"
+            text = f"Model NOT loaded: {self._model_type}/{self._target_mode} ({model_name})"
             color = "#aa0000"
 
         self._model_status_var.set(text)
@@ -278,7 +292,8 @@ class TooltipDetectorApp(tk.Tk):
         try:
             return np.array(Image.open(seg_path))
         except Exception as exc:
-            print(f"WARNING: could not load segmentation mask {seg_path} — {exc}")
+            print(
+                f"WARNING: could not load segmentation mask {seg_path} — {exc}")
             return None
 
     def _infer(self, image: np.ndarray) -> tuple[np.ndarray, list, float]:
@@ -305,7 +320,7 @@ class TooltipDetectorApp(tk.Tk):
 
         heatmap = torch.sigmoid(pred[0, 1]).cpu().numpy()  # (H, W)
 
-        threshold  = self._threshold_var.get()
+        threshold = self._threshold_var.get()
         nms_radius = int(self._nms_var.get())
         peaks = find_peaks(heatmap, threshold, nms_radius)
 
@@ -314,9 +329,9 @@ class TooltipDetectorApp(tk.Tk):
     # ── Accumulated stats ────────────────────────────────────────────────
 
     def _stats_reset(self):
-        self._n_frames  = 0
+        self._n_frames = 0
         self._n_gt_tips = 0
-        self._n_missed  = 0
+        self._n_missed = 0
         self._all_dists: list[float] = []
         self._hits = {t: 0 for t in _HIT_THRESHOLDS}
 
@@ -337,16 +352,16 @@ class TooltipDetectorApp(tk.Tk):
                     self._hits[t] += 1
 
     def _stats_str(self) -> str:
-        n     = self._n_gt_tips
-        safe  = max(1, n)
-        arr   = np.array(self._all_dists) if self._all_dists else np.zeros(0)
+        n = self._n_gt_tips
+        safe = max(1, n)
+        arr = np.array(self._all_dists) if self._all_dists else np.zeros(0)
 
-        mean_d = f"{arr.mean():.2f} px"          if arr.size else "—"
-        med_d  = f"{np.median(arr):.2f} px"      if arr.size else "—"
-        p90_d  = f"{np.percentile(arr, 90):.2f} px" if arr.size else "—"
+        mean_d = f"{arr.mean():.2f} px" if arr.size else "—"
+        med_d = f"{np.median(arr):.2f} px" if arr.size else "—"
+        p90_d = f"{np.percentile(arr, 90):.2f} px" if arr.size else "—"
         miss_r = f"{self._n_missed / safe * 100:.1f}%" if n else "—"
-        hits   = {t: (f"{self._hits[t] / safe * 100:.1f}%" if n else "—")
-                  for t in _HIT_THRESHOLDS}
+        hits = {t: (f"{self._hits[t] / safe * 100:.1f}%" if n else "—")
+                for t in _HIT_THRESHOLDS}
 
         return (
             f"Frames: {self._n_frames:>5}   GT tips: {n:>6}   "
@@ -377,6 +392,19 @@ class TooltipDetectorApp(tk.Tk):
         self._split_cb.bind("<<ComboboxSelected>>",
                             lambda _: self._load_split(self._split_var.get()))
 
+        tk.Label(ctrl, text="Target:").pack(side=tk.LEFT)
+        self._target_mode_var = tk.StringVar(value=self._target_mode)
+        self._target_mode_cb = ttk.Combobox(
+            ctrl,
+            textvariable=self._target_mode_var,
+            values=list(TARGET_MODES),
+            width=12,
+            state="readonly",
+        )
+        self._target_mode_cb.pack(side=tk.LEFT, padx=(2, 8))
+        self._target_mode_cb.bind(
+            "<<ComboboxSelected>>", self._on_target_mode_change)
+
         tk.Label(ctrl, text="Model:").pack(side=tk.LEFT)
         self._model_var = tk.StringVar(value=self._model_type)
         self._model_cb = ttk.Combobox(
@@ -400,7 +428,8 @@ class TooltipDetectorApp(tk.Tk):
         tk.Button(ctrl, text="Rand",
                   command=self._random).pack(side=tk.LEFT, padx=(4, 8))
 
-        self._play_btn = tk.Button(ctrl, text="Play", width=6, command=self._play)
+        self._play_btn = tk.Button(
+            ctrl, text="Play", width=6, command=self._play)
         self._play_btn.pack(side=tk.LEFT, padx=(0, 2))
         self._pause_btn = tk.Button(ctrl, text="Pause", width=6,
                                     command=self._pause, state=tk.DISABLED)
@@ -459,7 +488,8 @@ class TooltipDetectorApp(tk.Tk):
             padx=4, pady=4,
         )
         lf_orig.grid(row=0, column=0, padx=4)
-        self._lbl_orig = tk.Label(lf_orig, width=PANEL_W, height=PANEL_H, bg="#1a1a1a")
+        self._lbl_orig = tk.Label(
+            lf_orig, width=PANEL_W, height=PANEL_H, bg="#1a1a1a")
         self._lbl_orig.pack()
 
         lf_heat = tk.LabelFrame(
@@ -468,7 +498,8 @@ class TooltipDetectorApp(tk.Tk):
             padx=4, pady=4,
         )
         lf_heat.grid(row=0, column=1, padx=4)
-        self._lbl_heat = tk.Label(lf_heat, width=PANEL_W, height=PANEL_H, bg="#1a1a1a")
+        self._lbl_heat = tk.Label(
+            lf_heat, width=PANEL_W, height=PANEL_H, bg="#1a1a1a")
         self._lbl_heat.pack()
 
         # ── Row 4: per-frame info (fixed height; scrolls instead of resizing
@@ -492,11 +523,12 @@ class TooltipDetectorApp(tk.Tk):
 
         tk.Label(seek_frame, text="0", width=6, anchor="e").pack(side=tk.LEFT)
         self._seek_var = tk.DoubleVar(value=0)
-        self._seekbar  = ttk.Scale(seek_frame, from_=0, to=1,
-                                   orient=tk.HORIZONTAL, variable=self._seek_var,
-                                   command=self._on_seek)
+        self._seekbar = ttk.Scale(seek_frame, from_=0, to=1,
+                                  orient=tk.HORIZONTAL, variable=self._seek_var,
+                                  command=self._on_seek)
         self._seekbar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=6)
-        self._seek_end_lbl = tk.Label(seek_frame, text="—", width=6, anchor="w")
+        self._seek_end_lbl = tk.Label(
+            seek_frame, text="—", width=6, anchor="w")
         self._seek_end_lbl.pack(side=tk.LEFT)
         self._seek_after_id: str | None = None
 
@@ -542,7 +574,8 @@ class TooltipDetectorApp(tk.Tk):
             # Clear panels
             self._lbl_orig.config(image="")
             self._lbl_heat.config(image="")
-            self._set_info("[File mode]  Click 'Open Image…' to load an image.")
+            self._set_info(
+                "[File mode]  Click 'Open Image…' to load an image.")
 
     # ── Playback ─────────────────────────────────────────────────────────
 
@@ -577,6 +610,14 @@ class TooltipDetectorApp(tk.Tk):
         model_type = self._model_var.get()
         model_path = _default_model_path(model_type, self._target_mode)
         self._apply_model(model_type, model_path, show_error=True)
+        self._stats_reset()
+        self._refresh_stats_display()
+        self._rerender_current_view()
+
+    def _on_target_mode_change(self, _=None):
+        self._target_mode = self._target_mode_var.get()
+        model_path = _default_model_path(self._model_type, self._target_mode)
+        self._apply_model(self._model_type, model_path, show_error=True)
         self._stats_reset()
         self._refresh_stats_display()
         self._rerender_current_view()
@@ -660,7 +701,8 @@ class TooltipDetectorApp(tk.Tk):
             return
 
         # Resize to model input size so prediction coords align with display
-        image = np.array(Image.fromarray(raw).resize((736, 480), Image.BILINEAR))
+        image = np.array(Image.fromarray(
+            raw).resize((736, 480), Image.BILINEAR))
         self._current_file_image = image
         self._idx_var.set(os.path.basename(path))
         self._total_lbl.config(text="")
@@ -672,8 +714,9 @@ class TooltipDetectorApp(tk.Tk):
         if self._ds is None:
             return
 
-        image, _ = self._ds[idx]          # HWC uint8 numpy (no transform applied)
-        ann_path  = self._ds.samples[idx]
+        # HWC uint8 numpy (no transform applied)
+        image, _ = self._ds[idx]
+        ann_path = self._ds.samples[idx]
 
         with open(ann_path) as f:
             ann_data = json.load(f)
@@ -702,7 +745,7 @@ class TooltipDetectorApp(tk.Tk):
     def _render_file_frame(self, image: np.ndarray):
         heatmap, peaks, infer_ms = self._infer(image)
 
-        left  = _draw_predictions(image.copy(), peaks)
+        left = _draw_predictions(image.copy(), peaks)
         right = _blend_heatmap(image, heatmap)
         right = _draw_predictions(right, peaks)
 
@@ -729,7 +772,7 @@ class TooltipDetectorApp(tk.Tk):
         peaks: list,
         infer_ms: float,
     ):
-        stem  = os.path.splitext(os.path.basename(ann_path))[0]
+        stem = os.path.splitext(os.path.basename(ann_path))[0]
         lines = [
             f"File: {stem}   GT tips: {len(gt_tips)}   Predicted: {len(peaks)}",
             f"Inference time: {infer_ms:.2f} ms",
@@ -751,7 +794,8 @@ class TooltipDetectorApp(tk.Tk):
                     f"dist={dist:.1f}px  conf={best[2]:.3f}{hit_str}"
                 )
         elif gt_tips and not peaks:
-            lines.append("  (no predictions — try lowering threshold or NMS radius)")
+            lines.append(
+                "  (no predictions — try lowering threshold or NMS radius)")
 
         self._set_info("\n".join(lines))
 
@@ -787,7 +831,8 @@ def main():
                         help="Path to data/dataset/ directory (default: data/dataset)")
     args = parser.parse_args()
 
-    model_path = args.model or _default_model_path(args.model_type, args.target_mode)
+    model_path = args.model or _default_model_path(
+        args.model_type, args.target_mode)
     model_type = args.model_type
     inferred_model_type = _infer_model_type_from_path(model_path)
     if args.model is not None and inferred_model_type is not None:
