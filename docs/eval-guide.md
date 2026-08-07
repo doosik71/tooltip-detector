@@ -49,7 +49,15 @@ run eval-model --dataset cholec80 --target-mode gaussian-tip
 | `--nms-radius`  | `20`                                                | 두 피크 사이의 최소 픽셀 거리 (NMS)    |
 | `--batch-size`  | `16`                                                | 추론 배치 크기                         |
 | `--workers`     | `4`                                                 | DataLoader 워커 수                     |
-| `--device`      | 자동                                                | torch device (예: `cuda:0`, `cpu`)     |
+| `--device`      | 자동 (CUDA 있으면 `cuda`, 없으면 `cpu`)             | 평가에 사용할 torch device (예: `cuda:1`, `cpu`) |
+
+GPU가 여러 개인 장비에서는 `--device cuda:<N>`으로 사용할 장치를 직접 지정한다.
+한 번의 평가는 지정한 GPU 한 대만 사용하므로, 학습이 돌고 있는 GPU를 피해
+비어 있는 장치를 골라 평가를 병행할 수 있다.
+
+```bash
+run eval-model --dataset cholec80 --device cuda:1
+```
 
 ## 결과 저장
 

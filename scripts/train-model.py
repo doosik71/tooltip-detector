@@ -56,7 +56,8 @@ from tqdm import tqdm
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from ttd.checkpoints import model_dir as default_model_dir
-from ttd.dataset import DATASETS, DEFAULT_GAUSSIAN_SIGMA, DEFAULT_TARGET_MODE, TARGET_MODES, SurgicalToolDataset
+from ttd.dataset import (DATASETS, DEFAULT_GAUSSIAN_SIGMA, DEFAULT_TARGET_MODE, TARGET_MODES,
+                         SurgicalToolDataset, require_samples)
 from ttd.model import REGISTRY as MODEL_REGISTRY
 from ttd.model import build as build_model
 from ttd.transforms import _eval_transform
@@ -252,6 +253,9 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int,   default=16)
     parser.add_argument("--lr",         type=float, default=1e-4)
     parser.add_argument("--workers",    type=int,   default=4)
+    parser.add_argument("--device",     default="",
+                        help="torch device, e.g. 'cuda:1' to pick one of "
+                             "several GPUs (default: cuda if available else cpu)")
     parser.add_argument("--no-resume",  action="store_true",
                         help="Ignore any existing last.pt/train-status.json/"
                              "metric.csv in <model-dir> and train from scratch "
@@ -270,7 +274,10 @@ def main() -> None:
     metric_path = os.path.join(args.model_dir, "metric.csv")
     os.makedirs(args.model_dir, exist_ok=True)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(
+        args.device if args.device else (
+            "cuda" if torch.cuda.is_available() else "cpu")
+    )
 
     # ── Datasets & loaders ───────────────────────────────────────────────
     dataset_root = os.path.join(args.data_root, args.dataset)
@@ -280,6 +287,8 @@ def main() -> None:
     val_ds = SurgicalToolDataset(
         dataset_root, "val",   transform=_eval_transform(),
         target_mode=args.target_mode, gaussian_sigma=args.gaussian_sigma)
+    require_samples(train_ds, "train", dataset_root)
+    require_samples(val_ds, "val", dataset_root)
 
     train_loader = DataLoader(
         train_ds, batch_size=args.batch_size, shuffle=True,

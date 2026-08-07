@@ -18,7 +18,8 @@ from torch.utils.data import DataLoader, Subset
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from ttd.checkpoints import default_model_path
-from ttd.dataset import DATASETS, DEFAULT_TARGET_MODE, TARGET_MODES, SurgicalToolDataset
+from ttd.dataset import (DATASETS, DEFAULT_TARGET_MODE, TARGET_MODES, SurgicalToolDataset,
+                         require_samples)
 from ttd.model import REGISTRY as MODEL_REGISTRY
 from ttd.model import build as build_model
 from ttd.transforms import _eval_transform
@@ -244,6 +245,9 @@ def main() -> None:
 
     base_dataset = SurgicalToolDataset(dataset_root, "test", transform=_eval_transform(),
                                         target_mode=args.target_mode)
+    # Checked here, before any model is loaded: _build_loader() rebuilds the
+    # same dataset per model, so one check up front covers every benchmark run.
+    require_samples(base_dataset, "test", dataset_root)
     sample_indices = _build_sample_indices(len(base_dataset), args.num_samples, args.seed)
 
     results: list[dict] = []

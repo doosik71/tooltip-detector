@@ -42,6 +42,7 @@ run.bat train-model --dataset cholec80      # Windows
 | `--batch-size`     | `16`                                               | 배치 크기                                                  |
 | `--lr`             | `1e-4`                                             | 초기 학습률 (Adam optimizer)                                |
 | `--workers`        | `4`                                                | DataLoader 워커 수                                        |
+| `--device`         | 자동 (CUDA 있으면 `cuda`, 없으면 `cpu`)                    | 학습에 사용할 torch device (예: `cuda:1`, `cpu`)              |
 | `--no-resume`      | off (기본값은 재개)                                 | `<model-dir>`의 기존 체크포인트를 무시하고 처음부터 학습          |
 
 타겟 생성 방식(`gradient-seg`/`gaussian-tip`)의 차이는 [dataset-guide.md](dataset-guide.md)의 "학습 타겟 생성 방법"을 참고한다.
@@ -56,6 +57,24 @@ run train-model --dataset cholec80 --epochs 60 --batch-size 8
 
 ```bash
 run train-model --dataset cholec80 --target-mode gaussian-tip --gaussian-sigma 15
+```
+
+### GPU 장치 선택 (`--device`)
+
+`--device`를 생략하면 CUDA가 있을 때 기본 장치(`cuda`, 보통 0번)를, 없으면 `cpu`를 사용한다.
+GPU가 여러 개인 장비에서는 `--device cuda:<N>`으로 사용할 장치를 직접 지정한다.
+
+```bash
+run train-model --dataset cholec80 --device cuda:1
+```
+
+하나의 학습 실행은 지정한 GPU 한 대만 사용한다. 여러 GPU를 가진 장비에서는
+아래처럼 조합이 다른 실험을 GPU별로 나눠 동시에 돌릴 수 있다. 조합마다
+체크포인트 디렉터리가 다르므로 서로 충돌하지 않는다.
+
+```bash
+run train-model --dataset erop --model-type monai      --device cuda:0 &
+run train-model --dataset erop --model-type monai_mini --device cuda:1 &
 ```
 
 ## 데이터 증강

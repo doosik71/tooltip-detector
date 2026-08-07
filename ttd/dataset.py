@@ -2,6 +2,7 @@ import glob
 import json
 import os
 import random
+import sys
 from collections import defaultdict
 
 import numpy as np
@@ -242,3 +243,43 @@ class SurgicalToolDataset(Dataset):
 
         raise RuntimeError(
             f"SurgicalToolDataset: all {n} samples in '{self.ann_dir}' failed to load")
+
+
+def require_samples(ds: SurgicalToolDataset, split: str, dataset_root: str) -> None:
+    """Abort the calling CLI with a readable message when a split is empty.
+
+    Meant to be called right after building a dataset, before it reaches a
+    DataLoader. Without it an empty split only surfaces deep inside torch as
+    "num_samples should be a positive integer value, but got num_samples=0",
+    which says nothing about which directory was actually scanned.
+    """
+    if len(ds) > 0:
+        return
+
+    lines = [f"Error: no '{split}' samples found for dataset '{dataset_root}'.",
+             f"  Scanned: {os.path.join(ds.ann_dir, '*.json')}"]
+    if not os.path.isdir(ds.ann_dir):
+        lines.append("  That directory does not exist.")
+        # An extra nesting level (data/dataset/<name>/<name>/annotation/...) is
+        # the usual cause, e.g. after unpacking an archive that carries its own
+        # top-level folder. Point at it instead of leaving the user to guess.
+        if os.path.isdir(dataset_root):
+            nested = [
+                d for d in sorted(os.listdir(dataset_root))
+                if os.path.isdir(os.path.join(dataset_root, d, "annotation"))
+            ]
+            if nested:
+                lines.append(
+                    f"  Found annotation/ one level deeper, under: "
+                    f"{', '.join(os.path.join(dataset_root, d) for d in nested)}")
+                lines.append(
+                    "  Move that inner directory's contents up so the layout is "
+                    "<dataset-root>/annotation/<split>/, or pass --data-root "
+                    "accordingly.")
+        else:
+            lines.append(f"  Dataset root '{dataset_root}' does not exist either.")
+    else:
+        lines.append("  The directory exists but contains no *.json annotations.")
+
+    print("\n".join(lines), file=sys.stderr)
+    sys.exit(1)

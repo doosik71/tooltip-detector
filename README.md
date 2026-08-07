@@ -72,6 +72,7 @@ tooltip-detector/
 │   ├── peaks.py                   # 히트맵 피크 탐지 (find_peaks)
 │   └── camera_motion_vector.py    # tooltip-tracker의 화살표(카메라 이동 방향) 스무딩 구현
 ├── scripts/
+│   ├── dashboard.py               # 학습·평가 진행 상태 표 + 실행 명령 안내 GUI
 │   ├── train-model.py             # 학습 스크립트
 │   ├── eval-model.py              # 평가 스크립트
 │   ├── compare-speed.py           # 모델 속도 비교 스크립트
@@ -119,7 +120,21 @@ tooltip-detector/
 
 ## 작업 순서
 
-### 1. 데이터셋 확인 (선택)
+### 1. 실험 현황 확인 (선택)
+
+```bash
+run dashboard          # Linux / macOS
+run.bat dashboard      # Windows
+```
+
+데이터셋 × 타겟 생성 방식 × 모델 타입의 모든 조합에 대해 학습·평가가 어디까지 진행됐는지를 한 표로 보여준다.
+표에서 `Train`/`Eval` 칸을 선택하면 그 작업을 수행하는 명령(예: `run train-model --dataset erop --target-mode gaussian-tip --model-type monai`)과, 현재 상태에서 그 명령을 실행하면 어떻게 되는지에 대한 안내가 표시되고 `Copy` 버튼으로 복사할 수 있다.
+상태는 `data/models/`·`data/results/` 아래 파일만 보고 판정하므로 모델이나 데이터셋을 로드하지 않으며, 5초마다 자동으로 갱신된다.
+다른 스크립트와 달리 `--dataset`은 선택 인자이고, 지정하면 해당 데이터셋의 첫 행이 선택된 채로 열린다.
+
+사용법 상세: [docs/dashboard-guide.md](docs/dashboard-guide.md)
+
+### 2. 데이터셋 확인 (선택)
 
 ```bash
 run dataset-browser --dataset cholec80          # Linux / macOS
@@ -128,7 +143,7 @@ run.bat dataset-browser --dataset cholec80      # Windows
 
 원본 이미지, 바운딩 박스, 팁 마커, 거리 기반 히트맵을 시각적으로 탐색한다. `--dataset`은 필수 인자이며, GUI 상단의 `Dataset` 드롭다운으로 실행 중에도 전환할 수 있다.
 
-### 2. 학습
+### 3. 학습
 
 ```bash
 run train-model --dataset cholec80          # Linux / macOS
@@ -197,7 +212,7 @@ data/models/<dataset>/<target-mode>/<model-type>/best.pt
 
 현재 학습 스크립트는 선택한 `model_type`에 해당하는 아키텍처를 생성해 복강경 수술 데이터셋으로 전체 네트워크를 파인튜닝한다.
 
-### 3. 평가
+### 4. 평가
 
 ```bash
 run eval-model --dataset cholec80          # Linux / macOS
@@ -215,7 +230,7 @@ run.bat eval-model --dataset cholec80      # Windows
 | `summary.json` | 전체 지표 + 세션별 지표 + 실행 파라미터              |
 | `per_tip.csv`  | GT 팁 1개당 1행 (좌표, 예측값, 거리, 탐지 성공 여부) |
 
-### 3-1. 속도 비교
+### 4-1. 속도 비교
 
 ```bash
 run compare-speed --dataset cholec80          # Linux / macOS
@@ -226,7 +241,7 @@ run.bat compare-speed --dataset cholec80      # Windows
 - 기본 설정은 test 셋에서 임의 샘플 1,000건을 골라 `monai`와 `monai_mini`의 추론 속도를 비교한다.
 - 결과는 `data/results/<dataset>/<target-mode>/speed-comparison.json`에 저장된다 (기본 `--target-mode gradient-seg`).
 
-### 4. 탐지 결과 시각화
+### 5. 탐지 결과 시각화
 
 ```bash
 run tooltip-detector --dataset cholec80          # Linux / macOS
@@ -244,7 +259,7 @@ GUI 상단의 `Dataset` 드롭다운으로 `erop`/`cholec80`을, `Target` 드롭
 - **Inference time 표시**: 현재 프레임의 모델 forward 시간을 ms 단위로 표시
 - **누적 통계 패널**: 탐색한 프레임의 hit-rate, 평균 거리 등 평가 지표를 실시간 집계
 
-### 5. 동영상 실시간 추적
+### 6. 동영상 실시간 추적
 
 ```bash
 run tooltip-tracker --dataset cholec80          # Linux / macOS
@@ -267,8 +282,9 @@ run.bat tooltip-tracker --dataset cholec80      # Windows
 
 | 스크립트               | 설명                   | 주요 인수                                                                                                       |
 | ---------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `run train-model`      | 모델 학습              | `--dataset`(필수), `--model-type`, `--target-mode`, `--gaussian-sigma`, `--epochs`, `--batch-size`, `--lr`, `--no-resume` |
-| `run eval-model`       | 팁 탐지 정확도 평가    | `--dataset`(필수), `--model-type`, `--target-mode`, `--threshold`, `--nms-radius`, `--model`                    |
+| `run dashboard`        | 학습·평가 현황 표 GUI  | `--dataset`(선택), `--models-root`, `--results-root`                                                            |
+| `run train-model`      | 모델 학습              | `--dataset`(필수), `--model-type`, `--target-mode`, `--gaussian-sigma`, `--epochs`, `--batch-size`, `--lr`, `--device`, `--no-resume` |
+| `run eval-model`       | 팁 탐지 정확도 평가    | `--dataset`(필수), `--model-type`, `--target-mode`, `--threshold`, `--nms-radius`, `--model`, `--device`        |
 | `run compare-speed`    | 모델 추론 속도 비교    | `--dataset`(필수), `--model-types`, `--target-mode`, `--num-samples`, `--batch-size`, `--workers`               |
 | `run tooltip-detector` | 탐지 결과 시각화 GUI   | `--dataset`(필수), `--model-type`, `--target-mode`, `--model`, `--data-root`                                    |
 | `run tooltip-tracker`  | 동영상 실시간 추적 GUI | `--dataset`(필수), `--model-type`, `--target-mode`, `--model`                                                   |
@@ -293,6 +309,10 @@ run eval-model --dataset cholec80 --target-mode gaussian-tip
 
 # 두 모델의 속도 비교
 run compare-speed --dataset cholec80 --num-samples 1000
+
+# GPU가 여러 개인 장비에서 사용할 장치 지정 (학습/평가 모두 지원)
+run train-model --dataset cholec80 --device cuda:1
+run eval-model  --dataset cholec80 --device cuda:1
 ```
 
 ## 평가 지표
@@ -341,6 +361,7 @@ run compare-speed --dataset cholec80 --num-samples 1000
 | [docs/model-monai-mini.md](docs/model-monai-mini.md)               | EfficientNet-B2 + U-Net 경량 모델 아키텍처 상세 설명                 |
 | [docs/dataset-guide.md](docs/dataset-guide.md)                     | 데이터셋 디렉터리 구조, 파일 포맷, 어노테이션 스펙, 히트맵 타겟 수식 |
 | [docs/commands.md](docs/commands.md)                               | 실험 재현용 실행 명령 모음                                           |
+| [docs/dashboard-guide.md](docs/dashboard-guide.md)                 | 학습·평가 현황 표 GUI 화면 구성, 상태 판정 기준, 조작 방법           |
 | [docs/train-guide.md](docs/train-guide.md)                         | 학습 실행 방법, 인수 설명, 증강 파이프라인, 체크포인트, 출력 예시    |
 | [docs/eval-guide.md](docs/eval-guide.md)                           | 평가 실행 방법, 피크 탐지 알고리즘, 지표 정의, 결과 파일 구조        |
 | [docs/tooltip-detector.md](docs/tooltip-detector.md)               | 탐지 GUI 화면 구성, 추론 흐름, 조작 방법, 설계 상세                  |

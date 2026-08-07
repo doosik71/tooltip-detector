@@ -37,7 +37,8 @@ from torch.utils.data import DataLoader
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from ttd.checkpoints import default_model_path, default_results_dir
-from ttd.dataset import DATASETS, DEFAULT_TARGET_MODE, TARGET_MODES, SurgicalToolDataset
+from ttd.dataset import (DATASETS, DEFAULT_TARGET_MODE, TARGET_MODES, SurgicalToolDataset,
+                         require_samples)
 from ttd.model import REGISTRY as MODEL_REGISTRY
 from ttd.model import build as build_model
 from ttd.peaks import find_peaks
@@ -87,18 +88,22 @@ def evaluate(
     print(f"Threshold   : {threshold}   NMS radius: {nms_radius} px")
     print(f"Results dir : {results_dir}")
 
+    # ── Dataset ──────────────────────────────────────────────────────────
+    # Built before the model so a missing/empty test split is reported up
+    # front rather than after waiting on a checkpoint load.
+    # target_mode only controls whether a segmentation mask is loaded per
+    # frame; the GT tips used below are read directly from the annotation
+    # JSON, not from the dataset's generated target heatmap.
+    ds = SurgicalToolDataset(data_root, "test", transform=_eval_transform(),
+                              target_mode=target_mode)
+    require_samples(ds, "test", data_root)
+
     # ── Model ────────────────────────────────────────────────────────────
     model = build_model(model_type, num_classes=2).to(device)
     state = torch.load(model_path, map_location=device, weights_only=False)
     model.load_state_dict(state)
     model.eval()
 
-    # ── Dataset ──────────────────────────────────────────────────────────
-    # target_mode only controls whether a segmentation mask is loaded per
-    # frame; the GT tips used below are read directly from the annotation
-    # JSON, not from the dataset's generated target heatmap.
-    ds = SurgicalToolDataset(data_root, "test", transform=_eval_transform(),
-                              target_mode=target_mode)
     loader = DataLoader(
         ds,
         batch_size=batch_size,
@@ -336,7 +341,8 @@ def main() -> None:
     parser.add_argument("--batch-size",  type=int,   default=16)
     parser.add_argument("--workers",     type=int,   default=4)
     parser.add_argument("--device",      default="",
-                        help="torch device, e.g. 'cuda:0' (default: auto)")
+                        help="torch device, e.g. 'cuda:1' to pick one of "
+                             "several GPUs (default: cuda if available else cpu)")
     args = parser.parse_args()
 
     if args.model is None:
