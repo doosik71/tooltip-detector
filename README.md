@@ -101,20 +101,19 @@ tooltip-detector/
 
 여러 데이터셋을 `data/dataset/<dataset-name>/`로 구분해 지원한다 (`--dataset` 인자로 선택, 필수). 현재:
 
-| 데이터셋 (`--dataset`) | 상태      | 설명                                                                    |
-| ---------------------- | --------- | ----------------------------------------------------------------------- |
-| `erop`                 | 학습 가능 | 5개의 복강경 수술 세션에서 추출한 총 **180,706 프레임** (736 × 480 px) |
-| `cholec80`             | 구축 중   | 별도 복강경 수술 영상 데이터셋 (아직 학습/평가 불가)                     |
+| 데이터셋 (`--dataset`) | 상태      | 설명                                                                          |
+| ---------------------- | --------- | ----------------------------------------------------------------------------- |
+| `erop`                 | 학습 가능 | 자체 구축. 5개 복강경 수술 세션에서 추출한 **180,706 프레임** (736 × 480 px)   |
+| `cholec80`             | 학습 가능 | 공개 Cholec80(담낭절제술 80편)을 변환한 **184,578 프레임** (736 × 480 px)      |
 
-`erop`의 스플릿 구성:
+스플릿 구성:
 
-| 스플릿 | 프레임 수 | 비율 |
-| ------ | --------: | ---: |
-| train  |   108,424 | 60 % |
-| val    |    36,140 | 20 % |
-| test   |    36,142 | 20 % |
+| 데이터셋   | train              | val               | test              | 팁 어노테이션 |
+| ---------- | ------------------ | ----------------- | ----------------- | ------------: |
+| `erop`     | 108,424 (60 %)     | 36,140 (20 %)     | 36,142 (20 %)     |       252,977 |
+| `cholec80` | 110,747 (60 %)     | 36,901 (20 %)     | 36,930 (20 %)     |       315,204 |
 
-분할 기준은 세션 내 시간 순서(temporal split)이다. 각 프레임마다 RGB 이미지, 이진 분할 마스크, 도구 팁 좌표 어노테이션이 제공된다.
+두 데이터셋 모두 영상(세션)마다 독립적으로 60:20:20으로 나누되, 영상 내부는 프레임 단위 무작위 셔플로 분할된다. 따라서 같은 영상의 인접 프레임이 train과 test에 동시에 존재할 수 있다(시간적 누수). 각 프레임마다 RGB 이미지, 이진 분할 마스크, 도구 팁 좌표 어노테이션이 제공된다.
 
 데이터셋 포맷 상세 및 데이터셋별 통계: [docs/dataset-guide.md](docs/dataset-guide.md)
 
@@ -328,15 +327,23 @@ run eval-model  --dataset cholec80 --device cuda:1
 
 ## 평가 결과
 
-`erop` 데이터셋(`--dataset erop`) 테스트 세트 기준 `threshold=0.5`, `NMS radius=20 px` 설정의 모델별 성능 요약이다. 아래 수치는 모두 `--target-mode gradient-seg`(기본값)로 학습한 모델 기준이며, `gaussian-tip`과의 비교 및 `cholec80` 데이터셋 결과는 추후 추가된다.
+데이터셋 × 타겟 생성 방식 × 모델 타입 8개 조합 전체의 테스트 세트 성능이다. 전 조합 공통으로 30 에포크·배치 16으로 학습하고 `threshold=0.5`, `NMS radius=20 px`로 평가했다.
 
-| 모델         | Miss rate | Hit@10 px | Hit@20 px | Hit@50 px | Median dist | Mean dist |  P90 dist |
-| ------------ | --------: | --------: | --------: | --------: | ----------: | --------: | --------: |
-| `monai`      |    2.97 % |   38.10 % |   64.96 % |   80.95 % |    12.53 px |  39.76 px | 111.00 px |
-| `monai_mini` |    3.20 % |   29.61 % |   62.00 % |   80.16 % |    14.14 px |  41.35 px | 115.52 px |
+| 데이터셋   | 타겟 방식      | 모델         | Miss rate | Hit@10 px | Hit@20 px | Hit@50 px | Median dist | Mean dist |  P90 dist |
+| ---------- | -------------- | ------------ | --------: | --------: | --------: | --------: | ----------: | --------: | --------: |
+| `erop`     | `gradient-seg` | `monai`      |    3.09 % |   44.98 % |   70.17 % |   82.95 % |    10.77 px |  34.94 px |  88.68 px |
+| `erop`     | `gradient-seg` | `monai_mini` |    3.47 % |   40.99 % |   68.28 % |   82.48 % |    11.40 px |  35.78 px |  93.36 px |
+| `erop`     | `gaussian-tip` | `monai`      |    7.29 % |   68.38 % |   73.46 % |   77.91 % |     4.00 px |  36.26 px | 143.77 px |
+| `erop`     | `gaussian-tip` | `monai_mini` |    5.85 % |   73.44 % |   78.00 % |   82.41 % |     3.16 px |  28.58 px |  87.66 px |
+| `cholec80` | `gradient-seg` | `monai`      |    2.13 % |   29.55 % |   58.52 % |   79.54 % |    15.26 px |  43.82 px | 128.32 px |
+| `cholec80` | `gradient-seg` | `monai_mini` |    2.15 % |   31.47 % |   57.16 % |   78.83 % |    15.65 px |  44.58 px | 131.93 px |
+| `cholec80` | `gaussian-tip` | `monai`      |    5.42 % |   65.38 % |   72.44 % |   79.15 % |     4.24 px |  36.37 px | 134.17 px |
+| `cholec80` | `gaussian-tip` | `monai_mini` |    5.89 % |   64.68 % |   71.60 % |   78.40 % |     4.47 px |  36.98 px | 138.00 px |
 
-- `monai`는 현재 기준 모델이며, 정밀도(Hit@10 px)가 더 높다.
-- `monai_mini`는 경량 모델로, 정확도와 속도의 trade-off 비교를 염두에 두고 추가되었다.
+- **타겟 생성 방식이 성능을 지배한다.** `gaussian-tip`은 중앙값 오차 3–4 px, Hit@10 px 65–73 %로 정밀하지만 탐지 실패율이 높고(5.4–7.3 %), `gradient-seg`는 정밀도는 낮아도 탐지 실패율이 안정적이다(2.1–3.5 %). 임계값 0.5에서 두 타겟이 만드는 초과-임계 영역의 크기 차이 때문이다.
+- **분할 마스크 레이블링 비용이 정확도로 회수되지 않는다.** 팁 좌표만 필요한 `gaussian-tip`이 Hit@10 px에서 평균 31 %p 앞선다.
+- **모델 크기의 영향은 미미하다.** 4개 비교쌍 중 3개에서 지표 차이가 ±4 %p 이내이고 방향도 일관되지 않는다.
+- 평균 거리가 중앙값의 2.9–9.1배인 긴 꼬리는 대부분 다중 도구 프레임의 과소 탐지에서 발생한다 — 전체 GT 팁의 18.6–29.9 %가 같은 프레임의 다른 팁과 예측 피크를 공유한다.
 
 속도 비교 결과 (`data/results/erop/gradient-seg/speed-comparison.json`, CPU, test 샘플 1,000건, batch=16, workers=0):
 
@@ -347,18 +354,17 @@ run eval-model  --dataset cholec80 --device cuda:1
 
 - `monai_mini`가 `monai`보다 forward 기준 **1.35배**, wall-clock 기준 **1.34배** 빠르다.
 - 파라미터 수는 `monai_mini`가 `monai`의 약 48 % 수준으로 줄어든다.
-- 정확도는 `monai`가 우세하지만, CPU 추론 속도까지 함께 보면 `monai_mini`는 경량 대안으로 의미가 있다.
+- 정확도 손실이 거의 없으므로, 자원 제약이 있는 환경에서는 `monai_mini`가 합리적인 기본 선택이다.
 
-상세 분석:
-[docs/eval-results-monai.md](docs/eval-results-monai.md)
-[docs/eval-results-monai_mini.md](docs/eval-results-monai_mini.md)
+상세 분석·실험 설계·한계: [docs/final-report.md](docs/final-report.md)
 
 ## 문서 목록
 
 | 문서                                                               | 내용                                                                 |
 | ------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| [docs/final-report.md](docs/final-report.md)                       | 실험결과보고서 — 8개 조합 전수 실험의 설계·결과·분석·한계           |
 | [docs/model-monai.md](docs/model-monai.md)                         | EfficientNet-B2 + U-Net 풀 모델 아키텍처 상세 설명                   |
-| [docs/model-monai-mini.md](docs/model-monai-mini.md)               | EfficientNet-B2 + U-Net 경량 모델 아키텍처 상세 설명                 |
+| [docs/model-monai_mini.md](docs/model-monai_mini.md)               | EfficientNet-B2 + U-Net 경량 모델 아키텍처 상세 설명                 |
 | [docs/dataset-guide.md](docs/dataset-guide.md)                     | 데이터셋 디렉터리 구조, 파일 포맷, 어노테이션 스펙, 히트맵 타겟 수식 |
 | [docs/commands.md](docs/commands.md)                               | 실험 재현용 실행 명령 모음                                           |
 | [docs/dashboard-guide.md](docs/dashboard-guide.md)                 | 학습·평가 현황 표 GUI 화면 구성, 상태 판정 기준, 조작 방법           |
@@ -367,5 +373,3 @@ run eval-model  --dataset cholec80 --device cuda:1
 | [docs/tooltip-detector.md](docs/tooltip-detector.md)               | 탐지 GUI 화면 구성, 추론 흐름, 조작 방법, 설계 상세                  |
 | [docs/tooltip-tracker.md](docs/tooltip-tracker.md)                 | 추적 GUI 화면 구성, 화살표 스무딩 로직, 오탐지 판정 규칙, 설계 상세  |
 | [docs/dataset-browser-guide.md](docs/dataset-browser-guide.md)     | GUI 화면 구성, 조작 방법, 키보드 단축키                              |
-| [docs/eval-results-monai.md](docs/eval-results-monai.md)           | `monai` 테스트 세트 평가 결과 분석                                   |
-| [docs/eval-results-monai_mini.md](docs/eval-results-monai_mini.md) | `monai_mini` 테스트 세트 평가 결과 분석                              |
