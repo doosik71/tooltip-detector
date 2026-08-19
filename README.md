@@ -76,6 +76,7 @@ tooltip-detector/
 │   ├── train-model.py             # 학습 스크립트
 │   ├── eval-model.py              # 평가 스크립트
 │   ├── compare-speed.py           # 모델 속도 비교 스크립트
+│   ├── generate-summary.py        # data/models·data/results → docs/results-summary.md 생성
 │   ├── tooltip-detector.py        # 탐지 결과 시각화 GUI (이미지/데이터셋)
 │   ├── tooltip-tracker.py         # 동영상 실시간 탐지·추적 GUI
 │   └── dataset-browser.py         # 데이터셋 시각화 GUI
@@ -84,6 +85,7 @@ tooltip-detector/
 │   ├── dataset-guide.md          # 데이터셋 구조 및 포맷
 │   ├── train-guide.md            # 학습 절차 및 설정
 │   ├── eval-guide.md             # 평가 방법 및 지표
+│   ├── results-summary.md        # 실험 수치 요약 (generate-summary.py 자동 생성)
 │   ├── tooltip-detector.md       # 탐지 GUI 상세설계서 및 사용자설명서
 │   ├── tooltip-tracker.md        # 동영상 추적 GUI 상세설계서 및 사용자설명서
 │   └── dataset-browser-guide.md  # GUI 브라우저 사용법
@@ -101,17 +103,17 @@ tooltip-detector/
 
 여러 데이터셋을 `data/dataset/<dataset-name>/`로 구분해 지원한다 (`--dataset` 인자로 선택, 필수). 현재:
 
-| 데이터셋 (`--dataset`) | 상태      | 설명                                                                          |
-| ---------------------- | --------- | ----------------------------------------------------------------------------- |
-| `erop`                 | 학습 가능 | 자체 구축. 5개 복강경 수술 세션에서 추출한 **180,706 프레임** (736 × 480 px)   |
-| `cholec80`             | 학습 가능 | 공개 Cholec80(담낭절제술 80편)을 변환한 **184,578 프레임** (736 × 480 px)      |
+| 데이터셋 (`--dataset`) | 상태      | 설명                                                                         |
+| ---------------------- | --------- | ---------------------------------------------------------------------------- |
+| `erop`                 | 학습 가능 | 자체 구축. 5개 복강경 수술 세션에서 추출한 **180,706 프레임** (736 × 480 px) |
+| `cholec80`             | 학습 가능 | 공개 Cholec80(담낭절제술 80편)을 변환한 **184,578 프레임** (736 × 480 px)    |
 
 스플릿 구성:
 
-| 데이터셋   | train              | val               | test              | 팁 어노테이션 |
-| ---------- | ------------------ | ----------------- | ----------------- | ------------: |
-| `erop`     | 108,424 (60 %)     | 36,140 (20 %)     | 36,142 (20 %)     |       252,977 |
-| `cholec80` | 110,747 (60 %)     | 36,901 (20 %)     | 36,930 (20 %)     |       315,204 |
+| 데이터셋   | train          | val           | test          | 팁 어노테이션 |
+| ---------- | -------------- | ------------- | ------------- | ------------: |
+| `erop`     | 108,424 (60 %) | 36,140 (20 %) | 36,142 (20 %) |       252,977 |
+| `cholec80` | 110,747 (60 %) | 36,901 (20 %) | 36,930 (20 %) |       315,204 |
 
 두 데이터셋 모두 영상(세션)마다 독립적으로 60:20:20으로 나누되, 영상 내부는 프레임 단위 무작위 셔플로 분할된다. 따라서 같은 영상의 인접 프레임이 train과 test에 동시에 존재할 수 있다(시간적 누수). 각 프레임마다 RGB 이미지, 이진 분할 마스크, 도구 팁 좌표 어노테이션이 제공된다.
 
@@ -240,6 +242,20 @@ run.bat compare-speed --dataset cholec80      # Windows
 - 기본 설정은 test 셋에서 임의 샘플 1,000건을 골라 `monai`와 `monai_mini`의 추론 속도를 비교한다.
 - 결과는 `data/results/<dataset>/<target-mode>/speed-comparison.json`에 저장된다 (기본 `--target-mode gradient-seg`).
 
+### 4-2. 실험 수치 요약 문서 생성
+
+```bash
+run generate-summary          # Linux / macOS
+run.bat generate-summary      # Windows
+```
+
+`data/models/`·`data/results/`의 파일만 읽어 모든 조합의 학습·평가 수치를 한 문서
+`docs/results-summary.md`로 모은다. 학습 기록·수렴 곡선·전체 지표·축별 차이 외에,
+`summary.json`에 없는 오차 거리 분포·프레임 단위 탐지 실패율·팁 수별 성능·공유 피크(과소 탐지)
+분석·예측 좌표의 계통 편차를 `per_tip.csv`에서 다시 계산해 포함한다.
+[docs/final-report.md](docs/final-report.md)에 인용하는 수치의 기초 자료이므로, 재학습이나
+재평가 뒤에는 이 스크립트를 다시 실행해 갱신한다. 모델이나 데이터셋을 로드하지 않는다.
+
 ### 5. 탐지 결과 시각화
 
 ```bash
@@ -279,15 +295,16 @@ run.bat tooltip-tracker --dataset cholec80      # Windows
 
 ## 스크립트 요약
 
-| 스크립트               | 설명                   | 주요 인수                                                                                                       |
-| ---------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `run dashboard`        | 학습·평가 현황 표 GUI  | `--dataset`(선택), `--models-root`, `--results-root`                                                            |
-| `run train-model`      | 모델 학습              | `--dataset`(필수), `--model-type`, `--target-mode`, `--gaussian-sigma`, `--epochs`, `--batch-size`, `--lr`, `--device`, `--no-resume` |
-| `run eval-model`       | 팁 탐지 정확도 평가    | `--dataset`(필수), `--model-type`, `--target-mode`, `--threshold`, `--nms-radius`, `--model`, `--device`        |
-| `run compare-speed`    | 모델 추론 속도 비교    | `--dataset`(필수), `--model-types`, `--target-mode`, `--num-samples`, `--batch-size`, `--workers`               |
-| `run tooltip-detector` | 탐지 결과 시각화 GUI   | `--dataset`(필수), `--model-type`, `--target-mode`, `--model`, `--data-root`                                    |
-| `run tooltip-tracker`  | 동영상 실시간 추적 GUI | `--dataset`(필수), `--model-type`, `--target-mode`, `--model`                                                   |
-| `run dataset-browser`  | 데이터셋 시각화 GUI    | `--dataset`(필수), `--split`, `--data-root`                                                                     |
+| 스크립트               | 설명                     | 주요 인수                                                                                                                             |
+| ---------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `run dashboard`        | 학습·평가 현황 표 GUI    | `--dataset`(선택), `--models-root`, `--results-root`                                                                                  |
+| `run train-model`      | 모델 학습                | `--dataset`(필수), `--model-type`, `--target-mode`, `--gaussian-sigma`, `--epochs`, `--batch-size`, `--lr`, `--device`, `--no-resume` |
+| `run eval-model`       | 팁 탐지 정확도 평가      | `--dataset`(필수), `--model-type`, `--target-mode`, `--threshold`, `--nms-radius`, `--model`, `--device`                              |
+| `run compare-speed`    | 모델 추론 속도 비교      | `--dataset`(필수), `--model-types`, `--target-mode`, `--num-samples`, `--batch-size`, `--workers`                                     |
+| `run generate-summary` | 실험 수치 요약 문서 생성 | `--models-root`, `--results-root`, `--output`                                                                                         |
+| `run tooltip-detector` | 탐지 결과 시각화 GUI     | `--dataset`(필수), `--model-type`, `--target-mode`, `--model`, `--data-root`                                                          |
+| `run tooltip-tracker`  | 동영상 실시간 추적 GUI   | `--dataset`(필수), `--model-type`, `--target-mode`, `--model`                                                                         |
+| `run dataset-browser`  | 데이터셋 시각화 GUI      | `--dataset`(필수), `--split`, `--data-root`                                                                                           |
 
 Windows에서는 `run` 대신 `run.bat`을 사용한다. 인자 없이 `run`(`run.bat`)만 실행하면 사용법과 사용 가능한 스크립트 목록이 출력된다.
 
@@ -333,17 +350,18 @@ run eval-model  --dataset cholec80 --device cuda:1
 | ---------- | -------------- | ------------ | --------: | --------: | --------: | --------: | ----------: | --------: | --------: |
 | `erop`     | `gradient-seg` | `monai`      |    3.09 % |   44.98 % |   70.17 % |   82.95 % |    10.77 px |  34.94 px |  88.68 px |
 | `erop`     | `gradient-seg` | `monai_mini` |    3.47 % |   40.99 % |   68.28 % |   82.48 % |    11.40 px |  35.78 px |  93.36 px |
-| `erop`     | `gaussian-tip` | `monai`      |    7.29 % |   68.38 % |   73.46 % |   77.91 % |     4.00 px |  36.26 px | 143.77 px |
+| `erop`     | `gaussian-tip` | `monai`      |    5.03 % |   69.52 % |   79.36 % |   83.82 % |     7.81 px |  29.85 px |  74.28 px |
 | `erop`     | `gaussian-tip` | `monai_mini` |    5.85 % |   73.44 % |   78.00 % |   82.41 % |     3.16 px |  28.58 px |  87.66 px |
 | `cholec80` | `gradient-seg` | `monai`      |    2.13 % |   29.55 % |   58.52 % |   79.54 % |    15.26 px |  43.82 px | 128.32 px |
 | `cholec80` | `gradient-seg` | `monai_mini` |    2.15 % |   31.47 % |   57.16 % |   78.83 % |    15.65 px |  44.58 px | 131.93 px |
 | `cholec80` | `gaussian-tip` | `monai`      |    5.42 % |   65.38 % |   72.44 % |   79.15 % |     4.24 px |  36.37 px | 134.17 px |
 | `cholec80` | `gaussian-tip` | `monai_mini` |    5.89 % |   64.68 % |   71.60 % |   78.40 % |     4.47 px |  36.98 px | 138.00 px |
 
-- **타겟 생성 방식이 성능을 지배한다.** `gaussian-tip`은 중앙값 오차 3–4 px, Hit@10 px 65–73 %로 정밀하지만 탐지 실패율이 높고(5.4–7.3 %), `gradient-seg`는 정밀도는 낮아도 탐지 실패율이 안정적이다(2.1–3.5 %). 임계값 0.5에서 두 타겟이 만드는 초과-임계 영역의 크기 차이 때문이다.
-- **분할 마스크 레이블링 비용이 정확도로 회수되지 않는다.** 팁 좌표만 필요한 `gaussian-tip`이 Hit@10 px에서 평균 31 %p 앞선다.
-- **모델 크기의 영향은 미미하다.** 4개 비교쌍 중 3개에서 지표 차이가 ±4 %p 이내이고 방향도 일관되지 않는다.
-- 평균 거리가 중앙값의 2.9–9.1배인 긴 꼬리는 대부분 다중 도구 프레임의 과소 탐지에서 발생한다 — 전체 GT 팁의 18.6–29.9 %가 같은 프레임의 다른 팁과 예측 피크를 공유한다.
+- **타겟 생성 방식이 성능을 지배한다.** `gaussian-tip`은 Hit@10 px 65–73 %, 중앙값 오차 3–8 px로 정밀하지만 탐지 실패율이 높고(5.0–5.9 %), `gradient-seg`는 정밀도는 낮아도 탐지 실패율이 안정적이다(2.1–3.5 %). 임계값 0.5에서 두 타겟이 만드는 초과-임계 영역의 크기 차이 때문이다.
+- **분할 마스크 레이블링 비용이 정확도로 회수되지 않는다.** 팁 좌표만 필요한 `gaussian-tip`이 Hit@10 px에서 평균 31.5 %p 앞선다.
+- **모델 크기의 영향은 미미하다.** 4개 비교쌍 전부에서 지표 차이가 ±4 %p 이내이고 방향도 일관되지 않는다.
+- 평균 거리가 중앙값의 2.9–9.0배인 긴 꼬리는 대부분 다중 도구 프레임의 과소 탐지에서 발생한다 — 전체 GT 팁의 18.6–29.9 %가 같은 프레임의 다른 팁과 예측 피크를 공유한다.
+- 8개 조합 중 5개는 예측 좌표에 4.5–5.7 px의 계통 편차가 있어, 이 상수만 차감해도 정밀도가 크게 회복된다 (한 조합에서 중앙값 7.28 px → 3.61 px).
 
 속도 비교 결과 (`data/results/erop/gradient-seg/speed-comparison.json`, CPU, test 샘플 1,000건, batch=16, workers=0):
 
@@ -360,16 +378,17 @@ run eval-model  --dataset cholec80 --device cuda:1
 
 ## 문서 목록
 
-| 문서                                                               | 내용                                                                 |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| [docs/final-report.md](docs/final-report.md)                       | 실험결과보고서 — 8개 조합 전수 실험의 설계·결과·분석·한계           |
-| [docs/model-monai.md](docs/model-monai.md)                         | EfficientNet-B2 + U-Net 풀 모델 아키텍처 상세 설명                   |
-| [docs/model-monai_mini.md](docs/model-monai_mini.md)               | EfficientNet-B2 + U-Net 경량 모델 아키텍처 상세 설명                 |
-| [docs/dataset-guide.md](docs/dataset-guide.md)                     | 데이터셋 디렉터리 구조, 파일 포맷, 어노테이션 스펙, 히트맵 타겟 수식 |
-| [docs/commands.md](docs/commands.md)                               | 실험 재현용 실행 명령 모음                                           |
-| [docs/dashboard-guide.md](docs/dashboard-guide.md)                 | 학습·평가 현황 표 GUI 화면 구성, 상태 판정 기준, 조작 방법           |
-| [docs/train-guide.md](docs/train-guide.md)                         | 학습 실행 방법, 인수 설명, 증강 파이프라인, 체크포인트, 출력 예시    |
-| [docs/eval-guide.md](docs/eval-guide.md)                           | 평가 실행 방법, 피크 탐지 알고리즘, 지표 정의, 결과 파일 구조        |
-| [docs/tooltip-detector.md](docs/tooltip-detector.md)               | 탐지 GUI 화면 구성, 추론 흐름, 조작 방법, 설계 상세                  |
-| [docs/tooltip-tracker.md](docs/tooltip-tracker.md)                 | 추적 GUI 화면 구성, 화살표 스무딩 로직, 오탐지 판정 규칙, 설계 상세  |
-| [docs/dataset-browser-guide.md](docs/dataset-browser-guide.md)     | GUI 화면 구성, 조작 방법, 키보드 단축키                              |
+| 문서                                                           | 내용                                                                 |
+| -------------------------------------------------------------- | -------------------------------------------------------------------- |
+| [docs/final-report.md](docs/final-report.md)                   | 실험결과보고서 — 8개 조합 전수 실험의 설계·결과·분석·한계            |
+| [docs/results-summary.md](docs/results-summary.md)             | 실험 수치 요약 — 보고서 작성용 기초 자료 (자동 생성)                 |
+| [docs/model-monai.md](docs/model-monai.md)                     | EfficientNet-B2 + U-Net 풀 모델 아키텍처 상세 설명                   |
+| [docs/model-monai_mini.md](docs/model-monai_mini.md)           | EfficientNet-B2 + U-Net 경량 모델 아키텍처 상세 설명                 |
+| [docs/dataset-guide.md](docs/dataset-guide.md)                 | 데이터셋 디렉터리 구조, 파일 포맷, 어노테이션 스펙, 히트맵 타겟 수식 |
+| [docs/commands.md](docs/commands.md)                           | 실험 재현용 실행 명령 모음                                           |
+| [docs/dashboard-guide.md](docs/dashboard-guide.md)             | 학습·평가 현황 표 GUI 화면 구성, 상태 판정 기준, 조작 방법           |
+| [docs/train-guide.md](docs/train-guide.md)                     | 학습 실행 방법, 인수 설명, 증강 파이프라인, 체크포인트, 출력 예시    |
+| [docs/eval-guide.md](docs/eval-guide.md)                       | 평가 실행 방법, 피크 탐지 알고리즘, 지표 정의, 결과 파일 구조        |
+| [docs/tooltip-detector.md](docs/tooltip-detector.md)           | 탐지 GUI 화면 구성, 추론 흐름, 조작 방법, 설계 상세                  |
+| [docs/tooltip-tracker.md](docs/tooltip-tracker.md)             | 추적 GUI 화면 구성, 화살표 스무딩 로직, 오탐지 판정 규칙, 설계 상세  |
+| [docs/dataset-browser-guide.md](docs/dataset-browser-guide.md) | GUI 화면 구성, 조작 방법, 키보드 단축키                              |
