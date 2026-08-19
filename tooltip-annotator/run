@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# run -- dispatch to a project Python script under scripts/.
+#
+#   run <script-name> [args...]   =>  uv run python -m scripts.<script-name> [args...]
+#
+# The trailing ".py" is optional, so "run generate_dataset" and
+# "run generate_dataset.py" are equivalent. With no arguments, the available
+# scripts are listed. Invoked as a module (-m) rather than a file path so
+# scripts can import sibling packages at the project root (e.g. tooltip/).
+#
+# Examples:
+#   run generate_dataset --dataset erop
+#   run generate_segmentation --dataset erop --device cuda:0
+#   run pipeline
+set -euo pipefail
+
+cd "$(dirname "$0")"
+scripts_dir="scripts"
+
+list_scripts() {
+    echo "Usage: run <script-name> [args...]"
+    echo "       run <script-name> --help"
+    echo
+    echo "Available scripts:"
+    for f in "$scripts_dir"/*.py; do
+        [ -e "$f" ] || continue
+        printf '  %s\n' "$(basename "$f" .py)"
+    done
+}
+
+if [ "$#" -eq 0 ]; then
+    list_scripts
+    exit 0
+fi
+
+name="${1%.py}"        # allow "run foo.py"
+shift
+
+target="$scripts_dir/$name.py"
+if [ ! -f "$target" ]; then
+    echo "run: unknown script '$name' (no $target)" >&2
+    echo >&2
+    list_scripts >&2
+    exit 1
+fi
+
+exec uv run python -m "scripts.$name" "$@"
