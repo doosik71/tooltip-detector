@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="522" viewBox="0 0 900 522" role="img" aria-label="erop 데이터셋 경량 모델의 gradient-seg 대 gaussian-tip 오차 거리 분포 비교">
+  <style>
+    .t{font-family:'Noto Sans CJK KR','NanumGothic','Noto Sans CJK JP',sans-serif}
+    .m{font-family:'D2Coding','DejaVu Sans Mono',monospace}
+    .sub{font-size:12.5px;font-weight:700;fill:#17202e}
+    .cat{font-size:11px;fill:#17202e}
+    .val{font-size:10px;fill:#5c6675}
+    .ax{font-size:10px;fill:#8b95a3}
+    .note{font-size:10.5px;fill:#5c6675}
+    .cal{font-size:10px;font-weight:700}
+  </style>
+  <rect width="900" height="522" fill="#ffffff"/>
+  <text x="24" y="28" class="t sub">erop 데이터셋 · 경량 모델 <tspan class="m" font-size="11.5">monai_mini</tspan> — 오차 거리 분포</text>
+  <rect x="596" y="18" width="14" height="11" rx="2" fill="#c4763a"/>
+  <text x="616" y="28" class="t val"><tspan class="m" font-size="10">gradient-seg</tspan></text>
+  <rect x="722" y="18" width="14" height="11" rx="2" fill="#2f6f9f"/>
+  <text x="742" y="28" class="t val"><tspan class="m" font-size="10">gaussian-tip</tspan></text>
+  <line x1="166.0" y1="58" x2="166.0" y2="394" stroke="#e7ebf0" stroke-width="1"/>
+  <text x="166.0" y="412" class="t ax" text-anchor="middle">0</text>
+  <line x1="262.8" y1="58" x2="262.8" y2="394" stroke="#e7ebf0" stroke-width="1"/>
+  <text x="262.8" y="412" class="t ax" text-anchor="middle">10</text>
+  <line x1="359.5" y1="58" x2="359.5" y2="394" stroke="#e7ebf0" stroke-width="1"/>
+  <text x="359.5" y="412" class="t ax" text-anchor="middle">20</text>
+  <line x1="456.3" y1="58" x2="456.3" y2="394" stroke="#e7ebf0" stroke-width="1"/>
+  <text x="456.3" y="412" class="t ax" text-anchor="middle">30</text>
+  <line x1="553.1" y1="58" x2="553.1" y2="394" stroke="#e7ebf0" stroke-width="1"/>
+  <text x="553.1" y="412" class="t ax" text-anchor="middle">40</text>
+  <line x1="649.9" y1="58" x2="649.9" y2="394" stroke="#e7ebf0" stroke-width="1"/>
+  <text x="649.9" y="412" class="t ax" text-anchor="middle">50</text>
+  <line x1="746.6" y1="58" x2="746.6" y2="394" stroke="#e7ebf0" stroke-width="1"/>
+  <text x="746.6" y="412" class="t ax" text-anchor="middle">60</text>
+  <line x1="166" y1="58" x2="166" y2="394" stroke="#8b95a3" stroke-width="1.2"/>
+  <text x="466" y="432" class="t ax" text-anchor="middle">전체 GT 팁 대비 비율 (%)</text>
+  <text x="152" y="88" class="t cat" text-anchor="end">미탐지 (miss)</text>
+  <rect x="166" y="69" width="33.6" height="14" fill="#c4763a" stroke="#c4763a" stroke-dasharray="3 2" fill-opacity="0.45"/>
+  <text x="205.6" y="80" class="t val">3.47</text>
+  <rect x="166" y="87" width="56.6" height="14" fill="#2f6f9f" stroke="#2f6f9f" stroke-dasharray="3 2" fill-opacity="0.45"/>
+  <text x="228.6" y="98" class="t val">5.85</text>
+  <line x1="24" y1="104" x2="766" y2="104" stroke="#ccd4de" stroke-dasharray="4 3"/>
+  <text x="152" y="102" class="t ax" text-anchor="end">거리 통계에서 제외</text>
+  <text x="152" y="130" class="t cat" text-anchor="end">0–5 px</text>
+  <rect x="166" y="111" width="69.6" height="14" fill="#c4763a"/>
+  <text x="241.6" y="122" class="t val">7.19</text>
+  <rect x="166" y="129" width="574.7" height="14" fill="#2f6f9f"/>
+  <text x="746.7" y="140" class="t val">59.39</text>
+  <text x="152" y="172" class="t cat" text-anchor="end">5–10 px</text>
+  <rect x="166" y="153" width="317.1" height="14" fill="#c4763a"/>
+  <text x="489.1" y="164" class="t val">32.77</text>
+  <rect x="166" y="171" width="133.8" height="14" fill="#2f6f9f"/>
+  <text x="305.8" y="182" class="t val">13.83</text>
+  <text x="152" y="214" class="t cat" text-anchor="end">10–20 px</text>
+  <rect x="166" y="195" width="273.0" height="14" fill="#c4763a"/>
+  <text x="445.0" y="206" class="t val">28.21</text>
+  <rect x="166" y="213" width="46.1" height="14" fill="#2f6f9f"/>
+  <text x="218.1" y="224" class="t val">4.76</text>
+  <text x="152" y="256" class="t cat" text-anchor="end">20–50 px</text>
+  <rect x="166" y="237" width="138.2" height="14" fill="#c4763a"/>
+  <text x="310.2" y="248" class="t val">14.28</text>
+  <rect x="166" y="255" width="42.8" height="14" fill="#2f6f9f"/>
+  <text x="214.8" y="266" class="t val">4.42</text>
+  <text x="152" y="298" class="t cat" text-anchor="end">50–100 px</text>
+  <rect x="166" y="279" width="47.1" height="14" fill="#c4763a"/>
+  <text x="219.1" y="290" class="t val">4.87</text>
+  <rect x="166" y="297" width="28.5" height="14" fill="#2f6f9f"/>
+  <text x="200.5" y="308" class="t val">2.95</text>
+  <text x="152" y="340" class="t cat" text-anchor="end">100–200 px</text>
+  <rect x="166" y="321" width="45.0" height="14" fill="#c4763a"/>
+  <text x="217.0" y="332" class="t val">4.65</text>
+  <rect x="166" y="339" width="38.5" height="14" fill="#2f6f9f"/>
+  <text x="210.5" y="350" class="t val">3.98</text>
+  <text x="152" y="382" class="t cat" text-anchor="end">200 px +</text>
+  <rect x="166" y="363" width="44.0" height="14" fill="#c4763a"/>
+  <text x="216.0" y="374" class="t val">4.55</text>
+  <rect x="166" y="381" width="46.7" height="14" fill="#2f6f9f"/>
+  <text x="218.7" y="392" class="t val">4.83</text>
+  <text x="527" y="164" class="t cal" fill="#c4763a">← 봉우리</text>
+  <text x="785" y="140" class="t cal" fill="#2f6f9f">← 봉우리</text>
+  <rect x="24" y="458" width="852" height="48" rx="6" fill="#f5f7fa" stroke="#ccd4de"/>
+  <text x="40" y="478" class="t note"><tspan font-weight="700" fill="#2f6f9f">gaussian-tip</tspan>은 전체 GT 팁의 <tspan font-weight="700">59.4 %를 5 px 이내</tspan>로 맞혀 봉우리가 0–5 px에 서고, 10 px 이내 누적은 73.2 %다.</text>
+  <text x="40" y="496" class="t note"><tspan font-weight="700" fill="#c4763a">gradient-seg</tspan>는 5 px 이내가 7.2 %뿐이고 봉우리가 5–10 px로 밀려 10 px 이내 누적이 40.0 %다. 대신 미탐지가 3.47 % 대 5.85 %로 더 낮다 — <tspan font-weight="700">두 방식은 오차의 종류가 다르다.</tspan></text>
+</svg>

@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="548" viewBox="0 0 900 548" role="img"
+     aria-label="MONAI 사전학습 분할 모델을 이용한 반자동 어노테이션 파이프라인">
+  <style>
+    .t{font-family:'Noto Sans CJK KR','NanumGothic','Noto Sans CJK JP',sans-serif}
+    .m{font-family:'D2Coding','DejaVu Sans Mono',monospace}
+    .h{font-size:14px;font-weight:700;fill:#17202e}
+    .s{font-size:11.5px;fill:#5c6675}
+    .k{font-size:11px;fill:#17202e}
+    .lbl{font-size:10.5px;fill:#5c6675}
+  </style>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="8" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 4 L0 8 z" fill="#8b95a3"/>
+    </marker>
+    <marker id="arb" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="7" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 4 L0 8 z" fill="#2f6f9f"/>
+    </marker>
+  </defs>
+  <rect width="900" height="548" fill="#ffffff"/>
+
+  <!-- ── 좌측 파이프라인 흐름 ────────────────────────────────── -->
+  <g class="t">
+    <rect x="30" y="34" width="300" height="52" rx="6" fill="#f5f7fa" stroke="#ccd4de"/>
+    <text x="46" y="56" class="h">원본 프레임</text>
+    <text x="46" y="74" class="s">736 × 480 letterbox · 10 또는 25 프레임 간격 샘플링</text>
+
+    <line x1="180" y1="86" x2="180" y2="108" stroke="#8b95a3" stroke-width="1.4" marker-end="url(#ar)"/>
+
+    <rect x="30" y="110" width="300" height="66" rx="6" fill="#dceaf5" stroke="#2f6f9f"/>
+    <text x="46" y="132" class="h">MONAI 사전학습 분할 모델 추론</text>
+    <text x="46" y="150" class="s"><tspan class="m">FlexibleUNet</tspan> + EfficientNet-B2 백본</text>
+    <text x="46" y="167" class="s">추가 학습 없음 (zero-shot 적용)</text>
+
+    <line x1="180" y1="176" x2="180" y2="198" stroke="#8b95a3" stroke-width="1.4" marker-end="url(#ar)"/>
+
+    <rect x="30" y="200" width="300" height="52" rx="6" fill="#f5f7fa" stroke="#ccd4de"/>
+    <text x="46" y="222" class="h">이진 분할 마스크</text>
+    <text x="46" y="240" class="s">화소값 0 / 255 · 도구 인스턴스 구분 없음</text>
+
+    <line x1="180" y1="252" x2="180" y2="274" stroke="#8b95a3" stroke-width="1.4" marker-end="url(#ar)"/>
+
+    <rect x="30" y="276" width="300" height="66" rx="6" fill="#f8e7d6" stroke="#c4763a"/>
+    <text x="46" y="298" class="h">contour 기하 휴리스틱</text>
+    <text x="46" y="316" class="s">무게중심에서 가장 먼 두 극점을 구하고,</text>
+    <text x="46" y="333" class="s">그중 <tspan font-weight="700" fill="#c4763a">영상 중심에 더 가까운</tspan> 점을 팁으로 선택</text>
+
+    <line x1="180" y1="342" x2="180" y2="364" stroke="#8b95a3" stroke-width="1.4" marker-end="url(#ar)"/>
+
+    <rect x="30" y="366" width="300" height="66" rx="6" fill="#f5f7fa" stroke="#ccd4de"/>
+    <text x="46" y="388" class="h">팁 좌표 (x, y) + 바운딩 박스</text>
+    <text x="46" y="406" class="s">도구별 <tspan class="m">annotation JSON</tspan></text>
+    <text x="46" y="423" class="s">→ 학습 타겟이자 평가 기준값(GT)</text>
+  </g>
+
+  <!-- ── 우측 상세 패널: 팁 선택 규칙 ────────────────────────── -->
+  <g class="t">
+    <rect x="366" y="110" width="504" height="322" rx="6" fill="#fdfdfe" stroke="#ccd4de" stroke-dasharray="4 3"/>
+    <text x="382" y="132" class="h">팁 선택 규칙 — <tspan class="m" font-size="12.5">compute_tip()</tspan></text>
+
+    <!-- 프레임(영상) -->
+    <rect x="390" y="146" width="228" height="150" fill="#eef1f5" stroke="#b9c2ce"/>
+    <rect x="390" y="146" width="228" height="11" fill="#d7dde5"/>
+    <rect x="390" y="285" width="228" height="11" fill="#d7dde5"/>
+    <text x="394" y="309" class="lbl">letterbox 패딩</text>
+
+    <!-- bbox -->
+    <rect x="446" y="161" width="168" height="106" fill="none" stroke="#8b95a3" stroke-dasharray="3 2"/>
+    <text x="446" y="157" class="lbl">bbox</text>
+
+    <!-- 도구 -->
+    <polygon points="599.6,165.4 610.4,184.6 453.7,265.0 450.3,259.0" fill="#9aa6b4" stroke="#6f7b8a"/>
+
+    <!-- 영상 중심 -->
+    <line x1="502" y1="221" x2="518" y2="221" stroke="#ac4b45" stroke-width="1.3"/>
+    <line x1="510" y1="213" x2="510" y2="229" stroke="#ac4b45" stroke-width="1.3"/>
+
+    <!-- 중심에서의 거리 -->
+    <line x1="510" y1="221" x2="452" y2="262" stroke="#ac4b45" stroke-width="1" stroke-dasharray="3 2"/>
+    <line x1="510" y1="221" x2="605" y2="175" stroke="#ac4b45" stroke-width="1" stroke-dasharray="3 2"/>
+
+    <!-- 무게중심 -->
+    <circle cx="536" cy="214" r="3.6" fill="none" stroke="#17202e" stroke-width="1.5"/>
+
+    <!-- point_b (탈락) -->
+    <circle cx="605" cy="175" r="4.4" fill="#ffffff" stroke="#8b95a3" stroke-width="1.6"/>
+    <!-- point_a (선택된 팁) -->
+    <circle cx="452" cy="262" r="5" fill="#2f6f9f"/>
+
+    <!-- 지시선 -->
+    <line x1="452" y1="262" x2="422" y2="278" stroke="#2f6f9f" stroke-width="1" marker-end="url(#arb)"/>
+    <text x="396" y="291" class="k" fill="#2f6f9f" font-weight="700">팁</text>
+
+    <!-- 우측 설명 -->
+    <g>
+      <line x1="638" y1="160" x2="652" y2="160" stroke="#ac4b45" stroke-width="1.3"/>
+      <line x1="645" y1="153" x2="645" y2="167" stroke="#ac4b45" stroke-width="1.3"/>
+      <text x="662" y="164" class="k">영상 중심</text>
+
+      <circle cx="645" cy="188" r="3.6" fill="none" stroke="#17202e" stroke-width="1.5"/>
+      <text x="662" y="192" class="k">무게중심 <tspan class="m" font-size="10.5">centroid</tspan></text>
+
+      <circle cx="645" cy="216" r="5" fill="#2f6f9f"/>
+      <text x="662" y="220" class="k"><tspan class="m" font-size="10.5">point_a</tspan> — 무게중심에서 최원점</text>
+      <text x="662" y="235" class="lbl">영상 중심까지 69 px (가까움) → <tspan font-weight="700" fill="#2f6f9f">팁으로 채택</tspan></text>
+
+      <circle cx="645" cy="260" r="4.4" fill="#ffffff" stroke="#8b95a3" stroke-width="1.6"/>
+      <text x="662" y="264" class="k"><tspan class="m" font-size="10.5">point_b</tspan> — <tspan class="m" font-size="10.5">point_a</tspan>에서 최원점</text>
+      <text x="662" y="279" class="lbl">영상 중심까지 107 px (멂) → 탈락</text>
+
+      <rect x="638" y="294" width="220" height="62" rx="4" fill="#f6e0de" stroke="#ac4b45"/>
+      <text x="648" y="311" class="lbl" fill="#ac4b45" font-size="10">도구가 영상 중심을 향해 진입하지 않으면</text>
+      <text x="648" y="326" class="lbl" fill="#ac4b45" font-size="10">이 규칙은 <tspan font-weight="700">반대쪽 끝(손잡이)</tspan>을 고른다.</text>
+      <text x="648" y="341" class="lbl" fill="#ac4b45" font-size="10">§6.6 <tspan class="m" font-size="10">video50</tspan>·<tspan class="m" font-size="10">video30</tspan> 이상치의 의심 원인</text>
+    </g>
+
+    <!-- 좌측 흐름 4단계와 연결 -->
+    <line x1="330" y1="309" x2="364" y2="271" stroke="#c4763a" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#ar)"/>
+  </g>
+
+  <!-- ── 하단 한계 스트립 ────────────────────────────────────── -->
+  <g class="t">
+    <rect x="30" y="452" width="840" height="72" rx="6" fill="#f6e0de" stroke="#ac4b45"/>
+    <text x="46" y="474" class="h" fill="#ac4b45">사람 검증 없음 — 이 파이프라인의 산출물이 곧 학습 타겟이자 평가 기준값(GT)이다</text>
+    <text x="46" y="493" class="s" fill="#17202e">사람이 검증한 정답 대비 정량적 정확도(마스크 IoU, 팁 픽셀 오차)는 <tspan font-weight="700">측정되지 않았다</tspan> (§2.3, §8.1).</text>
+    <text x="46" y="512" class="s" fill="#17202e">알려진 실패 유형 ①&#160;휴리스틱이 도구의 반대쪽 끝을 팁으로 선택&#160;&#160;②&#160;마스크 노이즈가 가짜 인스턴스로 잡히는 과분할</text>
+  </g>
+</svg>

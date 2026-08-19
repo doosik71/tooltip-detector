@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" viewBox="0 0 900 600" role="img" aria-label="gaussian-tip과 gradient-seg의 초과-임계 영역 차이와 그 결과인 정밀도 대 miss율 트레이드오프">
+  <style>
+    .t{font-family:'Noto Sans CJK KR','NanumGothic','Noto Sans CJK JP',sans-serif}
+    .m{font-family:'D2Coding','DejaVu Sans Mono',monospace}
+    .ph{font-size:13px;font-weight:700}
+    .bl{font-size:10.5px;fill:#17202e}
+    .an{font-size:10px;fill:#5c6675}
+    .ax{font-size:10px;fill:#8b95a3}
+    .cn{font-size:10.5px;font-weight:700;fill:#17202e}
+    .cv{font-size:14px;font-weight:700}
+    .cs{font-size:9.5px;fill:#8b95a3}
+  </style>
+  <defs>
+    <marker id="f5a" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="7" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 4 L0 8 z" fill="#5c6675"/>
+    </marker>
+  </defs>
+  <rect width="900" height="600" fill="#ffffff"/>
+  <rect x="24" y="30" width="414" height="216" rx="6" fill="#fdfdfe" stroke="#ccd4de"/>
+  <text x="40" y="53" class="t ph m" fill="#2f6f9f">gaussian-tip</text>  <text x="152" y="53" class="t an">(σ = 15 px, 마스크 미사용)</text>
+  <polygon points="76,105 376,96 376,124 76,115" fill="#d3dae2" stroke="#b3bcc7"/>
+  <circle cx="76" cy="110" r="26.5" fill="#2f6f9f" fill-opacity="0.82" stroke="#2f6f9f"/>
+  <circle cx="76" cy="110" r="2.6" fill="#ffffff"/>
+  <line x1="76" y1="110" x2="102.5" y2="110" stroke="#ffffff" stroke-width="1.2" stroke-dasharray="2 2"/>
+  <text x="106" y="152" class="t an" fill="#2f6f9f" font-weight="700">반경 17.7 px</text><line x1="103" y1="146" x2="92" y2="126" stroke="#2f6f9f" stroke-width="1"/>
+  <line x1="196" y1="82" x2="98" y2="96" stroke="#5c6675" stroke-width="1" marker-end="url(#f5a)"/>
+  <text x="202" y="80" class="t an">값 ≥ 0.5 영역 — 팁 중심 원판</text>
+  <text x="290" y="132" class="t an">도구 마스크 (타겟 생성에 쓰이지 않음)</text>
+  <line x1="196" y1="152" x2="271" y2="152" stroke="#8b95a3" stroke-width="1.2"/>
+  <line x1="196" y1="148" x2="196" y2="156" stroke="#8b95a3" stroke-width="1.2"/>
+  <line x1="271" y1="148" x2="271" y2="156" stroke="#8b95a3" stroke-width="1.2"/>
+  <text x="277" y="156" class="t ax">50 px</text>
+  <text x="40" y="182" class="t bl">· 분할 마스크가 필요 없다 — 팁 좌표 하나로 생성된다.</text>
+  <text x="40" y="201" class="t bl">· argmax가 팁에서 <tspan font-weight="700">최대 17.7 px</tspan> 안에 갇힌다 → 정밀도 ↑</text>
+  <text x="40" y="220" class="t bl">· 응답이 0.5 아래로 내려가면 후보가 <tspan font-weight="700">통째로 사라진다</tspan> → miss ↑</text>
+  <rect x="462" y="30" width="414" height="216" rx="6" fill="#fdfdfe" stroke="#ccd4de"/>
+  <text x="478" y="53" class="t ph m" fill="#c4763a">gradient-seg</text>  <text x="590" y="53" class="t an">(마스크 형태에 따라 달라짐)</text>
+  <polygon points="514,105 814,96 814,124 514,115" fill="#d3dae2" stroke="#b3bcc7"/>
+  <polygon points="514,105 664,100.5 664,119.5 514,115" fill="#c4763a" fill-opacity="0.85" stroke="#c4763a"/>
+  <circle cx="514" cy="110" r="2.6" fill="#ffffff"/>
+  <line x1="742" y1="82" x2="620" y2="99" stroke="#5c6675" stroke-width="1" marker-end="url(#f5a)"/>
+  <text x="596" y="78" class="t an">값 ≥ 0.5 영역 — 몸통의 팁 쪽 절반</text>
+  <line x1="514" y1="136" x2="664" y2="136" stroke="#c4763a" stroke-width="1.2"/>
+  <line x1="514" y1="132" x2="514" y2="140" stroke="#c4763a" stroke-width="1.2"/>
+  <line x1="664" y1="132" x2="664" y2="140" stroke="#c4763a" stroke-width="1.2"/>
+  <text x="670" y="140" class="t an" fill="#c4763a" font-weight="700">≈ L / 2</text>
+  <text x="726" y="118" class="t an">L = 팁에서 그룹 내 최원 화소까지</text>
+  <line x1="514" y1="152" x2="589" y2="152" stroke="#8b95a3" stroke-width="1.2"/>
+  <line x1="514" y1="148" x2="514" y2="156" stroke="#8b95a3" stroke-width="1.2"/>
+  <line x1="589" y1="148" x2="589" y2="156" stroke="#8b95a3" stroke-width="1.2"/>
+  <text x="595" y="156" class="t ax">50 px</text>
+  <text x="478" y="182" class="t bl">· 마스크 + 팁 + bbox 세 종류의 레이블이 필요하다.</text>
+  <text x="478" y="201" class="t bl">· argmax가 <tspan font-weight="700">넓은 영역에서 방황한다</tspan> → 정밀도 ↓</text>
+  <text x="478" y="220" class="t bl">· 영역이 넓어 일부라도 0.5를 넘길 확률이 높다 → miss ↓</text>
+  <text x="24" y="278" class="t cn">팁으로부터의 거리에 따른 타겟값 — 임계값 0.5를 넘는 구간의 길이가 다르다</text>
+  <line x1="120" y1="418.0" x2="760" y2="418.0" stroke="#e7ebf0"/>
+  <text x="112" y="422.0" class="t ax" text-anchor="end">0.0</text>
+  <line x1="120" y1="359.0" x2="760" y2="359.0" stroke="#e7ebf0"/>
+  <text x="112" y="363.0" class="t ax" text-anchor="end">0.5</text>
+  <line x1="120" y1="300.0" x2="760" y2="300.0" stroke="#e7ebf0"/>
+  <text x="112" y="304.0" class="t ax" text-anchor="end">1.0</text>
+  <line x1="120.0" y1="418" x2="120.0" y2="422" stroke="#8b95a3"/>
+  <text x="120.0" y="436" class="t ax" text-anchor="middle">0</text>
+  <line x1="226.7" y1="418" x2="226.7" y2="422" stroke="#8b95a3"/>
+  <text x="226.7" y="436" class="t ax" text-anchor="middle">20</text>
+  <line x1="333.3" y1="418" x2="333.3" y2="422" stroke="#8b95a3"/>
+  <text x="333.3" y="436" class="t ax" text-anchor="middle">40</text>
+  <line x1="440.0" y1="418" x2="440.0" y2="422" stroke="#8b95a3"/>
+  <text x="440.0" y="436" class="t ax" text-anchor="middle">60</text>
+  <line x1="546.7" y1="418" x2="546.7" y2="422" stroke="#8b95a3"/>
+  <text x="546.7" y="436" class="t ax" text-anchor="middle">80</text>
+  <line x1="653.3" y1="418" x2="653.3" y2="422" stroke="#8b95a3"/>
+  <text x="653.3" y="436" class="t ax" text-anchor="middle">100</text>
+  <line x1="760.0" y1="418" x2="760.0" y2="422" stroke="#8b95a3"/>
+  <text x="760.0" y="436" class="t ax" text-anchor="middle">120</text>
+  <line x1="120" y1="300" x2="120" y2="418" stroke="#8b95a3" stroke-width="1.2"/>
+  <line x1="120" y1="418" x2="760" y2="418" stroke="#8b95a3" stroke-width="1.2"/>
+  <text x="440" y="454" class="t ax" text-anchor="middle">팁으로부터의 거리 (px)</text>
+  <text x="112" y="290" class="t ax" text-anchor="end">타겟값</text>
+  <line x1="120" y1="359.0" x2="760" y2="359.0" stroke="#ac4b45" stroke-width="1.3" stroke-dasharray="5 3"/>
+  <text x="768" y="363.0" class="t an" fill="#ac4b45" font-weight="700">임계값 0.5</text>
+  <polygon points="120.0,300.0 760.0,388.5 760.0,418.0 440.0,418.0" fill="#c4763a" fill-opacity="0.18"/>
+  <polyline points="120.0,300.0 653.3,418.0 760.0,418.0" fill="none" stroke="#c4763a" stroke-width="2" stroke-dasharray="6 3"/>
+  <polyline points="120.0,300.0 130.7,301.0 141.3,304.1 152.0,309.1 162.7,315.6 173.3,323.5 184.0,332.3 194.7,341.7 205.3,351.2 216.0,360.6 226.7,369.5 237.3,377.7 248.0,385.2 258.7,391.7 269.3,397.3 280.0,402.0 290.7,405.9 301.3,409.0 312.0,411.4 322.7,413.2 333.3,414.6 344.0,415.7 354.7,416.4 365.3,416.9 376.0,417.3 386.7,417.5 397.3,417.7 408.0,417.8 418.7,417.9 429.3,417.9 440.0,418.0 450.7,418.0 461.3,418.0 472.0,418.0 482.7,418.0 493.3,418.0 504.0,418.0 514.7,418.0 525.3,418.0 536.0,418.0 546.7,418.0 557.3,418.0 568.0,418.0 578.7,418.0 589.3,418.0 600.0,418.0 610.7,418.0 621.3,418.0 632.0,418.0 642.7,418.0 653.3,418.0 664.0,418.0 674.7,418.0 685.3,418.0 696.0,418.0 706.7,418.0 717.3,418.0 728.0,418.0 738.7,418.0 749.3,418.0 760.0,418.0" fill="none" stroke="#2f6f9f" stroke-width="2.2"/>
+  <line x1="214.2" y1="359.0" x2="214.2" y2="418" stroke="#2f6f9f" stroke-width="1" stroke-dasharray="3 2"/>
+  <circle cx="214.2" cy="359.0" r="3.6" fill="#2f6f9f"/>
+  <text x="220.2" y="351.0" class="t an" fill="#2f6f9f" font-weight="700">17.7 px</text>
+  <line x1="280.0" y1="359.0" x2="280.0" y2="418" stroke="#c4763a" stroke-width="1" stroke-dasharray="3 2"/>
+  <circle cx="280.0" cy="359.0" r="3.2" fill="#c4763a"/>
+  <line x1="386.7" y1="359.0" x2="386.7" y2="418" stroke="#c4763a" stroke-width="1" stroke-dasharray="3 2"/>
+  <circle cx="386.7" cy="359.0" r="3.2" fill="#c4763a"/>
+  <line x1="546.7" y1="359.0" x2="546.7" y2="418" stroke="#c4763a" stroke-width="1" stroke-dasharray="3 2"/>
+  <circle cx="546.7" cy="359.0" r="3.2" fill="#c4763a"/>
+  <text x="280.0" y="349.0" class="t an" fill="#c4763a" text-anchor="middle">30</text>
+  <text x="386.7" y="349.0" class="t an" fill="#c4763a" text-anchor="middle">50</text>
+  <text x="546.7" y="349.0" class="t an" fill="#c4763a" text-anchor="middle">80 px</text>
+  <text x="418.7" y="323.6" class="t an" fill="#c4763a">L = 60–160 px 범위</text>
+  <line x1="600" y1="292" x2="626" y2="292" stroke="#2f6f9f" stroke-width="2.2"/>
+  <text x="632" y="296" class="t ax"><tspan class="m" font-size="9.5">gaussian-tip</tspan></text>
+  <line x1="740" y1="292" x2="766" y2="292" stroke="#c4763a" stroke-width="2" stroke-dasharray="6 3"/>
+  <text x="772" y="296" class="t ax"><tspan class="m" font-size="9.5">gradient-seg</tspan></text>
+  <rect x="24" y="458" width="164" height="86" rx="6" fill="#f5f7fa" stroke="#ccd4de"/>
+  <text x="106" y="476" class="t cn" text-anchor="middle">Miss율</text>
+  <text x="38" y="500" class="t cv" fill="#c4763a">2.71 %</text>
+  <text x="174" y="500" class="t cv" fill="#2f6f9f" text-anchor="end">5.55 %</text>
+  <text x="38" y="514" class="t cs">gradient-seg</text>
+  <text x="174" y="514" class="t cs" text-anchor="end">gaussian-tip</text>
+  <line x1="38" y1="522" x2="174" y2="522" stroke="#ccd4de"/>
+  <text x="106" y="536" class="t cs" fill="#c4763a" font-weight="700" text-anchor="middle">우세: gradient-seg</text>
+  <rect x="196" y="458" width="164" height="86" rx="6" fill="#f5f7fa" stroke="#ccd4de"/>
+  <text x="278" y="476" class="t cn" text-anchor="middle">프레임 완전 실패율</text>
+  <text x="210" y="500" class="t cv" font-size="12" fill="#c4763a">3.0–4.5 %</text>
+  <text x="346" y="500" class="t cv" font-size="12" fill="#2f6f9f" text-anchor="end">6.5–7.6 %</text>
+  <text x="210" y="514" class="t cs">gradient-seg</text>
+  <text x="346" y="514" class="t cs" text-anchor="end">gaussian-tip</text>
+  <line x1="210" y1="522" x2="346" y2="522" stroke="#ccd4de"/>
+  <text x="278" y="536" class="t cs" fill="#c4763a" font-weight="700" text-anchor="middle">우세: gradient-seg</text>
+  <rect x="368" y="458" width="164" height="86" rx="6" fill="#f5f7fa" stroke="#ccd4de"/>
+  <text x="450" y="476" class="t cn" text-anchor="middle">Hit@10 px</text>
+  <text x="382" y="500" class="t cv" fill="#c4763a">36.75 %</text>
+  <text x="518" y="500" class="t cv" fill="#2f6f9f" text-anchor="end">68.26 %</text>
+  <text x="382" y="514" class="t cs">gradient-seg</text>
+  <text x="518" y="514" class="t cs" text-anchor="end">gaussian-tip</text>
+  <line x1="382" y1="522" x2="518" y2="522" stroke="#ccd4de"/>
+  <text x="450" y="536" class="t cs" fill="#2f6f9f" font-weight="700" text-anchor="middle">우세: gaussian-tip</text>
+  <rect x="540" y="458" width="164" height="86" rx="6" fill="#f5f7fa" stroke="#ccd4de"/>
+  <text x="622" y="476" class="t cn" text-anchor="middle">중앙값 오차</text>
+  <text x="554" y="500" class="t cv" fill="#c4763a">13.27 px</text>
+  <text x="690" y="500" class="t cv" fill="#2f6f9f" text-anchor="end">4.92 px</text>
+  <text x="554" y="514" class="t cs">gradient-seg</text>
+  <text x="690" y="514" class="t cs" text-anchor="end">gaussian-tip</text>
+  <line x1="554" y1="522" x2="690" y2="522" stroke="#ccd4de"/>
+  <text x="622" y="536" class="t cs" fill="#2f6f9f" font-weight="700" text-anchor="middle">우세: gaussian-tip</text>
+  <rect x="712" y="458" width="164" height="86" rx="6" fill="#f5f7fa" stroke="#ccd4de"/>
+  <text x="794" y="476" class="t cn" text-anchor="middle">Hit@50 px</text>
+  <text x="726" y="500" class="t cv" fill="#c4763a">80.95 %</text>
+  <text x="862" y="500" class="t cv" fill="#2f6f9f" text-anchor="end">80.94 %</text>
+  <text x="726" y="514" class="t cs">gradient-seg</text>
+  <text x="862" y="514" class="t cs" text-anchor="end">gaussian-tip</text>
+  <line x1="726" y1="522" x2="862" y2="522" stroke="#ccd4de"/>
+  <text x="794" y="536" class="t cs" fill="#5c6675" font-weight="700" text-anchor="middle">우세: 대등</text>
+  <text x="24" y="586" class="t an"><tspan font-weight="700">이 대비는 임계값 0.5 고정에서만 성립한다.</tspan> gaussian-tip의 높은 miss율은 좁은 초과-임계 영역의 직접적 결과이므로, 임계값을 0.3 정도로 낮추면 상당 부분 해소될 수 있다 (§8.3).</text>
+</svg>

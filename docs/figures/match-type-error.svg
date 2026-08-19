@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="506" viewBox="0 0 900 506" role="img" aria-label="erop gaussian-tip monai_mini 조합의 매칭 유형별 오차 분해">
+  <style>
+    .t{font-family:'Noto Sans CJK KR','NanumGothic','Noto Sans CJK JP',sans-serif}
+    .m{font-family:'D2Coding','DejaVu Sans Mono',monospace}
+    .ti{font-size:13px;font-weight:700;fill:#17202e}
+    .su{font-size:10.5px;fill:#5c6675}
+    .seg{font-size:11px;font-weight:700;fill:#ffffff}
+    .gn{font-size:11.5px;font-weight:700}
+    .mt{font-size:10.5px;fill:#17202e}
+    .val{font-size:10.5px;fill:#5c6675}
+    .ax{font-size:10px;fill:#8b95a3}
+    .note{font-size:10.5px;fill:#5c6675}
+  </style>
+  <rect width="900" height="506" fill="#ffffff"/>
+  <text x="24" y="26" class="t ti">erop / <tspan class="m" font-size="13">gaussian-tip</tspan> / <tspan class="m" font-size="13">monai_mini</tspan> — 매칭 유형별 오차</text>
+  <text x="24" y="44" class="t su">test 세트의 GT 팁 50,718개를 매칭 유형으로 분해. 오차 분포의 긴 꼬리는 거의 전부 “공유 매칭” 집단에서 나온다.</text>
+  <text x="62" y="82" class="t ax" text-anchor="end">구성</text>
+  <rect x="70.0" y="62" width="551.2" height="30" fill="#3f8468"/>
+  <text x="345.6" y="81" class="t seg" text-anchor="middle">단독 매칭 72.6 %</text>
+  <rect x="621.2" y="62" width="164.0" height="30" fill="#75619e"/>
+  <text x="703.2" y="81" class="t seg" text-anchor="middle">공유 매칭 21.6 %</text>
+  <rect x="785.2" y="62" width="44.8" height="30" fill="#ac4b45"/>
+  <text x="830" y="110" class="t ax" fill="#ac4b45" text-anchor="end" font-weight="700">미탐지 5.9 %</text>
+  <rect x="70" y="62" width="760" height="30" fill="none" stroke="#ffffff" stroke-width="0"/>
+  <line x1="807" y1="94" x2="807" y2="102" stroke="#ac4b45" stroke-width="1"/>
+  <rect x="24" y="121" width="12" height="10" rx="2" fill="#3f8468"/>
+  <text x="44" y="130" class="t note"><tspan font-weight="700" fill="#3f8468">단독 매칭</tspan> — GT 팁 하나가 예측 피크 하나를 단독으로 점유 — 정상 매칭</text>
+  <rect x="24" y="138" width="12" height="10" rx="2" fill="#75619e"/>
+  <text x="44" y="147" class="t note"><tspan font-weight="700" fill="#75619e">공유 매칭</tspan> — 같은 프레임의 다른 GT 팁과 피크를 공유 = 모델이 도구 수보다 적은 피크를 만든 과소 탐지</text>
+  <rect x="24" y="155" width="12" height="10" rx="2" fill="#ac4b45"/>
+  <text x="44" y="164" class="t note"><tspan font-weight="700" fill="#ac4b45">미탐지</tspan> — 임계값을 넘는 피크 후보가 아예 없음 — 거리 통계에서 제외</text>
+  <line x1="204.0" y1="192" x2="204.0" y2="423" stroke="#e7ebf0"/>
+  <text x="204.0" y="441" class="t ax" text-anchor="middle">0</text>
+  <line x1="304.0" y1="192" x2="304.0" y2="423" stroke="#e7ebf0"/>
+  <text x="304.0" y="441" class="t ax" text-anchor="middle">50</text>
+  <line x1="404.0" y1="192" x2="404.0" y2="423" stroke="#e7ebf0"/>
+  <text x="404.0" y="441" class="t ax" text-anchor="middle">100</text>
+  <line x1="504.0" y1="192" x2="504.0" y2="423" stroke="#e7ebf0"/>
+  <text x="504.0" y="441" class="t ax" text-anchor="middle">150</text>
+  <line x1="604.0" y1="192" x2="604.0" y2="423" stroke="#e7ebf0"/>
+  <text x="604.0" y="441" class="t ax" text-anchor="middle">200</text>
+  <line x1="704.0" y1="192" x2="704.0" y2="423" stroke="#e7ebf0"/>
+  <text x="704.0" y="441" class="t ax" text-anchor="middle">250</text>
+  <line x1="804.0" y1="192" x2="804.0" y2="423" stroke="#e7ebf0"/>
+  <text x="804.0" y="441" class="t ax" text-anchor="middle">300</text>
+  <line x1="204" y1="192" x2="204" y2="423" stroke="#8b95a3" stroke-width="1.2"/>
+  <text x="504" y="461" class="t ax" text-anchor="middle">오차 거리 (px)</text>
+  <rect x="24" y="204" width="12" height="10" rx="2" fill="#3f8468"/>
+  <text x="44" y="214" class="t gn" fill="#3f8468">단독 매칭</text>
+  <text x="44" y="230" class="t ax">72.6 %</text>
+  <text x="196" y="211" class="t mt" text-anchor="end">중앙값</text>
+  <rect x="204" y="201" width="5.7" height="14" fill="#3f8468" fill-opacity="0.55"/>
+  <text x="215.7" y="212" class="t val">2.83 px</text>
+  <text x="196" y="230" class="t mt" text-anchor="end">평균</text>
+  <rect x="204" y="220" width="15.1" height="14" fill="#3f8468" fill-opacity="0.78"/>
+  <text x="225.1" y="231" class="t val">7.54 px</text>
+  <text x="196" y="249" class="t mt" text-anchor="end">P90</text>
+  <rect x="204" y="239" width="20.1" height="14" fill="#3f8468"/>
+  <text x="230.1" y="250" class="t val">10.05 px</text>
+  <line x1="24" y1="268" x2="804" y2="268" stroke="#eef1f5"/>
+  <rect x="24" y="288" width="12" height="10" rx="2" fill="#75619e"/>
+  <text x="44" y="298" class="t gn" fill="#75619e">공유 매칭</text>
+  <text x="44" y="314" class="t ax">21.6 %</text>
+  <text x="196" y="295" class="t mt" text-anchor="end">중앙값</text>
+  <rect x="204" y="285" width="80.0" height="14" fill="#75619e" fill-opacity="0.55"/>
+  <text x="290.0" y="296" class="t val">40.01 px</text>
+  <text x="196" y="314" class="t mt" text-anchor="end">평균</text>
+  <rect x="204" y="304" width="198.6" height="14" fill="#75619e" fill-opacity="0.78"/>
+  <text x="408.6" y="315" class="t val">99.28 px</text>
+  <text x="196" y="333" class="t mt" text-anchor="end">P90</text>
+  <rect x="204" y="323" width="568.6" height="14" fill="#75619e"/>
+  <text x="778.6" y="334" class="t val">284.29 px</text>
+  <line x1="24" y1="352" x2="804" y2="352" stroke="#eef1f5"/>
+  <rect x="24" y="372" width="12" height="10" rx="2" fill="#5c6675"/>
+  <text x="44" y="382" class="t gn" fill="#5c6675">전체</text>
+  <text x="44" y="398" class="t ax">100 %</text>
+  <text x="196" y="379" class="t mt" text-anchor="end">중앙값</text>
+  <rect x="204" y="369" width="6.3" height="14" fill="#5c6675" fill-opacity="0.55"/>
+  <text x="216.3" y="380" class="t val">3.16 px</text>
+  <text x="196" y="398" class="t mt" text-anchor="end">평균</text>
+  <rect x="204" y="388" width="57.2" height="14" fill="#5c6675" fill-opacity="0.78"/>
+  <text x="267.2" y="399" class="t val">28.58 px</text>
+  <text x="196" y="417" class="t mt" text-anchor="end">P90</text>
+  <rect x="204" y="407" width="175.3" height="14" fill="#5c6675"/>
+  <text x="385.3" y="418" class="t val">87.66 px</text>
+  <text x="762" y="330" class="t seg" text-anchor="end">오차 분포의 꼬리를 독점</text>
+  <rect x="24" y="444" width="852" height="46" rx="6" fill="#f5f7fa" stroke="#ccd4de"/>
+  <text x="40" y="464" class="t note">단독 매칭의 P90은 <tspan font-weight="700">10.05 px</tspan>, 공유 매칭의 P90은 <tspan font-weight="700">284.29 px</tspan>로 <tspan font-weight="700">28배</tspan> 차이다. 전체 평균(28.58 px)이 중앙값(3.16 px)의 9배가 되는 이유가 여기 있다.</text>
+  <text x="40" y="482" class="t note">공유 매칭은 모델이 프레임 내 도구 수보다 적은 피크를 만든 결과이며, 현행 평가 프로토콜은 이 과소 탐지를 <tspan font-weight="700">miss가 아니라 거리 오차로 전가한다</tspan> (§3.5, §6.7.3).</text>
+</svg>

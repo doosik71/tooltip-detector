@@ -1,0 +1,195 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="614" viewBox="0 0 900 614" role="img"
+     aria-label="TooltipDetector 신경망 구조 — EfficientNet-B2 인코더 + U-Net 디코더 처리 흐름">
+  <style>
+    .t{font-family:'Noto Sans CJK KR','NanumGothic','Noto Sans CJK JP',sans-serif}
+    .m{font-family:'D2Coding','DejaVu Sans Mono',monospace}
+    .ct{font-size:11.5px;font-weight:700;fill:#17202e}
+    .cd{font-size:10px;fill:#5c6675}
+    .res{font-size:10px;fill:#8b95a3}
+    .sk{font-size:9.5px;font-weight:700;fill:#3f8468}
+    .hd{font-size:11px;font-weight:700;fill:#5c6675}
+    .np{font-size:10px;fill:#17202e}
+  </style>
+  <defs>
+    <marker id="a-d" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="7" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 4 L0 8 z" fill="#2f6f9f"/>
+    </marker>
+    <marker id="a-u" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="7" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 4 L0 8 z" fill="#c4763a"/>
+    </marker>
+    <marker id="a-s" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="7" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 4 L0 8 z" fill="#3f8468"/>
+    </marker>
+  </defs>
+  <rect width="900" height="614" fill="#ffffff"/>
+
+  <text x="112" y="16" class="t hd">EfficientNet-B2 인코더</text>
+  <text x="452" y="16" class="t hd" fill="#a45f28">U-Net 디코더</text>
+
+  <g class="t">
+    <!-- ── 해상도 축 라벨 ── -->
+    <text x="104" y="50" class="res" text-anchor="end">H · 480 × 736</text>
+    <text x="104" y="110" class="res" text-anchor="end">H · 480 × 736</text>
+    <text x="104" y="166" class="res" text-anchor="end">H · 480 × 736</text>
+    <text x="104" y="228" class="res" text-anchor="end">H/2 · 240 × 368</text>
+    <text x="104" y="298" class="res" text-anchor="end">H/4 · 120 × 184</text>
+    <text x="104" y="352" class="res" text-anchor="end">H/8 · 60 × 92</text>
+    <text x="104" y="412" class="res" text-anchor="end">H/16 · 30 × 46</text>
+    <text x="104" y="488" class="res" text-anchor="end">H/32 · 15 × 23</text>
+
+    <!-- ══ Row A: 입력 / 출력 ══ -->
+    <rect x="112" y="22" width="232" height="48" rx="6" fill="#f5f7fa" stroke="#ccd4de"/>
+    <text x="126" y="43" class="ct">입력</text>
+    <text x="126" y="59" class="cd m">(B, 3, 480, 736)</text>
+
+    <rect x="452" y="22" width="248" height="48" rx="6" fill="#f5f7fa" stroke="#ccd4de"/>
+    <text x="466" y="40" class="ct">출력 <tspan class="m" font-weight="400" font-size="10">(B, 2, 480, 736)</tspan></text>
+    <text x="466" y="54" class="cd">채널 0 = 배경 로짓</text>
+    <text x="466" y="66" class="cd">채널 1 = 도구 로짓 → <tspan class="m">sigmoid</tspan> → <tspan font-weight="700" fill="#17202e">히트맵</tspan></text>
+
+    <!-- ══ Row B: Segmentation Head ══ -->
+    <rect x="452" y="92" width="248" height="40" rx="6" fill="#e6e0f0" stroke="#75619e"/>
+    <text x="466" y="109" class="ct">Segmentation Head</text>
+    <text x="466" y="124" class="cd m">Conv2d(16 → 2, kernel 3×3)</text>
+
+    <!-- ══ Row C: 디코더 블록 4 (전체 해상도) ══ -->
+    <rect x="452" y="148" width="248" height="40" rx="6" fill="#f8e7d6" stroke="#c4763a"/>
+    <text x="466" y="165" class="ct">블록 4 &#160;<tspan class="cd" font-weight="400">32 → 16 ch</tspan></text>
+    <text x="466" y="180" class="cd">bilinear ×2 · <tspan font-weight="700">스킵 없음</tspan> · ConvBn ×2</text>
+
+    <text x="240" y="130" class="cd">입력은 stem의 stride 2 에서</text>
+    <text x="240" y="144" class="cd">곧바로 1/2 해상도로 축소된다.</text>
+    <text x="240" y="158" class="cd">인코더에는 전체 해상도 단계가 없다.</text>
+
+    <!-- ══ Row L1: /2 ══ -->
+    <rect x="112" y="204" width="232" height="62" rx="6" fill="#dceaf5" stroke="#2f6f9f"/>
+    <text x="126" y="222" class="ct">stem &#160;<tspan class="cd" font-weight="400">Conv 3×3, stride 2 → 32 ch</tspan></text>
+    <line x1="126" y1="230" x2="330" y2="230" stroke="#b3cfe3"/>
+    <text x="126" y="247" class="ct">스테이지 0 &#160;<tspan class="cd" font-weight="400">MBConv ×2 → 16 ch</tspan></text>
+    <text x="126" y="260" class="cd">SiLU · SE · 잔차 연결</text>
+
+    <rect x="452" y="204" width="248" height="62" rx="6" fill="#f8e7d6" stroke="#c4763a"/>
+    <text x="466" y="222" class="ct">블록 3 &#160;<tspan class="cd" font-weight="400">80 → 32 ch</tspan></text>
+    <text x="466" y="238" class="cd">bilinear ×2 → concat s0(16) → 80</text>
+    <text x="466" y="255" class="cd">→ Conv3×3-BN-ReLU ×2</text>
+
+    <!-- ══ Row L2: /4 ══ -->
+    <rect x="112" y="280" width="232" height="40" rx="6" fill="#dceaf5" stroke="#2f6f9f"/>
+    <text x="126" y="297" class="ct">스테이지 1 &#160;<tspan class="cd" font-weight="400">MBConv ×3 → 24 ch</tspan></text>
+    <text x="126" y="312" class="cd">stride 2 (첫 블록)</text>
+
+    <rect x="452" y="280" width="248" height="40" rx="6" fill="#f8e7d6" stroke="#c4763a"/>
+    <text x="466" y="297" class="ct">블록 2 &#160;<tspan class="cd" font-weight="400">152 → 64 ch</tspan></text>
+    <text x="466" y="312" class="cd">bilinear ×2 → concat s1(24) → 152</text>
+
+    <!-- ══ Row L3: /8 ══ -->
+    <rect x="112" y="334" width="232" height="40" rx="6" fill="#dceaf5" stroke="#2f6f9f"/>
+    <text x="126" y="351" class="ct">스테이지 2 &#160;<tspan class="cd" font-weight="400">MBConv ×3 → 48 ch</tspan></text>
+    <text x="126" y="366" class="cd">kernel 5×5 · stride 2 (첫 블록)</text>
+
+    <rect x="452" y="334" width="248" height="40" rx="6" fill="#f8e7d6" stroke="#c4763a"/>
+    <text x="466" y="351" class="ct">블록 1 &#160;<tspan class="cd" font-weight="400">304 → 128 ch</tspan></text>
+    <text x="466" y="366" class="cd">bilinear ×2 → concat s2(48) → 304</text>
+
+    <!-- ══ Row L4: /16 ══ -->
+    <rect x="112" y="388" width="232" height="62" rx="6" fill="#dceaf5" stroke="#2f6f9f"/>
+    <text x="126" y="405" class="ct">스테이지 3 &#160;<tspan class="cd" font-weight="400">MBConv ×4 → 88 ch</tspan></text>
+    <line x1="126" y1="413" x2="330" y2="413" stroke="#b3cfe3"/>
+    <text x="126" y="430" class="ct">스테이지 4 &#160;<tspan class="cd" font-weight="400">MBConv ×4 → 120 ch</tspan></text>
+    <text x="126" y="443" class="cd">stride 1 — 해상도 유지</text>
+
+    <rect x="452" y="388" width="248" height="62" rx="6" fill="#f8e7d6" stroke="#c4763a"/>
+    <text x="466" y="406" class="ct">블록 0 &#160;<tspan class="cd" font-weight="400">472 → 256 ch</tspan></text>
+    <text x="466" y="422" class="cd">bilinear ×2 → concat s4(120) → 472</text>
+    <text x="466" y="439" class="cd">→ Conv3×3-BN-ReLU ×2</text>
+
+    <!-- ══ Row L5: /32 병목 ══ -->
+    <rect x="112" y="464" width="232" height="62" rx="6" fill="#c7dcec" stroke="#2f6f9f" stroke-width="1.6"/>
+    <text x="126" y="481" class="ct">스테이지 5 &#160;<tspan class="cd" font-weight="400">MBConv ×5 → 208 ch</tspan></text>
+    <line x1="126" y1="489" x2="330" y2="489" stroke="#a9c6dc"/>
+    <text x="126" y="506" class="ct">스테이지 6 &#160;<tspan class="cd" font-weight="400">MBConv ×2 → 352 ch</tspan></text>
+    <text x="126" y="519" class="cd" font-weight="700" fill="#2f6f9f">병목 (bottleneck)</text>
+  </g>
+
+  <!-- ══ 인코더 하강 흐름 ══ -->
+  <g stroke="#2f6f9f" stroke-width="1.5" fill="none">
+    <line x1="228" y1="70" x2="228" y2="200" marker-end="url(#a-d)"/>
+    <line x1="228" y1="266" x2="228" y2="276" marker-end="url(#a-d)"/>
+    <line x1="228" y1="320" x2="228" y2="330" marker-end="url(#a-d)"/>
+    <line x1="228" y1="374" x2="228" y2="384" marker-end="url(#a-d)"/>
+    <line x1="228" y1="450" x2="228" y2="460" marker-end="url(#a-d)"/>
+  </g>
+
+  <!-- ══ 디코더 상승 흐름 ══ -->
+  <g stroke="#c4763a" stroke-width="1.5" fill="none">
+    <line x1="576" y1="388" x2="576" y2="378" marker-end="url(#a-u)"/>
+    <line x1="576" y1="334" x2="576" y2="324" marker-end="url(#a-u)"/>
+    <line x1="576" y1="280" x2="576" y2="270" marker-end="url(#a-u)"/>
+    <line x1="576" y1="204" x2="576" y2="192" marker-end="url(#a-u)"/>
+    <line x1="576" y1="148" x2="576" y2="136" marker-end="url(#a-u)"/>
+    <line x1="576" y1="92" x2="576" y2="74" marker-end="url(#a-u)"/>
+  </g>
+
+  <!-- ══ 스킵 연결 5개 ══ -->
+  <g stroke="#3f8468" stroke-width="1.5" fill="none" stroke-dasharray="5 3">
+    <line x1="344" y1="247" x2="448" y2="247" marker-end="url(#a-s)"/>
+    <line x1="344" y1="297" x2="448" y2="297" marker-end="url(#a-s)"/>
+    <line x1="344" y1="351" x2="448" y2="351" marker-end="url(#a-s)"/>
+    <line x1="344" y1="432" x2="448" y2="432" marker-end="url(#a-s)"/>
+    <path d="M344 506 L422 506 L422 414 L448 414" marker-end="url(#a-s)" stroke-dasharray="0"/>
+  </g>
+  <g class="t">
+    <text x="396" y="242" class="sk" text-anchor="middle">s0 · 16</text>
+    <text x="396" y="292" class="sk" text-anchor="middle">s1 · 24</text>
+    <text x="396" y="346" class="sk" text-anchor="middle">s2 · 48</text>
+    <text x="386" y="425" class="sk" text-anchor="middle">s4 · 120</text>
+    <text x="426" y="470" class="sk">s6 · 352</text>
+  </g>
+
+  <!-- ══ 우측 요약 패널 ══ -->
+  <g class="t">
+    <rect x="712" y="148" width="174" height="378" rx="6" fill="#f5f7fa" stroke="#ccd4de"/>
+    <text x="726" y="169" class="ct">구조 요약</text>
+    <line x1="726" y1="177" x2="872" y2="177" stroke="#ccd4de"/>
+
+    <text x="726" y="196" class="np" font-weight="700">총 파라미터 11,450,828</text>
+    <text x="726" y="211" class="cd">경량 모델(<tspan class="m" font-size="9.5">monai_mini</tspan>)은 5,502,870</text>
+    <text x="726" y="224" class="cd">(48.1 %) — §3.2</text>
+
+    <text x="726" y="250" class="np" font-weight="700">MBConv 블록 23개</text>
+    <text x="726" y="265" class="cd">스테이지별 2·3·3·4·4·5·2</text>
+    <text x="726" y="278" class="cd">폭 16·24·48·88·120·208·352</text>
+
+    <text x="726" y="304" class="np" font-weight="700">MBConv 내부</text>
+    <text x="726" y="319" class="cd">expand → depthwise →</text>
+    <text x="726" y="332" class="cd">Squeeze-and-Excitation →</text>
+    <text x="726" y="345" class="cd">project · SiLU · 잔차 연결</text>
+
+    <text x="726" y="371" class="np" font-weight="700">스킵 연결 5개</text>
+    <text x="726" y="386" class="cd">스테이지 0·1·2·4·6 출력</text>
+    <text x="726" y="399" class="cd">해상도 H/2 ~ H/32</text>
+
+    <text x="726" y="425" class="np" font-weight="700">디코더 블록 5개</text>
+    <text x="726" y="440" class="cd">bilinear ×2 → skip concat →</text>
+    <text x="726" y="453" class="cd">Conv3×3-BN-ReLU ×2</text>
+    <text x="726" y="466" class="cd">마지막 블록만 스킵 없음</text>
+
+    <text x="726" y="492" class="np" font-weight="700">MONAI 가중치 호환</text>
+    <text x="726" y="507" class="cd">모듈명을 <tspan class="m" font-size="9.5">FlexibleUNet</tspan>과 일치</text>
+    <text x="726" y="520" class="cd">570 키 <tspan class="m" font-size="9.5">strict=True</tspan> 로드</text>
+  </g>
+
+  <!-- ══ 하단 범례 ══ -->
+  <g class="t">
+    <rect x="112" y="546" width="774" height="46" rx="6" fill="#fdfdfe" stroke="#ccd4de" stroke-dasharray="4 3"/>
+    <rect x="128" y="560" width="16" height="12" rx="2" fill="#dceaf5" stroke="#2f6f9f"/>
+    <text x="150" y="570" class="cd">인코더 스테이지</text>
+    <rect x="256" y="560" width="16" height="12" rx="2" fill="#f8e7d6" stroke="#c4763a"/>
+    <text x="278" y="570" class="cd">디코더 블록</text>
+    <rect x="378" y="560" width="16" height="12" rx="2" fill="#e6e0f0" stroke="#75619e"/>
+    <text x="400" y="570" class="cd">분할 헤드</text>
+    <line x1="504" y1="566" x2="536" y2="566" stroke="#3f8468" stroke-width="1.5" stroke-dasharray="5 3"/>
+    <text x="544" y="570" class="cd">스킵 연결 (채널 방향 concat)</text>
+    <text x="700" y="570" class="cd">손실 = <tspan class="m" font-size="9">MSE(sigmoid(ch1), target)</tspan></text>
+  </g>
+</svg>
