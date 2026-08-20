@@ -879,3 +879,17 @@ CPU 환경에서 `erop` 테스트 세트 임의 샘플 1,000건(seed=42, batch=1
 | [tooltip-detector.md](tooltip-detector.md)           | 탐지 GUI 설계 및 사용법                                       |
 | [tooltip-tracker.md](tooltip-tracker.md)             | 추적 GUI 설계, 화살표 스무딩, 오탐지 판정 규칙                |
 | [dataset-browser-guide.md](dataset-browser-guide.md) | 데이터셋 브라우저 GUI 사용법                                  |
+
+## 11. 후속 실험 기록 (2026-08-20)
+
+### 11.1 2단계 후처리 최적화
+
+`monai_mini`를 대표 모델로 고정하고 val에서 threshold `{0.2, 0.3, 0.4, 0.5, 0.6}` × NMS `{5, 10, 15, 20, 30}`을 헝가리안 F1@50으로 탐색했다. 선택값은 `erop` 두 target에서 **0.4 / 30 px**, `cholec80` 두 target에서 **0.3 / 30 px**였다. 즉 NMS 반경 축소는 최적해가 아니었다. 고정된 최적값을 held-out test에 한 번만 적용했을 때 F1@50은 각각 `erop/gradient-seg` 0.8014→0.8274, `erop/gaussian-tip` 0.8736→0.8776, `cholec80/gradient-seg` 0.7747→0.7986, `cholec80/gaussian-tip` 0.8377→0.8469로 개선됐다.
+
+공유 피크 비율은 기존 18.65–29.93%에서 NMS 최적화 후 17.36–26.81%로만 감소했다. 선택형 `--peak-method watershed`도 평가했으나 15.80–25.86%에 그쳤고, `gradient-seg` F1@50은 0.8274→0.7801 및 0.7986→0.7515로 악화됐다. 따라서 기본 후처리는 `connected-components`로 유지한다. 인스턴스 헤드는 독립 실험으로 착수하지 않고, 4단계의 영상 단위·다중 시드 재학습 캠페인에서만 판단한다. 재현 노트북은 `notebook/parameter-optimization.ipynb`이며 결과는 `data/results/phase2/`에 분리 저장했다.
+
+### 11.2 3단계 생략과 4단계 영상 단위 재분할
+
+사람 검수가 필요한 3단계는 인적 비용 때문에 **의도적으로 생략**했다. 그러므로 자동 생성 라벨의 IoU·팁 오차 noise floor는 여전히 미측정이며, 이후 재학습 결과는 이 한계를 해소하지 않는다.
+
+`cholec80-vs`를 새 데이터셋 이름으로 생성했다. 기존 세 frame split의 파일을 재생성·복사하지 않고 심볼릭 링크로 합쳐, `video01–32` train (71,032 frames), `video33–40` val (15,312), `video41–80` test (98,234)로 재배치했다. 세 모달리티(images/segmentation/annotation)의 수와 링크 대응은 검증했다. 생성 절차는 `scripts/create-cholec80-video-split.py`에 있으며, 기존 `cholec80`과 기존 체크포인트·결과는 변경하지 않았다.

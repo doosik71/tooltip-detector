@@ -141,7 +141,7 @@ def _dataset_loader(data_root: str, split: str, target_mode: str, batch_size: in
 
 
 def estimate_bias(model_path, model_type, dataset_name, target_mode, data_root, threshold, nms_radius,
-                  batch_size, workers, device_str, near_distance_px):
+                  peak_method, batch_size, workers, device_str, near_distance_px):
     if near_distance_px <= 0:
         raise ValueError("near_distance_px must be positive")
     device = torch.device(device_str or ("cuda" if torch.cuda.is_available() else "cpu"))
@@ -155,7 +155,7 @@ def estimate_bias(model_path, model_type, dataset_name, target_mode, data_root, 
                 ann_path = dataset.samples[batch_index * batch_size + offset]
                 with open(ann_path, encoding="utf-8") as handle:
                     gt = [(item["tip"]["x"], item["tip"]["y"]) for item in json.load(handle)["annotations"]]
-                candidates = find_peaks(heatmaps[offset], threshold, nms_radius)
+                candidates = find_peaks(heatmaps[offset], threshold, nms_radius, peak_method)
                 for gx, gy in gt:
                     if candidates:
                         px, py, _ = min(candidates, key=lambda point: np.hypot(gx - point[0], gy - point[1]))
@@ -167,7 +167,7 @@ def estimate_bias(model_path, model_type, dataset_name, target_mode, data_root, 
         raise RuntimeError("No validation matches found within the bias distance cap")
     dx, dy = np.median(np.asarray(deltas), axis=0)
     return {"dataset": dataset_name, "target_mode": target_mode, "model_type": model_type,
-            "model_path": model_path, "split": "val", "threshold": threshold, "nms_radius": nms_radius,
+            "model_path": model_path, "split": "val", "threshold": threshold, "nms_radius": nms_radius, "peak_method": peak_method,
             "near_distance_px": near_distance_px, "n_matches": len(deltas),
             "dx_px": round(float(dx), 4), "dy_px": round(float(dy), 4),
             "per_session": {session: {"n_matches": len(items),
@@ -177,7 +177,7 @@ def estimate_bias(model_path, model_type, dataset_name, target_mode, data_root, 
 
 
 def evaluate(model_path, model_type, dataset_name, target_mode, data_root, threshold, nms_radius,
-             batch_size, workers, device_str, results_root, match_distances, bias=None):
+             peak_method, batch_size, workers, device_str, results_root, match_distances, bias=None):
     device = torch.device(device_str or ("cuda" if torch.cuda.is_available() else "cpu"))
     dataset, loader = _dataset_loader(data_root, "test", target_mode, batch_size, workers, device)
     model = _build_model(model_path, model_type, device)
@@ -196,7 +196,7 @@ def evaluate(model_path, model_type, dataset_name, target_mode, data_root, thres
                     gt = [(item["tip"]["x"], item["tip"]["y"]) for item in json.load(handle)["annotations"]]
                 if not gt:
                     continue
-                candidates = find_peaks(heatmaps[offset], threshold, nms_radius)
+                candidates = find_peaks(heatmaps[offset], threshold, nms_radius, peak_method)
                 legacy_matches, legacy_types = _accumulate_legacy(legacy, session, gt, candidates)
                 assignments = _accumulate_hungarian(hungarian, session, gt, candidates)
                 corrected_candidates = None
@@ -231,7 +231,7 @@ def evaluate(model_path, model_type, dataset_name, target_mode, data_root, thres
                 print(f"  {done:>6}/{len(dataset)}")
     metadata = {"timestamp": time.strftime("%Y%m%d_%H%M%S"), "dataset": dataset_name,
         "model_type": model_type, "target_mode": target_mode, "model_path": model_path,
-        "threshold": threshold, "nms_radius": nms_radius, "data_root": data_root,
+        "threshold": threshold, "nms_radius": nms_radius, "peak_method": peak_method, "data_root": data_root,
         "n_frames_with_tools": len({row["frame"] for row in rows})}
     stats = _legacy_stats(legacy, metadata)
     stats["hungarian"] = {"algorithm": "scipy.optimize.linear_sum_assignment",
@@ -275,6 +275,8 @@ def main():
     parser.add_argument("--results-dir", default=None)
     parser.add_argument("--threshold", type=float, default=0.5)
     parser.add_argument("--nms-radius", type=int, default=20)
+    parser.add_argument("--peak-method", choices=("connected-components", "watershed"),
+                        default="connected-components")
     parser.add_argument("--match-distance", type=float, nargs="+", default=list(_DEFAULT_MATCH_DISTANCES),
                         help="Hungarian assignment caps in px (default: 10 20 50)")
     parser.add_argument("--estimate-bias", action="store_true", help="Estimate and save val-set bias.json")
@@ -290,7 +292,7 @@ def main():
     data_root = os.path.join(args.data_root, args.dataset)
     if args.estimate_bias:
         bias = estimate_bias(model_path, args.model_type, args.dataset, args.target_mode, data_root,
-                             args.threshold, args.nms_radius, args.batch_size, args.workers,
+                             args.threshold, args.nms_radius, args.peak_method, args.batch_size, args.workers,
                              args.device, args.bias_distance)
         bias_path = Path(model_path).with_name("bias.json")
         bias_path.write_text(json.dumps(bias, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -303,7 +305,7 @@ def main():
             parser.error(f"--apply-bias requires {bias_path}; run --estimate-bias first")
         bias = json.loads(bias_path.read_text(encoding="utf-8"))
     evaluate(model_path, args.model_type, args.dataset, args.target_mode, data_root, args.threshold,
-             args.nms_radius, args.batch_size, args.workers, args.device,
+             args.nms_radius, args.peak_method, args.batch_size, args.workers, args.device,
              args.results_dir or default_results_dir(args.model_type, args.dataset, args.target_mode),
              tuple(sorted(set(args.match_distance))), bias)
 
