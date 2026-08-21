@@ -2,6 +2,8 @@
 
 `scripts/generate_dataset.py`는 동영상 파일에서 일정 간격으로 프레임을 추출하고, 각 프레임을 `train`, `val`, `test` 세 분할로 나누어 PNG 이미지 데이터셋을 만드는 스크립트다.
 
+분할 단위는 `--split-unit`으로 고른다. `frame`(기본값)은 비디오마다 그 비디오의 프레임을 독립적으로 나누므로 모든 비디오가 세 분할에 모두 기여하고, 시간적으로 인접한 프레임이 서로 다른 분할에 들어간다. `video`는 비디오 한 편을 통째로 한 분할에 배정하므로 **어떤 비디오도 두 분할에 걸치지 않는다**.
+
 `--dataset <name>` 옵션으로 데이터셋 이름만 주면 입력/출력 경로가 자동 계산된다. 입력은 `data/dataset/<name>/progressive`가 존재하고 비어있지 않으면 그것을, 아니면 원본 `data/dataset-src/<name>`을 사용한다. 출력은 `data/dataset/<name>/images`다. 출력 이미지는 지정한 해상도에 맞춰 letterbox 방식으로 리사이즈된다.
 
 ## 사용자 문서
@@ -49,6 +51,7 @@ uv run python scripts/generate_dataset.py --dataset erop
 - 프레임 간격: `10`
 - 출력 크기: `736x480`
 - 분할 비율: `train=60`, `val=20`, `test=20`
+- 분할 단위: `frame`
 - 랜덤 시드: `0`
 
 ### CLI 옵션
@@ -71,8 +74,10 @@ uv run python scripts/generate_dataset.py --dataset erop
   - 검증 세트 비율. 기본값은 `20`.
 - `--test`
   - 테스트 세트 비율. 기본값은 `20`.
+- `--split-unit`
+  - 분할 비율을 무엇에 적용할지 정한다. `frame`(기본값)은 비디오 내부의 프레임에, `video`는 비디오 편수에 적용한다. `video`에서는 비디오 목록을 **파일명 정렬 순서 그대로** 잘라 배정하므로(셔플하지 않음) 배정 결과가 파일 목록만의 함수이고, 공개된 비디오 단위 분할 규약을 그대로 재현할 수 있다.
 - `--seed`
-  - 비디오별 deterministic split에 사용하는 시드. 기본값은 `0`.
+  - 비디오별 deterministic split에 사용하는 시드. 기본값은 `0`. `--split-unit frame`에서만 쓰인다.
 - `--verify`
   - 재개 시 기존 이미지의 유효성 검사 방식. `fast`(기본값)는 PNG 헤더/트레일러만 빠르게 확인하고, `full`은 이미지를 완전히 디코딩해 내부 손상까지 검사한다.
 
@@ -101,6 +106,14 @@ python scripts/generate_dataset.py --input ./data/dataset/erop/progressive --out
 ```bash
 python scripts/generate_dataset.py --dataset cholec80 --train 70 --val 15 --test 15
 ```
+
+비디오가 분할에 걸치지 않게 나누는 예시:
+
+```bash
+python scripts/generate_dataset.py --dataset cholec80 --split-unit video --train 40 --val 10 --test 50
+```
+
+Cholec80 80편에 이 비율을 적용하면 편수가 `32 / 8 / 40`으로 나뉘고, 파일명 정렬 순서 그대로 배정되므로 `video01–32` train, `video33–40` val, `video41–80` test가 된다. 이는 문헌에서 널리 쓰이는 Cholec80 분할 규약이며, 현재 `data/dataset/cholec80`의 배치를 그대로 재현하는 명령이다. 기본 비율 `60:20:20`을 그대로 쓰면 `48 / 16 / 16`이 되어 이 규약과 달라지므로, 재현 목적이라면 비율을 반드시 함께 지정해야 한다.
 
 ### 입력 대상 파일
 
@@ -149,7 +162,7 @@ sample01_00000030.png
 4. 출력 디렉터리 아래 `train`, `val`, `test` 폴더를 생성한다. `--dataset`을 쓰면 실제 생성 위치는 `data/dataset/<dataset>/images/{train,val,test}`다.
 5. 입력 디렉터리의 비디오 파일 목록을 정렬해 수집한다.
 6. 각 비디오에 대해 `0, frame_step, 2*frame_step, ...` 위치의 프레임 번호 목록을 만든다.
-7. 비디오 경로와 시드를 기반으로 난수 생성기를 만들고, 프레임 번호를 `train/val/test`로 나눈다.
+7. `--split-unit frame`이면 비디오 경로와 시드를 기반으로 난수 생성기를 만들어 그 비디오의 프레임 번호를 `train/val/test`로 나눈다. `--split-unit video`이면 비디오 목록 전체를 먼저 분할에 배정하고, 각 비디오의 모든 프레임을 그 비디오에 배정된 분할 하나에만 저장한다.
 8. 비디오를 처음부터 끝까지 읽으면서 선택된 프레임만 저장한다.
 9. 각 프레임은 원본 종횡비를 유지한 채 letterbox 방식으로 리사이즈된다.
 10. 모든 비디오 처리가 끝나면 split별 저장 개수를 출력한다.
@@ -167,7 +180,9 @@ sample01_00000030.png
 
 ### deterministic split
 
-같은 비디오 경로와 같은 `--seed`를 사용하면 split 배정 결과는 재현 가능하다. 다만 비디오 파일의 절대 경로가 바뀌면 seed material도 바뀌므로 동일 파일이라도 split 결과가 달라질 수 있다.
+`--split-unit frame`에서는 같은 비디오 경로와 같은 `--seed`를 사용하면 split 배정 결과가 재현된다. 다만 비디오 파일의 절대 경로가 바뀌면 seed material도 바뀌므로 동일 파일이라도 split 결과가 달라질 수 있다.
+
+`--split-unit video`에서는 난수를 전혀 쓰지 않는다. 배정은 정렬된 파일 목록과 비율만으로 결정되므로 `--seed`와 절대 경로에 영향을 받지 않으며, 같은 파일 목록이면 어느 장비에서든 같은 결과가 나온다.
 
 ### 이미지 리사이즈 방식
 
@@ -224,10 +239,12 @@ OpenCV가 설치되지 않은 상태다. 프로젝트 의존성을 설치한 뒤
   - 입력 디렉터리의 비디오 파일을 정렬해 반환한다.
 - `allocate_split_counts(total_items, ratios)`
   - 분할 비율에 따라 split별 목표 개수를 계산한다.
+- `assign_video_splits(video_paths, ratios)`
+  - 정렬된 비디오 목록에 비율을 적용해 비디오 한 편을 split 하나에 매핑한다. 난수를 쓰지 않는다.
 - `create_split_rng(video_path, seed)`
-  - 비디오별 deterministic RNG를 만든다.
+  - 비디오별 deterministic RNG를 만든다. `--split-unit frame`에서만 쓰인다.
 - `assign_splits(frame_numbers, ratios, rng)`
-  - 추출 대상 프레임 번호를 split 이름에 매핑한다.
+  - 한 비디오의 추출 대상 프레임 번호를 split 이름에 매핑한다.
 - `resize_with_letterbox(frame, width, height)`
   - 종횡비를 유지한 채 black padding으로 리사이즈한다.
 - `is_valid_image(path, full=False)`
@@ -265,11 +282,11 @@ split RNG는 전역 `random.seed()`를 쓰지 않고, 아래 재료로 독립 �
 
 이 둘을 문자열로 합친 뒤 `blake2b` 해시를 만들고, 그 결과를 정수로 변환해 `random.Random`에 넣는다. 따라서 비디오마다 서로 다른 셔플 순서를 갖는다.
 
-#### 2. split 배정은 비디오 단위로 독립적
+#### 2. split 배정 단위
 
-프레임은 전체 데이터셋 기준으로 한 번에 섞이지 않고, 각 비디오 내부에서만 섞여서 split이 정해진다. 즉, 모든 비디오가 대체로 같은 비율로 `train/val/test`를 갖게 된다.
+`--split-unit frame`(기본값)에서는 프레임이 전체 데이터셋 기준으로 한 번에 섞이지 않고, 각 비디오 내부에서만 섞여서 split이 정해진다. 즉 모든 비디오가 대체로 같은 비율로 `train/val/test`를 갖게 된다. 균형 측면에서는 예측 가능하지만, **같은 비디오의 시간적으로 인접한 프레임이 train과 test에 동시에 존재한다.** 샘플링 간격이 1초 안팎이면 인접 프레임의 장면은 거의 같으므로, 이렇게 나눈 test 성능은 미지의 새 비디오에 대한 일반화 성능보다 낙관적이다.
 
-이 특성은 균형 측면에서는 예측 가능하지만, 프로젝트 목적에 따라서는 비디오 간 분리보다 약한 독립성을 가질 수 있다.
+`--split-unit video`에서는 `assign_video_splits()`가 정렬된 비디오 목록에 비율을 적용해 편수를 잘라 배정하고, `save_frames_for_video()`가 `forced_split`을 받아 그 비디오의 모든 프레임을 한 분할에만 저장한다. 이 모드에서는 어떤 비디오도 두 분할에 걸치지 않으므로 위 누수가 발생하지 않는다.
 
 #### 3. split 개수 계산
 
@@ -322,7 +339,8 @@ while True:
 ### 현재 설계 제약
 
 - 입력 디렉터리의 하위 폴더를 재귀 탐색하지 않는다.
-- split이 전체 데이터셋 기준이 아니라 비디오별로 독립 배정된다.
+- `--split-unit frame`의 split은 전체 데이터셋 기준이 아니라 비디오별로 독립 배정된다(전역 프레임 셔플은 지원하지 않는다).
+- `--split-unit video`는 비디오 목록을 셔플하지 않고 정렬 순서대로만 자른다. 무작위 비디오 배정이 필요하면 입력 파일명을 조정해야 한다.
 - 추출 대상 프레임만 seek하지 않고 전체 프레임을 순차적으로 읽는다.
 - 저장 포맷이 PNG로 고정되어 있다.
 - 기본 `fast` 검사는 PNG 트레일러만 보므로, 트레일러가 온전한 내부 손상은 `--verify full`로만 잡힌다.
@@ -333,7 +351,7 @@ while True:
 
 1. 재귀 입력 탐색 옵션 추가
 2. JPEG 저장 품질 또는 출력 포맷 선택 옵션 추가
-3. 전체 데이터셋 기준 split 또는 비디오 단위 split을 선택할 수 있게 확장
+3. `--split-unit video`에 무작위 배정(시드 기반 비디오 목록 셔플) 옵션 추가
 4. 긴 영상 성능 개선을 위해 프레임 seek 또는 샘플링 전략 최적화
 5. 실행 시작 시 잔여 임시 파일(`.<이름>.tmp`)을 자동 정리
 6. 예외를 정리해 사용자 친화적인 에러 메시지와 종료 코드를 제공
@@ -356,5 +374,7 @@ saved_counts = save_frames_for_video(
     seed=0,
 )
 ```
+
+`forced_split`에 split 이름을 넘기면 `ratios`와 `seed`는 무시되고 그 비디오의 모든 프레임이 지정한 split 하나에 저장된다. 비디오 단위 분할은 `assign_video_splits()`로 배정을 먼저 계산해 이 인자로 넘기는 구조다.
 
 다만 OpenCV 객체와 파일 시스템에 직접 의존하는 구조라 순수 함수형 재사용성은 제한적이다. 라이브러리 수준으로 발전시키려면 I/O와 split 계산 로직을 더 분리하는 편이 낫다.

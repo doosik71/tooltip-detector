@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="566" viewBox="0 0 900 566" role="img" aria-label="선택된 후처리 설정의 테스트셋 성능 개선과 정밀도 재현율 교환">
+  <style>
+    .t{font-family:'Noto Sans CJK KR','NanumGothic','Noto Sans CJK JP',sans-serif}
+    .m{font-family:'D2Coding','DejaVu Sans Mono',monospace}
+    .ti{font-size:13px;font-weight:700;fill:#17202e}
+    .su{font-size:10.5px;fill:#5c6675}
+    .ph{font-size:11.5px;font-weight:700;fill:#17202e}
+    .lb{font-size:10px;fill:#17202e}
+    .vl{font-size:9.5px;fill:#5c6675}
+    .ax{font-size:9.5px;fill:#8b95a3}
+    .dl{font-size:10px;font-weight:700}
+    .note{font-size:10px;fill:#5c6675}
+  </style>
+  <defs>
+    <marker id="p2a" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="7" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 4 L0 8 z" fill="#17202e"/>
+    </marker>
+  </defs>
+  <rect width="900" height="566" fill="#ffffff"/>
+  <text x="24" y="28" class="t ti">2-1 선택 설정의 홀드아웃 테스트셋 성능</text>
+  <text x="24" y="46" class="t su">기준선 = threshold 0.5 / NMS 20 px · 최적화 = 검증셋에서 선택한 설정 (계통 편차 보정 전) · 모델 <tspan class="m" font-size="10.5">monai_mini</tspan></text>
+  <text x="24" y="76" class="t ph">헝가리안 F1@50 px</text>
+  <text x="188" y="100" class="t lb" text-anchor="end">erop /</text>
+  <text x="188" y="113" class="t lb m" text-anchor="end" fill="#c4763a">gradient-seg</text>
+  <rect x="196" y="92" width="89.0" height="14" fill="#c9d2dc"/>
+  <text x="291.0" y="103" class="t vl">0.8014</text>
+  <rect x="196" y="109" width="126.7" height="14" fill="#c4763a"/>
+  <text x="328.7" y="120" class="t vl">0.8274 <tspan class="dl" fill="#c4763a">+0.0260</tspan></text>
+  <text x="188" y="158" class="t lb" text-anchor="end">erop /</text>
+  <text x="188" y="171" class="t lb m" text-anchor="end" fill="#2f6f9f">gaussian-tip</text>
+  <rect x="196" y="150" width="193.7" height="14" fill="#c9d2dc"/>
+  <text x="395.7" y="161" class="t vl">0.8736</text>
+  <rect x="196" y="167" width="199.5" height="14" fill="#2f6f9f"/>
+  <text x="401.5" y="178" class="t vl">0.8776 <tspan class="dl" fill="#2f6f9f">+0.0040</tspan></text>
+  <text x="188" y="216" class="t lb" text-anchor="end">cholec80 /</text>
+  <text x="188" y="229" class="t lb m" text-anchor="end" fill="#c4763a">gradient-seg</text>
+  <rect x="196" y="208" width="50.3" height="14" fill="#c9d2dc"/>
+  <text x="252.3" y="219" class="t vl">0.7747</text>
+  <rect x="196" y="225" width="85.0" height="14" fill="#c4763a"/>
+  <text x="287.0" y="236" class="t vl">0.7986 <tspan class="dl" fill="#c4763a">+0.0239</tspan></text>
+  <text x="188" y="274" class="t lb" text-anchor="end">cholec80 /</text>
+  <text x="188" y="287" class="t lb m" text-anchor="end" fill="#2f6f9f">gaussian-tip</text>
+  <rect x="196" y="266" width="141.7" height="14" fill="#c9d2dc"/>
+  <text x="343.7" y="277" class="t vl">0.8377</text>
+  <rect x="196" y="283" width="155.1" height="14" fill="#2f6f9f"/>
+  <text x="357.1" y="294" class="t vl">0.8469 <tspan class="dl" fill="#2f6f9f">+0.0092</tspan></text>
+  <line x1="196" y1="86" x2="196" y2="300" stroke="#8b95a3"/>
+  <text x="196" y="316" class="t ax">가로축 시작 0.74 (0 아님)</text>
+  <rect x="326" y="306" width="11" height="9" fill="#c9d2dc"/>
+  <text x="342" y="314" class="t ax">기준선</text>
+  <rect x="388" y="306" width="11" height="9" fill="#7a8794"/>
+  <text x="404" y="314" class="t ax">최적화</text>
+  <text x="490" y="76" class="t ph">정밀도 – 재현율 평면에서의 이동</text>
+  <line x1="597.3" y1="104" x2="597.3" y2="318" stroke="#eef1f5"/>
+  <text x="597.3" y="334" class="t ax" text-anchor="middle">0.76</text>
+  <line x1="658.7" y1="104" x2="658.7" y2="318" stroke="#eef1f5"/>
+  <text x="658.7" y="334" class="t ax" text-anchor="middle">0.78</text>
+  <line x1="720.0" y1="104" x2="720.0" y2="318" stroke="#eef1f5"/>
+  <text x="720.0" y="334" class="t ax" text-anchor="middle">0.80</text>
+  <line x1="781.3" y1="104" x2="781.3" y2="318" stroke="#eef1f5"/>
+  <text x="781.3" y="334" class="t ax" text-anchor="middle">0.82</text>
+  <line x1="842.7" y1="104" x2="842.7" y2="318" stroke="#eef1f5"/>
+  <text x="842.7" y="334" class="t ax" text-anchor="middle">0.84</text>
+  <line x1="536" y1="289.8" x2="858" y2="289.8" stroke="#eef1f5"/>
+  <text x="528" y="293.8" class="t ax" text-anchor="end">0.80</text>
+  <line x1="536" y1="233.5" x2="858" y2="233.5" stroke="#eef1f5"/>
+  <text x="528" y="237.5" class="t ax" text-anchor="end">0.85</text>
+  <line x1="536" y1="177.2" x2="858" y2="177.2" stroke="#eef1f5"/>
+  <text x="528" y="181.2" class="t ax" text-anchor="end">0.90</text>
+  <line x1="536" y1="120.9" x2="858" y2="120.9" stroke="#eef1f5"/>
+  <text x="528" y="124.9" class="t ax" text-anchor="end">0.95</text>
+  <line x1="536" y1="104" x2="536" y2="318" stroke="#8b95a3"/>
+  <line x1="536" y1="318" x2="858" y2="318" stroke="#8b95a3"/>
+  <text x="697" y="350" class="t ax" text-anchor="middle">재현율 (recall)</text>
+  <text x="496" y="211" class="t ax" text-anchor="middle" transform="rotate(-90 496 211)">정밀도 (precision)</text>
+  <line x1="758.5" y1="300.5" x2="795.6" y2="256.0" stroke="#c4763a" stroke-width="1.8" marker-end="url(#p2a)"/>
+  <circle cx="758.5" cy="300.5" r="4" fill="#ffffff" stroke="#c4763a" stroke-width="1.8"/>
+  <circle cx="795.6" cy="256.0" r="4.6" fill="#c4763a"/>
+  <text x="803.6" y="248.0" class="t ax m" fill="#c4763a">erop/gradient-seg</text>
+  <line x1="733.3" y1="114.3" x2="782.1" y2="128.2" stroke="#2f6f9f" stroke-width="1.8" marker-end="url(#p2a)"/>
+  <circle cx="733.3" cy="114.3" r="4" fill="#ffffff" stroke="#2f6f9f" stroke-width="1.8"/>
+  <circle cx="782.1" cy="128.2" r="4.6" fill="#2f6f9f"/>
+  <text x="788.1" y="118.2" class="t ax m" fill="#2f6f9f">erop/gaussian-tip</text>
+  <line x1="619.5" y1="309.8" x2="709.7" y2="289.2" stroke="#c4763a" stroke-width="1.8" marker-end="url(#p2a)"/>
+  <circle cx="619.5" cy="309.8" r="4" fill="#ffffff" stroke="#c4763a" stroke-width="1.8"/>
+  <circle cx="709.7" cy="289.2" r="4.6" fill="#c4763a"/>
+  <text x="640.0" y="311.0" class="t ax m" fill="#c4763a">cholec80/gradient-seg</text>
+  <line x1="573.0" y1="126.0" x2="701.9" y2="168.9" stroke="#2f6f9f" stroke-width="1.8" marker-end="url(#p2a)"/>
+  <circle cx="573.0" cy="126.0" r="4" fill="#ffffff" stroke="#2f6f9f" stroke-width="1.8"/>
+  <circle cx="701.9" cy="168.9" r="4.6" fill="#2f6f9f"/>
+  <text x="580.0" y="116.0" class="t ax m" fill="#2f6f9f">cholec80/gaussian-tip</text>
+  <circle cx="544" cy="90" r="4" fill="#ffffff" stroke="#5c6675" stroke-width="1.8"/>
+  <text x="554" y="94" class="t ax">기준선</text>
+  <circle cx="608" cy="90" r="4.6" fill="#5c6675"/>
+  <text x="618" y="94" class="t ax">최적화</text>
+  <text x="24" y="372" class="t ph">탐지 실패율 (legacy miss)</text>
+  <text x="120" y="398" class="t vl m" text-anchor="end">erop/grad</text>
+  <rect x="128" y="388" width="24.3" height="6" fill="#c9d2dc"/>
+  <rect x="128" y="396" width="19.0" height="6" fill="#c4763a"/>
+  <text x="158.3" y="400" class="t vl">3.47 → <tspan font-weight="700" fill="#c4763a">2.71</tspan>%</text>
+  <text x="120" y="426" class="t vl m" text-anchor="end">erop/gaus</text>
+  <rect x="128" y="416" width="40.9" height="6" fill="#c9d2dc"/>
+  <rect x="128" y="424" width="33.9" height="6" fill="#2f6f9f"/>
+  <text x="174.9" y="428" class="t vl">5.85 → <tspan font-weight="700" fill="#2f6f9f">4.84</tspan>%</text>
+  <text x="120" y="454" class="t vl m" text-anchor="end">cholec80/grad</text>
+  <rect x="128" y="444" width="15.0" height="6" fill="#c9d2dc"/>
+  <rect x="128" y="452" width="8.0" height="6" fill="#c4763a"/>
+  <text x="149.1" y="456" class="t vl">2.15 → <tspan font-weight="700" fill="#c4763a">1.14</tspan>%</text>
+  <text x="120" y="482" class="t vl m" text-anchor="end">cholec80/gaus</text>
+  <rect x="128" y="472" width="41.2" height="6" fill="#c9d2dc"/>
+  <rect x="128" y="480" width="20.0" height="6" fill="#2f6f9f"/>
+  <text x="175.2" y="484" class="t vl">5.89 → <tspan font-weight="700" fill="#2f6f9f">2.86</tspan>%</text>
+  <text x="464" y="372" class="t ph">P90 오차 거리</text>
+  <text x="560" y="398" class="t vl m" text-anchor="end">erop/grad</text>
+  <rect x="568" y="388" width="145.0" height="6" fill="#c9d2dc"/>
+  <rect x="568" y="396" width="122.9" height="6" fill="#c4763a"/>
+  <text x="719.0" y="400" class="t vl">93.52 → <tspan font-weight="700" fill="#c4763a">79.26</tspan> px</text>
+  <text x="560" y="426" class="t vl m" text-anchor="end">erop/gaus</text>
+  <rect x="568" y="416" width="135.9" height="6" fill="#c9d2dc"/>
+  <rect x="568" y="424" width="101.9" height="6" fill="#2f6f9f"/>
+  <text x="709.9" y="428" class="t vl">87.66 → <tspan font-weight="700" fill="#2f6f9f">65.73</tspan> px</text>
+  <text x="560" y="454" class="t vl m" text-anchor="end">cholec80/grad</text>
+  <rect x="568" y="444" width="204.4" height="6" fill="#c9d2dc"/>
+  <rect x="568" y="452" width="143.6" height="6" fill="#c4763a"/>
+  <text x="778.4" y="456" class="t vl">131.84 → <tspan font-weight="700" fill="#c4763a">92.63</tspan> px</text>
+  <text x="560" y="482" class="t vl m" text-anchor="end">cholec80/gaus</text>
+  <rect x="568" y="472" width="213.9" height="6" fill="#c9d2dc"/>
+  <rect x="568" y="480" width="142.6" height="6" fill="#2f6f9f"/>
+  <text x="787.9" y="484" class="t vl">138 → <tspan font-weight="700" fill="#2f6f9f">92.02</tspan> px</text>
+  <rect x="24" y="514" width="852" height="38" rx="6" fill="#f5f7fa" stroke="#ccd4de"/>
+  <text x="40" y="532" class="t note"><tspan font-weight="700">이득은 전부 재현율에서 나온다.</tspan> <tspan class="m" font-size="10">gradient-seg</tspan>는 정밀도·재현율이 함께 올라 순이득이지만, <tspan class="m" font-size="10">gaussian-tip</tspan>은 정밀도를 3.8–4.2 %p 내주고 재현율을 1.6–4.2 %p 얻는 교환이다.</text>
+  <text x="40" y="547" class="t note">F1 이득이 <tspan class="m" font-size="10">gaussian-tip</tspan>에서 작은(+0.004 / +0.009) 이유가 여기 있다. 반면 P90 거리는 네 조합 모두 15–33 % 줄어 꼬리가 눈에 띄게 짧아졌다.</text>
+</svg>

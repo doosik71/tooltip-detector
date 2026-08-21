@@ -25,7 +25,7 @@ DEFAULT_GAUSSIAN_SIGMA = 15.0
 # split train/val/test dataset). Used by CLI --dataset choices and GUI dropdowns;
 # SurgicalToolDataset itself only ever sees the resolved `root` path below and
 # does not reference this list.
-DATASETS = ("cholec80", "cholec80-vs", "erop")
+DATASETS = ("cholec80", "erop")
 
 
 class SurgicalToolDataset(Dataset):

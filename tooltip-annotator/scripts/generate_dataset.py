@@ -26,7 +26,10 @@ SPLIT_NAMES = ("train", "val", "test")
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Extract frames from videos and split them into train/val/test datasets."
+        description=(
+            "Extract frames from videos and split them into train/val/test datasets. "
+            "Use --split-unit video to keep each video inside a single split."
+        )
     )
     parser.add_argument(
         "--dataset",
@@ -89,10 +92,26 @@ def parse_args() -> argparse.Namespace:
         help="Test split ratio.",
     )
     parser.add_argument(
+        "--split-unit",
+        choices=("frame", "video"),
+        default="frame",
+        help=(
+            "What the train/val/test ratios are applied to. "
+            "'frame' (default) splits the frames of each video independently, so "
+            "every video contributes to all three splits and temporally adjacent "
+            "frames end up in different splits. "
+            "'video' assigns whole videos to one split each, in sorted filename "
+            "order, so no video appears in more than one split."
+        ),
+    )
+    parser.add_argument(
         "--seed",
         type=int,
         default=0,
-        help="Random seed used for deterministic split assignment within each video.",
+        help=(
+            "Random seed used for deterministic split assignment within each "
+            "video. Only used by --split-unit frame."
+        ),
     )
     parser.add_argument(
         "--verify",
@@ -130,6 +149,20 @@ def validate_args(args: argparse.Namespace) -> None:
     if not args.input.is_dir():
         raise NotADirectoryError(f"Input path is not a directory: {args.input}")
 
+    if args.split_unit == "video":
+        # With whole videos as the unit an unlucky ratio can starve a split
+        # entirely, which only surfaces much later as an empty dataset split.
+        video_count = len(list_video_files(args.input))
+        if video_count:
+            counts = allocate_split_counts(video_count, ratios)
+            empty = [name for name, count in counts.items() if count == 0]
+            if empty:
+                raise ValueError(
+                    f"--split-unit video leaves {', '.join(empty)} empty with "
+                    f"{video_count} video(s) and ratios {ratios}. "
+                    "Adjust --train/--val/--test."
+                )
+
 
 def list_video_files(input_dir: Path) -> list[Path]:
     return sorted(
@@ -155,6 +188,31 @@ def allocate_split_counts(total_items: int, ratios: tuple[int, int, int]) -> dic
         counts[index] += 1
 
     return dict(zip(SPLIT_NAMES, counts, strict=True))
+
+
+def assign_video_splits(
+    video_paths: list[Path],
+    ratios: tuple[int, int, int],
+) -> dict[Path, str]:
+    """Assign each whole video to exactly one split, in the given order.
+
+    The ratios are applied to the video count instead of the frame count, so a
+    video never contributes to more than one split. The order is not shuffled:
+    the caller passes videos sorted by filename, which makes the assignment a
+    pure function of the file listing and reproduces published by-video splits
+    (e.g. Cholec80's video01-32 / 33-40 / 41-80 with ratios 40:10:50).
+    """
+    split_counts = allocate_split_counts(len(video_paths), ratios)
+    assignments: dict[Path, str] = {}
+    cursor = 0
+
+    for split_name in SPLIT_NAMES:
+        split_count = split_counts[split_name]
+        for video_path in video_paths[cursor:cursor + split_count]:
+            assignments[video_path] = split_name
+        cursor += split_count
+
+    return assignments
 
 
 def create_split_rng(video_path: Path, seed: int) -> random.Random:
@@ -274,6 +332,7 @@ def save_frames_for_video(
     output_height: int,
     seed: int,
     full_verify: bool = False,
+    forced_split: str | None = None,
 ) -> tuple[dict[str, int], dict[str, int]]:
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
@@ -285,8 +344,11 @@ def save_frames_for_video(
             frame_count = 0
 
         frame_numbers = list(range(0, frame_count, frame_step))
-        split_rng = create_split_rng(video_path, seed)
-        assignments = assign_splits(frame_numbers, ratios, split_rng)
+        if forced_split is None:
+            split_rng = create_split_rng(video_path, seed)
+            assignments = assign_splits(frame_numbers, ratios, split_rng)
+        else:
+            assignments = {frame_number: forced_split for frame_number in frame_numbers}
 
         # Build the full output-path map and separate pending from already-done.
         output_map: dict[int, tuple[str, Path]] = {
@@ -381,6 +443,14 @@ def main() -> int:
     ratios = (args.train, args.val, args.test)
     full_verify = args.verify == "full"
 
+    video_splits: dict[Path, str] = {}
+    if args.split_unit == "video":
+        video_splits = assign_video_splits(video_files, ratios)
+        for split_name in SPLIT_NAMES:
+            names = [p.name for p in video_files if video_splits[p] == split_name]
+            print(f"{split_name}: {len(names)} video(s)"
+                  + (f" — {names[0]} .. {names[-1]}" if names else ""))
+
     for video_path in tqdm(video_files, desc="Videos", unit="video", ascii=True, ncols=100):
         saved_counts, skipped_counts = save_frames_for_video(
             video_path=video_path,
@@ -391,6 +461,7 @@ def main() -> int:
             output_height=args.height,
             seed=args.seed,
             full_verify=full_verify,
+            forced_split=video_splits.get(video_path),
         )
         for split_name in SPLIT_NAMES:
             total_saved[split_name] += saved_counts[split_name]
