@@ -8,9 +8,13 @@
     .ax{font-size:10px;fill:#5c6675}
     .axt{font-size:9.5px;fill:#8b95a3}
     .cv{font-size:9.5px}
+    .lb{font-size:10px;fill:#17202e}
+    .vl{font-size:9.5px;fill:#5c6675}
+    .dl{font-size:10px;font-weight:700}
     .note{font-size:10px;fill:#5c6675}
   </style>
   <rect width="900" height="664" fill="#ffffff"/>
+
   <text x="24" y="28" class="t ti">2-1 후처리 격자 탐색 — 검증셋 헝가리안 F1@50 px</text>
   <text x="24" y="46" class="t su">모델 <tspan class="m" font-size="10.5">monai_mini</tspan> 고정 · 조합별 25개 설정 · ★ = 선택된 설정 · 점선 = 기존 기본값 (0.5, 20)</text>
   <text x="40" y="84" class="t ph" fill="#c4763a">erop / <tspan class="m" font-size="12">gradient-seg</tspan></text>
@@ -26,25 +30,25 @@
   <rect x="146" y="114" width="56" height="36" fill="#dcb394" stroke="#ffffff"/>
   <text x="174" y="136" class="t cv" fill="#17202e" text-anchor="middle">0.801</text>
   <rect x="202" y="114" width="56" height="36" fill="#d7a681" stroke="#ffffff"/>
-  <text x="230" y="136" class="t cv" fill="#ffffff" text-anchor="middle">0.806</text>
+  <text x="230" y="136" class="t cv" fill="#17202e" text-anchor="middle">0.806</text>
   <rect x="258" y="114" width="56" height="36" fill="#d29b71" stroke="#ffffff"/>
-  <text x="286" y="136" class="t cv" fill="#ffffff" text-anchor="middle">0.809</text>
+  <text x="286" y="136" class="t cv" fill="#17202e" text-anchor="middle">0.809</text>
   <rect x="314" y="114" width="56" height="36" fill="#cc8b58" stroke="#ffffff"/>
   <text x="342" y="136" class="t cv" fill="#ffffff" text-anchor="middle">0.815</text>
   <text x="82" y="172" class="t ax" text-anchor="end">0.3</text>
   <rect x="90" y="150" width="56" height="36" fill="#d8a884" stroke="#ffffff"/>
   <text x="118" y="172" class="t cv" fill="#17202e" text-anchor="middle">0.805</text>
   <rect x="146" y="150" width="56" height="36" fill="#d39e74" stroke="#ffffff"/>
-  <text x="174" y="172" class="t cv" fill="#ffffff" text-anchor="middle">0.808</text>
+  <text x="174" y="172" class="t cv" fill="#17202e" text-anchor="middle">0.808</text>
   <rect x="202" y="150" width="56" height="36" fill="#d09467" stroke="#ffffff"/>
-  <text x="230" y="172" class="t cv" fill="#ffffff" text-anchor="middle">0.811</text>
+  <text x="230" y="172" class="t cv" fill="#17202e" text-anchor="middle">0.811</text>
   <rect x="258" y="150" width="56" height="36" fill="#cd8c5a" stroke="#ffffff"/>
   <text x="286" y="172" class="t cv" fill="#ffffff" text-anchor="middle">0.814</text>
   <rect x="314" y="150" width="56" height="36" fill="#c8814a" stroke="#ffffff"/>
   <text x="342" y="172" class="t cv" fill="#ffffff" text-anchor="middle">0.818</text>
   <text x="82" y="208" class="t ax" text-anchor="end">0.4</text>
   <rect x="90" y="186" width="56" height="36" fill="#d1986c" stroke="#ffffff"/>
-  <text x="118" y="208" class="t cv" fill="#ffffff" text-anchor="middle">0.810</text>
+  <text x="118" y="208" class="t cv" fill="#17202e" text-anchor="middle">0.810</text>
   <rect x="146" y="186" width="56" height="36" fill="#cd8e5e" stroke="#ffffff"/>
   <text x="174" y="208" class="t cv" fill="#ffffff" text-anchor="middle">0.813</text>
   <rect x="202" y="186" width="56" height="36" fill="#cb8753" stroke="#ffffff"/>
@@ -155,65 +159,65 @@
   <text x="286" y="386" class="t ax" text-anchor="middle">20</text>
   <text x="342" y="386" class="t ax" text-anchor="middle">30</text>
   <text x="82" y="412" class="t ax" text-anchor="end">0.2</text>
-  <rect x="90" y="390" width="56" height="36" fill="#f7f9fb" stroke="#ffffff"/>
-  <text x="118" y="412" class="t cv" fill="#17202e" text-anchor="middle">0.752</text>
-  <rect x="146" y="390" width="56" height="36" fill="#ebdbce" stroke="#ffffff"/>
-  <text x="174" y="412" class="t cv" fill="#17202e" text-anchor="middle">0.762</text>
-  <rect x="202" y="390" width="56" height="36" fill="#e4c8b3" stroke="#ffffff"/>
-  <text x="230" y="412" class="t cv" fill="#17202e" text-anchor="middle">0.768</text>
-  <rect x="258" y="390" width="56" height="36" fill="#deba9e" stroke="#ffffff"/>
-  <text x="286" y="412" class="t cv" fill="#17202e" text-anchor="middle">0.772</text>
-  <rect x="314" y="390" width="56" height="36" fill="#d6a47d" stroke="#ffffff"/>
-  <text x="342" y="412" class="t cv" fill="#ffffff" text-anchor="middle">0.779</text>
+  <rect x="90" y="390" width="56" height="36" fill="#e4c9b5" stroke="#ffffff"/>
+  <text x="118" y="412" class="t cv" fill="#17202e" text-anchor="middle">0.753</text>
+  <rect x="146" y="390" width="56" height="36" fill="#e2c2ab" stroke="#ffffff"/>
+  <text x="174" y="412" class="t cv" fill="#17202e" text-anchor="middle">0.754</text>
+  <rect x="202" y="390" width="56" height="36" fill="#deb99d" stroke="#ffffff"/>
+  <text x="230" y="412" class="t cv" fill="#17202e" text-anchor="middle">0.756</text>
+  <rect x="258" y="390" width="56" height="36" fill="#dbb08f" stroke="#ffffff"/>
+  <text x="286" y="412" class="t cv" fill="#17202e" text-anchor="middle">0.758</text>
+  <rect x="314" y="390" width="56" height="36" fill="#d49e75" stroke="#ffffff"/>
+  <text x="342" y="412" class="t cv" fill="#17202e" text-anchor="middle">0.762</text>
   <text x="82" y="448" class="t ax" text-anchor="end">0.3</text>
-  <rect x="90" y="426" width="56" height="36" fill="#d7a883" stroke="#ffffff"/>
-  <text x="118" y="448" class="t cv" fill="#ffffff" text-anchor="middle">0.778</text>
-  <rect x="146" y="426" width="56" height="36" fill="#d2996e" stroke="#ffffff"/>
-  <text x="174" y="448" class="t cv" fill="#ffffff" text-anchor="middle">0.782</text>
-  <rect x="202" y="426" width="56" height="36" fill="#cd8e5e" stroke="#ffffff"/>
-  <text x="230" y="448" class="t cv" fill="#ffffff" text-anchor="middle">0.786</text>
-  <rect x="258" y="426" width="56" height="36" fill="#c9844f" stroke="#ffffff"/>
-  <text x="286" y="448" class="t cv" fill="#ffffff" text-anchor="middle">0.789</text>
-  <rect x="314" y="426" width="56" height="36" fill="#c4763a" stroke="#ffffff"/>
-  <text x="342" y="448" class="t cv" fill="#ffffff" text-anchor="middle">0.793</text>
-  <rect x="315" y="427" width="54" height="34" fill="none" stroke="#17202e" stroke-width="2.4"/>
-  <text x="364" y="437" class="t cv" fill="#ffffff" text-anchor="end">★</text>
+  <rect x="90" y="426" width="56" height="36" fill="#deba9e" stroke="#ffffff"/>
+  <text x="118" y="448" class="t cv" fill="#17202e" text-anchor="middle">0.756</text>
+  <rect x="146" y="426" width="56" height="36" fill="#dcb394" stroke="#ffffff"/>
+  <text x="174" y="448" class="t cv" fill="#17202e" text-anchor="middle">0.758</text>
+  <rect x="202" y="426" width="56" height="36" fill="#d8a985" stroke="#ffffff"/>
+  <text x="230" y="448" class="t cv" fill="#17202e" text-anchor="middle">0.760</text>
+  <rect x="258" y="426" width="56" height="36" fill="#d5a179" stroke="#ffffff"/>
+  <text x="286" y="448" class="t cv" fill="#17202e" text-anchor="middle">0.762</text>
+  <rect x="314" y="426" width="56" height="36" fill="#ce9061" stroke="#ffffff"/>
+  <text x="342" y="448" class="t cv" fill="#ffffff" text-anchor="middle">0.765</text>
   <text x="82" y="484" class="t ax" text-anchor="end">0.4</text>
-  <rect x="90" y="462" width="56" height="36" fill="#dbb090" stroke="#ffffff"/>
-  <text x="118" y="484" class="t cv" fill="#17202e" text-anchor="middle">0.775</text>
-  <rect x="146" y="462" width="56" height="36" fill="#d7a681" stroke="#ffffff"/>
-  <text x="174" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.778</text>
-  <rect x="202" y="462" width="56" height="36" fill="#d49e76" stroke="#ffffff"/>
-  <text x="230" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.781</text>
-  <rect x="258" y="462" width="56" height="36" fill="#d1976b" stroke="#ffffff"/>
-  <text x="286" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.783</text>
-  <rect x="314" y="462" width="56" height="36" fill="#cc8b59" stroke="#ffffff"/>
-  <text x="342" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.787</text>
+  <rect x="90" y="462" width="56" height="36" fill="#d09466" stroke="#ffffff"/>
+  <text x="118" y="484" class="t cv" fill="#17202e" text-anchor="middle">0.764</text>
+  <rect x="146" y="462" width="56" height="36" fill="#ce8f5f" stroke="#ffffff"/>
+  <text x="174" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.765</text>
+  <rect x="202" y="462" width="56" height="36" fill="#cb8956" stroke="#ffffff"/>
+  <text x="230" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.767</text>
+  <rect x="258" y="462" width="56" height="36" fill="#ca844f" stroke="#ffffff"/>
+  <text x="286" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.768</text>
+  <rect x="314" y="462" width="56" height="36" fill="#c4763a" stroke="#ffffff"/>
+  <text x="342" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.771</text>
+  <rect x="315" y="463" width="54" height="34" fill="none" stroke="#17202e" stroke-width="2.4"/>
+  <text x="364" y="473" class="t cv" fill="#ffffff" text-anchor="end">★</text>
   <text x="82" y="520" class="t ax" text-anchor="end">0.5</text>
-  <rect x="90" y="498" width="56" height="36" fill="#e4c7b2" stroke="#ffffff"/>
-  <text x="118" y="520" class="t cv" fill="#17202e" text-anchor="middle">0.768</text>
-  <rect x="146" y="498" width="56" height="36" fill="#e0bea4" stroke="#ffffff"/>
-  <text x="174" y="520" class="t cv" fill="#17202e" text-anchor="middle">0.771</text>
-  <rect x="202" y="498" width="56" height="36" fill="#ddb79a" stroke="#ffffff"/>
-  <text x="230" y="520" class="t cv" fill="#17202e" text-anchor="middle">0.773</text>
-  <rect x="258" y="498" width="56" height="36" fill="#dbb191" stroke="#ffffff"/>
-  <text x="286" y="520" class="t cv" fill="#17202e" text-anchor="middle">0.775</text>
+  <rect x="90" y="498" width="56" height="36" fill="#eee2d9" stroke="#ffffff"/>
+  <text x="118" y="520" class="t cv" fill="#17202e" text-anchor="middle">0.747</text>
+  <rect x="146" y="498" width="56" height="36" fill="#ead6c8" stroke="#ffffff"/>
+  <text x="174" y="520" class="t cv" fill="#17202e" text-anchor="middle">0.750</text>
+  <rect x="202" y="498" width="56" height="36" fill="#e7cfbe" stroke="#ffffff"/>
+  <text x="230" y="520" class="t cv" fill="#17202e" text-anchor="middle">0.751</text>
+  <rect x="258" y="498" width="56" height="36" fill="#e4c9b4" stroke="#ffffff"/>
+  <text x="286" y="520" class="t cv" fill="#17202e" text-anchor="middle">0.753</text>
   <rect x="259.5" y="499.5" width="53" height="33" fill="none" stroke="#5c6675" stroke-width="1.6" stroke-dasharray="3 2"/>
-  <rect x="314" y="498" width="56" height="36" fill="#d6a580" stroke="#ffffff"/>
-  <text x="342" y="520" class="t cv" fill="#ffffff" text-anchor="middle">0.778</text>
+  <rect x="314" y="498" width="56" height="36" fill="#dfbb9f" stroke="#ffffff"/>
+  <text x="342" y="520" class="t cv" fill="#17202e" text-anchor="middle">0.756</text>
   <text x="82" y="556" class="t ax" text-anchor="end">0.6</text>
-  <rect x="90" y="534" width="56" height="36" fill="#e1c1a8" stroke="#ffffff"/>
-  <text x="118" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.770</text>
-  <rect x="146" y="534" width="56" height="36" fill="#dfbb9f" stroke="#ffffff"/>
-  <text x="174" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.772</text>
-  <rect x="202" y="534" width="56" height="36" fill="#ddb698" stroke="#ffffff"/>
-  <text x="230" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.773</text>
-  <rect x="258" y="534" width="56" height="36" fill="#dbb191" stroke="#ffffff"/>
-  <text x="286" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.775</text>
-  <rect x="314" y="534" width="56" height="36" fill="#d7a783" stroke="#ffffff"/>
-  <text x="342" y="556" class="t cv" fill="#ffffff" text-anchor="middle">0.778</text>
+  <rect x="90" y="534" width="56" height="36" fill="#f7f9fb" stroke="#ffffff"/>
+  <text x="118" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.742</text>
+  <rect x="146" y="534" width="56" height="36" fill="#f5f3f2" stroke="#ffffff"/>
+  <text x="174" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.743</text>
+  <rect x="202" y="534" width="56" height="36" fill="#f3edea" stroke="#ffffff"/>
+  <text x="230" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.745</text>
+  <rect x="258" y="534" width="56" height="36" fill="#f0e8e2" stroke="#ffffff"/>
+  <text x="286" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.746</text>
+  <rect x="314" y="534" width="56" height="36" fill="#edded4" stroke="#ffffff"/>
+  <text x="342" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.748</text>
   <text x="48" y="480" class="t axt" text-anchor="middle" transform="rotate(-90 48 480)">threshold</text>
-  <text x="90" y="586" class="t axt">F1 범위 0.752 – 0.793  ·  기준값 대비 +0.0184</text>
+  <text x="90" y="586" class="t axt">F1 범위 0.742 – 0.771  ·  기준값 대비 +0.0182</text>
   <text x="490" y="360" class="t ph" fill="#2f6f9f">cholec80 / <tspan class="m" font-size="12">gaussian-tip</tspan></text>
   <text x="680" y="368" class="t axt" text-anchor="middle">NMS 반경 (px)</text>
   <text x="568" y="386" class="t ax" text-anchor="middle">5</text>
@@ -222,66 +226,66 @@
   <text x="736" y="386" class="t ax" text-anchor="middle">20</text>
   <text x="792" y="386" class="t ax" text-anchor="middle">30</text>
   <text x="532" y="412" class="t ax" text-anchor="end">0.2</text>
-  <rect x="540" y="390" width="56" height="36" fill="#6e9abc" stroke="#ffffff"/>
-  <text x="568" y="412" class="t cv" fill="#ffffff" text-anchor="middle">0.836</text>
-  <rect x="596" y="390" width="56" height="36" fill="#6d9abb" stroke="#ffffff"/>
-  <text x="624" y="412" class="t cv" fill="#ffffff" text-anchor="middle">0.836</text>
-  <rect x="652" y="390" width="56" height="36" fill="#6c99bb" stroke="#ffffff"/>
-  <text x="680" y="412" class="t cv" fill="#ffffff" text-anchor="middle">0.836</text>
-  <rect x="708" y="390" width="56" height="36" fill="#6b99bb" stroke="#ffffff"/>
-  <text x="736" y="412" class="t cv" fill="#ffffff" text-anchor="middle">0.836</text>
-  <rect x="764" y="390" width="56" height="36" fill="#6b98bb" stroke="#ffffff"/>
-  <text x="792" y="412" class="t cv" fill="#ffffff" text-anchor="middle">0.836</text>
+  <rect x="540" y="390" width="56" height="36" fill="#5187af" stroke="#ffffff"/>
+  <text x="568" y="412" class="t cv" fill="#ffffff" text-anchor="middle">0.831</text>
+  <rect x="596" y="390" width="56" height="36" fill="#5186af" stroke="#ffffff"/>
+  <text x="624" y="412" class="t cv" fill="#ffffff" text-anchor="middle">0.831</text>
+  <rect x="652" y="390" width="56" height="36" fill="#5186af" stroke="#ffffff"/>
+  <text x="680" y="412" class="t cv" fill="#ffffff" text-anchor="middle">0.831</text>
+  <rect x="708" y="390" width="56" height="36" fill="#5086ae" stroke="#ffffff"/>
+  <text x="736" y="412" class="t cv" fill="#ffffff" text-anchor="middle">0.831</text>
+  <rect x="764" y="390" width="56" height="36" fill="#5086ae" stroke="#ffffff"/>
+  <text x="792" y="412" class="t cv" fill="#ffffff" text-anchor="middle">0.831</text>
   <text x="532" y="448" class="t ax" text-anchor="end">0.3</text>
   <rect x="540" y="426" width="56" height="36" fill="#2f6f9f" stroke="#ffffff"/>
-  <text x="568" y="448" class="t cv" fill="#ffffff" text-anchor="middle">0.844</text>
+  <text x="568" y="448" class="t cv" fill="#ffffff" text-anchor="middle">0.836</text>
   <rect x="596" y="426" width="56" height="36" fill="#2f6f9f" stroke="#ffffff"/>
-  <text x="624" y="448" class="t cv" fill="#ffffff" text-anchor="middle">0.844</text>
+  <text x="624" y="448" class="t cv" fill="#ffffff" text-anchor="middle">0.836</text>
   <rect x="652" y="426" width="56" height="36" fill="#2f6f9f" stroke="#ffffff"/>
-  <text x="680" y="448" class="t cv" fill="#ffffff" text-anchor="middle">0.844</text>
+  <text x="680" y="448" class="t cv" fill="#ffffff" text-anchor="middle">0.836</text>
   <rect x="708" y="426" width="56" height="36" fill="#2f6f9f" stroke="#ffffff"/>
-  <text x="736" y="448" class="t cv" fill="#ffffff" text-anchor="middle">0.844</text>
+  <text x="736" y="448" class="t cv" fill="#ffffff" text-anchor="middle">0.836</text>
   <rect x="764" y="426" width="56" height="36" fill="#2f6f9f" stroke="#ffffff"/>
-  <text x="792" y="448" class="t cv" fill="#ffffff" text-anchor="middle">0.844</text>
+  <text x="792" y="448" class="t cv" fill="#ffffff" text-anchor="middle">0.836</text>
   <rect x="765" y="427" width="54" height="34" fill="none" stroke="#17202e" stroke-width="2.4"/>
   <text x="814" y="437" class="t cv" fill="#ffffff" text-anchor="end">★</text>
   <text x="532" y="484" class="t ax" text-anchor="end">0.4</text>
-  <rect x="540" y="462" width="56" height="36" fill="#3472a1" stroke="#ffffff"/>
-  <text x="568" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.844</text>
-  <rect x="596" y="462" width="56" height="36" fill="#3472a1" stroke="#ffffff"/>
-  <text x="624" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.844</text>
-  <rect x="652" y="462" width="56" height="36" fill="#3472a1" stroke="#ffffff"/>
-  <text x="680" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.844</text>
-  <rect x="708" y="462" width="56" height="36" fill="#3472a1" stroke="#ffffff"/>
-  <text x="736" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.844</text>
-  <rect x="764" y="462" width="56" height="36" fill="#3372a1" stroke="#ffffff"/>
-  <text x="792" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.844</text>
+  <rect x="540" y="462" width="56" height="36" fill="#3f7aa6" stroke="#ffffff"/>
+  <text x="568" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.834</text>
+  <rect x="596" y="462" width="56" height="36" fill="#3f7aa6" stroke="#ffffff"/>
+  <text x="624" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.834</text>
+  <rect x="652" y="462" width="56" height="36" fill="#3e7aa6" stroke="#ffffff"/>
+  <text x="680" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.834</text>
+  <rect x="708" y="462" width="56" height="36" fill="#3e7aa6" stroke="#ffffff"/>
+  <text x="736" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.834</text>
+  <rect x="764" y="462" width="56" height="36" fill="#3e79a6" stroke="#ffffff"/>
+  <text x="792" y="484" class="t cv" fill="#ffffff" text-anchor="middle">0.834</text>
   <text x="532" y="520" class="t ax" text-anchor="end">0.5</text>
-  <rect x="540" y="498" width="56" height="36" fill="#78a2c1" stroke="#ffffff"/>
-  <text x="568" y="520" class="t cv" fill="#ffffff" text-anchor="middle">0.835</text>
-  <rect x="596" y="498" width="56" height="36" fill="#78a2c1" stroke="#ffffff"/>
-  <text x="624" y="520" class="t cv" fill="#ffffff" text-anchor="middle">0.835</text>
-  <rect x="652" y="498" width="56" height="36" fill="#78a2c1" stroke="#ffffff"/>
-  <text x="680" y="520" class="t cv" fill="#ffffff" text-anchor="middle">0.835</text>
-  <rect x="708" y="498" width="56" height="36" fill="#78a2c1" stroke="#ffffff"/>
-  <text x="736" y="520" class="t cv" fill="#ffffff" text-anchor="middle">0.835</text>
+  <rect x="540" y="498" width="56" height="36" fill="#77a1c0" stroke="#ffffff"/>
+  <text x="568" y="520" class="t cv" fill="#ffffff" text-anchor="middle">0.825</text>
+  <rect x="596" y="498" width="56" height="36" fill="#77a1c0" stroke="#ffffff"/>
+  <text x="624" y="520" class="t cv" fill="#ffffff" text-anchor="middle">0.825</text>
+  <rect x="652" y="498" width="56" height="36" fill="#77a1c0" stroke="#ffffff"/>
+  <text x="680" y="520" class="t cv" fill="#ffffff" text-anchor="middle">0.825</text>
+  <rect x="708" y="498" width="56" height="36" fill="#77a1c0" stroke="#ffffff"/>
+  <text x="736" y="520" class="t cv" fill="#ffffff" text-anchor="middle">0.825</text>
   <rect x="709.5" y="499.5" width="53" height="33" fill="none" stroke="#5c6675" stroke-width="1.6" stroke-dasharray="3 2"/>
-  <rect x="764" y="498" width="56" height="36" fill="#78a1c1" stroke="#ffffff"/>
-  <text x="792" y="520" class="t cv" fill="#ffffff" text-anchor="middle">0.835</text>
+  <rect x="764" y="498" width="56" height="36" fill="#77a1c0" stroke="#ffffff"/>
+  <text x="792" y="520" class="t cv" fill="#ffffff" text-anchor="middle">0.825</text>
   <text x="532" y="556" class="t ax" text-anchor="end">0.6</text>
   <rect x="540" y="534" width="56" height="36" fill="#f7f9fb" stroke="#ffffff"/>
-  <text x="568" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.818</text>
+  <text x="568" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.807</text>
   <rect x="596" y="534" width="56" height="36" fill="#f7f9fb" stroke="#ffffff"/>
-  <text x="624" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.818</text>
+  <text x="624" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.807</text>
   <rect x="652" y="534" width="56" height="36" fill="#f7f9fb" stroke="#ffffff"/>
-  <text x="680" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.818</text>
-  <rect x="708" y="534" width="56" height="36" fill="#f6f9fb" stroke="#ffffff"/>
-  <text x="736" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.818</text>
-  <rect x="764" y="534" width="56" height="36" fill="#f7f9fb" stroke="#ffffff"/>
-  <text x="792" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.818</text>
+  <text x="680" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.807</text>
+  <rect x="708" y="534" width="56" height="36" fill="#f7f9fb" stroke="#ffffff"/>
+  <text x="736" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.807</text>
+  <rect x="764" y="534" width="56" height="36" fill="#f6f9fb" stroke="#ffffff"/>
+  <text x="792" y="556" class="t cv" fill="#17202e" text-anchor="middle">0.807</text>
   <text x="498" y="480" class="t axt" text-anchor="middle" transform="rotate(-90 498 480)">threshold</text>
-  <text x="540" y="586" class="t axt">F1 범위 0.818 – 0.844  ·  기준값 대비 +0.0095</text>
-  <rect x="24" y="612" width="852" height="38" rx="6" fill="#f5f7fa" stroke="#ccd4de"/>
+  <text x="540" y="586" class="t axt">F1 범위 0.807 – 0.836  ·  기준값 대비 +0.0105</text>
+  <rect x="24" y="612" width="852" height="50" rx="6" fill="#f5f7fa" stroke="#ccd4de"/>
   <text x="40" y="630" class="t note"><tspan font-weight="700">threshold는 내부 최적점을 갖지만 NMS 반경은 그렇지 않다.</tspan> threshold는 네 조합 모두 0.3–0.4에서 정점이고 양쪽으로 떨어진다. 반면 NMS 반경은 <tspan class="m" font-size="10">gaussian-tip</tspan>에서 5–30 px 전체가 사실상 동일하고,</text>
   <text x="40" y="645" class="t note"><tspan class="m" font-size="10">gradient-seg</tspan>에서는 30 px까지 <tspan font-weight="700">단조 증가</tspan>해 격자 경계에서 최댓값을 만난다 — 즉 이 축의 최적점은 격자에 포섭되지 않았다.</text>
 </svg>

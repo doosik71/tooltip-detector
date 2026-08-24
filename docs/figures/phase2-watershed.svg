@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="470" viewBox="0 0 900 470" role="img" aria-label="연결요소 방식과 watershed 피크 분할의 테스트셋 성능 비교">
+  <style>
+    .t{font-family:'Noto Sans CJK KR','NanumGothic','Noto Sans CJK JP',sans-serif}
+    .m{font-family:'D2Coding','DejaVu Sans Mono',monospace}
+    .ti{font-size:13px;font-weight:700;fill:#17202e}
+    .su{font-size:10.5px;fill:#5c6675}
+    .ph{font-size:12px;font-weight:700}
+    .ax{font-size:10px;fill:#5c6675}
+    .axt{font-size:9.5px;fill:#8b95a3}
+    .cv{font-size:9.5px}
+    .lb{font-size:10px;fill:#17202e}
+    .vl{font-size:9.5px;fill:#5c6675}
+    .dl{font-size:10px;font-weight:700}
+    .note{font-size:10px;fill:#5c6675}
+  </style>
+  <rect width="900" height="470" fill="#ffffff"/>
+
+  <text x="24" y="28" class="t ti">2-2 피크 분할 방식 비교 — 연결요소 대 watershed</text>
+  <text x="24" y="46" class="t su">threshold·NMS는 2-1 선택값으로 고정 · 두 실행 모두 계통 편차 보정 전 지표 · 모델 <tspan class="m" font-size="10.5">monai_mini</tspan></text>
+  <text x="24" y="82" class="t ph" fill="#17202e">헝가리안 F1@50 px</text>
+  <text x="140" y="106" class="t lb" text-anchor="end">erop /</text>
+  <text x="140" y="119" class="t lb m" text-anchor="end" fill="#c4763a">gradient-seg</text>
+  <rect x="148" y="98" width="133.7" height="13" fill="#c4763a"/>
+  <text x="287.7" y="108" class="t vl">0.8274 연결요소</text>
+  <rect x="148" y="114" width="84.1" height="13" fill="#9aa5b1"/>
+  <text x="238.1" y="124" class="t vl">0.7801 watershed <tspan class="dl" fill="#ac4b45">-0.0472</tspan></text>
+  <text x="140" y="158" class="t lb" text-anchor="end">erop /</text>
+  <text x="140" y="171" class="t lb m" text-anchor="end" fill="#2f6f9f">gaussian-tip</text>
+  <rect x="148" y="150" width="186.5" height="13" fill="#2f6f9f"/>
+  <text x="340.5" y="160" class="t vl">0.8776 연결요소</text>
+  <rect x="148" y="166" width="188.1" height="13" fill="#9aa5b1"/>
+  <text x="342.1" y="176" class="t vl">0.8792 watershed <tspan class="dl" fill="#3f8468">+0.0016</tspan></text>
+  <text x="140" y="210" class="t lb" text-anchor="end">cholec80 /</text>
+  <text x="140" y="223" class="t lb m" text-anchor="end" fill="#c4763a">gradient-seg</text>
+  <rect x="148" y="202" width="68.5" height="13" fill="#c4763a"/>
+  <text x="222.5" y="212" class="t vl">0.7652 연결요소</text>
+  <rect x="148" y="218" width="28.9" height="13" fill="#9aa5b1"/>
+  <text x="182.9" y="228" class="t vl">0.7275 watershed <tspan class="dl" fill="#ac4b45">-0.0377</tspan></text>
+  <text x="140" y="262" class="t lb" text-anchor="end">cholec80 /</text>
+  <text x="140" y="275" class="t lb m" text-anchor="end" fill="#2f6f9f">gaussian-tip</text>
+  <rect x="148" y="254" width="120.6" height="13" fill="#2f6f9f"/>
+  <text x="274.6" y="264" class="t vl">0.8148 연결요소</text>
+  <rect x="148" y="270" width="122.3" height="13" fill="#9aa5b1"/>
+  <text x="276.3" y="280" class="t vl">0.8165 watershed <tspan class="dl" fill="#3f8468">+0.0017</tspan></text>
+  <line x1="148" y1="92" x2="148" y2="300" stroke="#8b95a3"/>
+  <text x="148" y="316" class="t ax">가로축 시작 0.70 (0 아님)</text>
+  <text x="500" y="82" class="t ph" fill="#17202e">거짓 양성 (FP @50 px)</text>
+  <text x="596" y="114" class="t vl m" text-anchor="end">erop/grad</text>
+  <rect x="604" y="100" width="21.3" height="10" fill="#c4763a"/>
+  <rect x="604" y="112" width="38.1" height="10" fill="#9aa5b1"/>
+  <text x="650.1" y="114" class="t vl">8,563 → 15,281 <tspan class="dl" fill="#ac4b45">+78 %</tspan></text>
+  <text x="596" y="166" class="t vl m" text-anchor="end">erop/gaus</text>
+  <rect x="604" y="152" width="6.2" height="10" fill="#2f6f9f"/>
+  <rect x="604" y="164" width="6.3" height="10" fill="#9aa5b1"/>
+  <text x="618.3" y="166" class="t vl">2,489 → 2,518 <tspan class="dl" fill="#5c6675">+1 %</tspan></text>
+  <text x="596" y="218" class="t vl m" text-anchor="end">cholec80/grad</text>
+  <rect x="604" y="204" width="82.9" height="10" fill="#c4763a"/>
+  <rect x="604" y="216" width="130.0" height="10" fill="#9aa5b1"/>
+  <text x="742.0" y="218" class="t vl">33,246 → 52,161 <tspan class="dl" fill="#ac4b45">+57 %</tspan></text>
+  <text x="596" y="270" class="t vl m" text-anchor="end">cholec80/gaus</text>
+  <rect x="604" y="256" width="39.0" height="10" fill="#2f6f9f"/>
+  <rect x="604" y="268" width="40.0" height="10" fill="#9aa5b1"/>
+  <text x="652.0" y="270" class="t vl">15,648 → 16,062 <tspan class="dl" fill="#5c6675">+3 %</tspan></text>
+  <text x="24" y="348" class="t ph" fill="#17202e">공유 피크율 (<tspan class="m" font-size="10">shared_legacy</tspan>) — 과소 탐지의 직접 지표</text>
+  <text x="40" y="368" class="t vl m" fill="#c4763a">erop/grad</text>
+  <rect x="40" y="376" width="97.2" height="10" fill="#c4763a"/>
+  <rect x="40" y="388" width="88.5" height="10" fill="#9aa5b1"/>
+  <text x="40" y="412" class="t vl">17.36 % → <tspan font-weight="700">15.80 %</tspan> (-1.56 %p)</text>
+  <text x="255" y="368" class="t vl m" fill="#2f6f9f">erop/gaus</text>
+  <rect x="255" y="376" width="113.0" height="10" fill="#2f6f9f"/>
+  <rect x="255" y="388" width="109.8" height="10" fill="#9aa5b1"/>
+  <text x="255" y="412" class="t vl">20.17 % → <tspan font-weight="700">19.60 %</tspan> (-0.58 %p)</text>
+  <text x="470" y="368" class="t vl m" fill="#c4763a">cholec80/grad</text>
+  <rect x="470" y="376" width="148.8" height="10" fill="#c4763a"/>
+  <rect x="470" y="388" width="140.2" height="10" fill="#9aa5b1"/>
+  <text x="470" y="412" class="t vl">26.57 % → <tspan font-weight="700">25.03 %</tspan> (-1.54 %p)</text>
+  <text x="685" y="368" class="t vl m" fill="#2f6f9f">cholec80/gaus</text>
+  <rect x="685" y="376" width="167.2" height="10" fill="#2f6f9f"/>
+  <rect x="685" y="388" width="163.1" height="10" fill="#9aa5b1"/>
+  <text x="685" y="412" class="t vl">29.85 % → <tspan font-weight="700">29.12 %</tspan> (-0.73 %p)</text>
+  <rect x="24" y="424" width="852" height="50" rx="6" fill="#f5f7fa" stroke="#ccd4de"/>
+  <text x="40" y="442" class="t note"><tspan font-weight="700">watershed는 과소 탐지를 거의 줄이지 못하면서 거짓 양성만 늘린다.</tspan> <tspan class="m" font-size="10">gradient-seg</tspan>에서 FP가 57–79 % 늘어 F1@50이 0.038–0.047 떨어지고, <tspan class="m" font-size="10">gaussian-tip</tspan>에서는 변화가 +0.002 이내다.</text>
+  <text x="40" y="457" class="t note">공유 피크율은 네 조합 모두 1.6 %p 이내로만 내려간다 — 인스턴스 분리는 피크 후처리 수준에서 해결되지 않는다.</text>
+</svg>

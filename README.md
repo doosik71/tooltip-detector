@@ -378,17 +378,18 @@ run eval-model  --dataset cholec80 --device cuda:1
 
 ## 문서 목록
 
-| 문서                                                           | 내용                                                                 |
-| -------------------------------------------------------------- | -------------------------------------------------------------------- |
-| [docs/final-report.md](docs/final-report.md)                   | 실험결과보고서 — 8개 조합 전수 실험의 설계·결과·분석·한계            |
-| [docs/results-summary.md](docs/results-summary.md)             | 실험 수치 요약 — 보고서 작성용 기초 자료 (자동 생성)                 |
-| [docs/model-monai.md](docs/model-monai.md)                     | EfficientNet-B2 + U-Net 풀 모델 아키텍처 상세 설명                   |
-| [docs/model-monai_mini.md](docs/model-monai_mini.md)           | EfficientNet-B2 + U-Net 경량 모델 아키텍처 상세 설명                 |
-| [docs/dataset-guide.md](docs/dataset-guide.md)                 | 데이터셋 디렉터리 구조, 파일 포맷, 어노테이션 스펙, 히트맵 타겟 수식 |
-| [docs/commands.md](docs/commands.md)                           | 실험 재현용 실행 명령 모음                                           |
-| [docs/dashboard-guide.md](docs/dashboard-guide.md)             | 학습·평가 현황 표 GUI 화면 구성, 상태 판정 기준, 조작 방법           |
-| [docs/train-guide.md](docs/train-guide.md)                     | 학습 실행 방법, 인수 설명, 증강 파이프라인, 체크포인트, 출력 예시    |
-| [docs/eval-guide.md](docs/eval-guide.md)                       | 평가 실행 방법, 피크 탐지 알고리즘, 지표 정의, 결과 파일 구조        |
-| [docs/tooltip-detector.md](docs/tooltip-detector.md)           | 탐지 GUI 화면 구성, 추론 흐름, 조작 방법, 설계 상세                  |
-| [docs/tooltip-tracker.md](docs/tooltip-tracker.md)             | 추적 GUI 화면 구성, 화살표 스무딩 로직, 오탐지 판정 규칙, 설계 상세  |
-| [docs/dataset-browser-guide.md](docs/dataset-browser-guide.md) | GUI 화면 구성, 조작 방법, 키보드 단축키                              |
+| 문서                                                             | 내용                                                                      |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [docs/final-report.md](docs/final-report.md)                     | 실험결과보고서 — 8개 조합 전수 실험의 설계·결과·분석·한계                 |
+| [docs/results-summary.md](docs/results-summary.md)               | 실험 수치 요약 — 보고서 작성용 기초 자료 (자동 생성)                      |
+| [docs/parameter-optimization.md](docs/parameter-optimization.md) | 후처리 파라미터 최적화(2단계) — threshold × NMS 격자 탐색, watershed 비교 |
+| [docs/model-monai.md](docs/model-monai.md)                       | EfficientNet-B2 + U-Net 풀 모델 아키텍처 상세 설명                        |
+| [docs/model-monai_mini.md](docs/model-monai_mini.md)             | EfficientNet-B2 + U-Net 경량 모델 아키텍처 상세 설명                      |
+| [docs/dataset-guide.md](docs/dataset-guide.md)                   | 데이터셋 디렉터리 구조, 파일 포맷, 어노테이션 스펙, 히트맵 타겟 수식      |
+| [docs/commands.md](docs/commands.md)                             | 실험 재현용 실행 명령 모음                                                |
+| [docs/dashboard-guide.md](docs/dashboard-guide.md)               | 학습·평가 현황 표 GUI 화면 구성, 상태 판정 기준, 조작 방법                |
+| [docs/train-guide.md](docs/train-guide.md)                       | 학습 실행 방법, 인수 설명, 증강 파이프라인, 체크포인트, 출력 예시         |
+| [docs/eval-guide.md](docs/eval-guide.md)                         | 평가 실행 방법, 피크 탐지 알고리즘, 지표 정의, 결과 파일 구조             |
+| [docs/tooltip-detector.md](docs/tooltip-detector.md)             | 탐지 GUI 화면 구성, 추론 흐름, 조작 방법, 설계 상세                       |
+| [docs/tooltip-tracker.md](docs/tooltip-tracker.md)               | 추적 GUI 화면 구성, 화살표 스무딩 로직, 오탐지 판정 규칙, 설계 상세       |
+| [docs/dataset-browser-guide.md](docs/dataset-browser-guide.md)   | GUI 화면 구성, 조작 방법, 키보드 단축키                                   |
