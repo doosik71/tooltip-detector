@@ -1,0 +1,40 @@
+# Standalone uv project for the CLAD-Net baseline.
+#
+# Kept separate from the repository root for the same reason as
+# baseline/yolov8s: this project needs `opencv-python` (video decoding for the
+# demo) while the root environment carries albumentations' headless build of
+# the same `cv2` package, and installing both into one environment clobbers
+# the training environment.
+#
+# CLAD-Net itself is implemented in plain PyTorch under common/ -- there is no
+# ultralytics/YOLO dependency, on purpose.
+[project]
+name = "cladnet-baseline"
+version = "0.1.0"
+description = "CLAD-Net (Zhao et al. 2023) reimplementation for surgical tool + tool-tip detection"
+readme = "README.md"
+requires-python = ">=3.12"
+
+dependencies = [
+    "numpy>=2.0",
+    "opencv-python>=4.10",
+    "pillow>=12.2.0",
+    "scipy>=1.15",
+    "torch>=2.7.1",
+    "torchvision==0.22.1",
+    "tqdm>=4.67",
+]
+
+[tool.uv]
+# common/ is imported via sys.path, the same convention the root project uses
+# for ttd/ -- nothing to build or install.
+package = false
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

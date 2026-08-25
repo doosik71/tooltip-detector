@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Same convention as the repository root's `run`, but bound to this
+# sub-project: cd'ing here makes `uv run` resolve this directory's
+# pyproject.toml, so the script runs in the sub-project's own .venv.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+script="${1:-}"
+if [ -z "$script" ]; then
+  echo "Usage: run <script> [args...]"
+  echo
+  echo "Available scripts:"
+  for f in scripts/*.py; do
+    echo "  $(basename "$f" .py)"
+  done
+  exit 1
+fi
+shift
+
+uv run python "scripts/$script.py" "$@"

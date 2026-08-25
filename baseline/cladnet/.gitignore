@@ -1,0 +1,3 @@
+# cladnet baseline: private virtualenv, converted data and checkpoints stay out of git.
+.venv/
+data/
