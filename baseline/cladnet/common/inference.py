@@ -7,6 +7,7 @@ them, so a demo never has to be told how the model was built:
      "image_size": 640, "dataset": "cholec80", "epoch": 30, "metrics": {...}}
 """
 
+import glob
 import os
 import time
 
@@ -20,9 +21,24 @@ DEFAULT_CONF = 0.25
 DEFAULT_IOU = 0.45
 
 
-def default_model_path() -> str:
+def data_dir() -> str:
     here = os.path.dirname(os.path.abspath(__file__))          # baseline/cladnet/common
-    return os.path.join(os.path.dirname(here), "data", "model.pt")
+    return os.path.join(os.path.dirname(here), "data")
+
+
+def dataset_dir(dataset: str) -> str:
+    """Where one dataset's checkpoints and results live: data/<dataset>/."""
+    return os.path.join(data_dir(), dataset)
+
+
+def default_model_path(dataset: str | None = None) -> str:
+    """Checkpoint of one dataset, or -- for the demo, which has no --dataset --
+    the first trained one under data/, in alphabetical order."""
+    if dataset:
+        return os.path.join(dataset_dir(dataset), "model.pt")
+    for path in sorted(glob.glob(os.path.join(data_dir(), "*", "model.pt"))):
+        return path
+    return os.path.join(data_dir(), "<dataset>", "model.pt")
 
 
 def save_checkpoint(path: str, model, arch: dict, image_size: int, dataset: str,

@@ -2,8 +2,9 @@
 """GUI demo for the CLAD-Net surgical-tool baseline.
 
 Plays a laparoscopic video -- or a directory of extracted dataset frames --
-through a trained CLAD-Net checkpoint (`baseline/cladnet/data/model.pt` by
-default) and draws what it predicts on every frame:
+through a trained CLAD-Net checkpoint (`baseline/cladnet/data/<dataset>/model.pt`,
+the alphabetically first one by default) and draws what it predicts on every
+frame:
 
   tool   the instrument's bounding box
   tip    a 10 x 10 px box on the instrument tip, marked with a cross at its
@@ -429,7 +430,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="GUI demo for the CLAD-Net surgical tool + tip detection baseline")
     parser.add_argument("--weights", default=default_model_path(),
-                        help=f"path to the checkpoint (default: {default_model_path()})")
+                        help="path to the checkpoint; with several datasets trained, "
+                             "pass data/<dataset>/model.pt explicitly "
+                             f"(default: {default_model_path()})")
     parser.add_argument("--device", default=None,
                         help="torch device, e.g. cuda:0 or cpu (default: cuda if available)")
     parser.add_argument("--videos-root", default=default_videos_root(),

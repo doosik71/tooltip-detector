@@ -12,7 +12,7 @@ that this loss/assignment recipe needs in practice, each switchable:
 a short linear warmup, a cosine learning-rate decay, and a weight EMA
 (`--no-ema` turns the last one off).
 
-Outputs, all under baseline/cladnet/data/ by default:
+Outputs, all under baseline/cladnet/data/<dataset>/ by default:
 
     model.pt            best checkpoint by val mAP@0.5:0.95
     model-last.pt       last epoch, plus optimizer/EMA state for --resume
@@ -44,13 +44,10 @@ if True:
     from common.boxes import non_max_suppression, xywh_to_xyxy
     from common.dataset import (CLASS_NAMES, SurgicalDetectionDataset, available_datasets,
                                 collate, default_data_root)
-    from common.inference import save_checkpoint
+    from common.inference import dataset_dir, save_checkpoint
     from common.loss import DetectionLoss
     from common.metrics import DetectionEvaluator
     from common.model import build, decode, parameter_count
-
-DEFAULT_OUTPUT_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 
 WARMUP_EPOCHS = 3.0
 FINAL_LR_FACTOR = 0.01      # cosine decays lr to lr * this
@@ -167,7 +164,8 @@ def main():
                         help="cap on validation frames per epoch (0 = all)")
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--device", default=None)
-    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--output-dir", default=None,
+                        help="where the checkpoints go (default: data/<dataset>)")
     parser.add_argument("--neck-channels", type=int, default=112)
     parser.add_argument("--head-hidden", type=int, default=96)
     parser.add_argument("--rm-combine", default="sum", choices=("sum", "mean"),
@@ -185,6 +183,8 @@ def main():
         parser.error("--batch-size must be at least 2")
 
     device = torch.device(args.device or ("cuda:0" if torch.cuda.is_available() else "cpu"))
+    # resolved back into args so train-status.json records the real path
+    args.output_dir = args.output_dir or dataset_dir(args.dataset)
     os.makedirs(args.output_dir, exist_ok=True)
     best_path = os.path.join(args.output_dir, "model.pt")
     last_path = os.path.join(args.output_dir, "model-last.pt")

@@ -116,12 +116,14 @@ baseline/cladnet/
 │   ├── train-model.py        # 학습
 │   ├── eval-model.py         # 평가 (탐지 AP + 팁 hit-rate)
 │   └── demo.py               # 탐지 결과 시각화 GUI
-└── data/                     # 체크포인트·평가 결과 (git 추적 제외)
+├── docs/
+│   └── commands.md           # 데이터셋별 학습·평가 재현 명령 모음
+└── data/<dataset>/           # 체크포인트·평가 결과 (git 추적 제외)
     ├── model.pt              #   최고 성능 체크포인트
     ├── model-last.pt         #   마지막 에포크 (+ 재개용 optimizer/EMA 상태)
     ├── train-status.json     #   진행 상황
     ├── metric.csv            #   에포크별 학습 곡선
-    └── results/<dataset>/<split>/{summary.json, per_tip.csv}
+    └── results/<split>/{summary.json, per_tip.csv}
 ```
 
 ## 설치
@@ -161,8 +163,11 @@ uv sync --project baseline/cladnet
 `model-last.pt`가 있으면 **기본 동작이 재개**다. optimizer·스케줄러·EMA 상태까지 저장하므로
 중단 지점에서 그대로 이어진다. `model.pt`는 val mAP@0.5:0.95가 갱신될 때마다 저장된다.
 
-여러 학습을 동시에 돌릴 때는 `--output-dir`를 따로 준다. 그러지 않으면 두 학습이 같은
-`data/model.pt`에 쓴다.
+체크포인트는 `data/<dataset>/`에 데이터셋별로 나뉘어 저장되므로 cholec80과 erop 학습을
+동시에 돌려도 서로 덮어쓰지 않는다. 같은 데이터셋으로 설정만 바꿔 여러 번 돌릴 때만
+`--output-dir`를 따로 준다.
+
+데이터셋별 전체 재현 명령은 [docs/commands.md](docs/commands.md)에 있다.
 
 ### 2. 평가
 
@@ -179,7 +184,8 @@ uv sync --project baseline/cladnet
   수치와 직접 비교할 수 있다.
 
 거리는 모두 letterbox된 640 × 640이 아니라 **원본 프레임 좌표계(736 × 480)** 에서 잰다.
-결과는 `data/results/<dataset>/<split>/`에 `summary.json`과 `per_tip.csv`로 저장된다.
+결과는 `data/<dataset>/results/<split>/`에 `summary.json`과 `per_tip.csv`로 저장된다.
+평가할 체크포인트도 `--dataset`에서 정해진다 (`data/<dataset>/model.pt`, `--model`로 변경).
 
 ### 3. 데모 GUI
 
@@ -187,8 +193,12 @@ uv sync --project baseline/cladnet
 ./baseline/cladnet/run demo
 ```
 
-`data/model.pt`를 읽어 영상을 프레임 단위로 처리하며 `tool` 박스와 `tip` 박스(중심에 십자
-마커)를 그린다.
+`data/<dataset>/model.pt` 중 사전순 첫 번째를 읽어 영상을 프레임 단위로 처리하며 `tool` 박스와
+`tip` 박스(중심에 십자 마커)를 그린다. 다른 데이터셋의 모델을 쓰려면 `--weights`를 지정한다.
+
+```bash
+./baseline/cladnet/run demo --weights baseline/cladnet/data/erop/model.pt
+```
 
 | 조작                      | 동작                                                                 |
 | ------------------------- | -------------------------------------------------------------------- |

@@ -14,7 +14,7 @@ in two directions:
 Everything is measured in original frame pixels (736 x 480), not in the
 letterboxed 640 x 640 network input.
 
-Outputs, under baseline/cladnet/data/results/<dataset>/<split>/ by default:
+Outputs, under baseline/cladnet/data/<dataset>/results/<split>/ by default:
 
     summary.json   all metrics plus the run parameters
     per_tip.csv    one row per ground-truth tip (coordinates, nearest
@@ -41,12 +41,10 @@ if True:
     from common.dataset import (CLASS_NAMES, SPLITS, TIP_CLASS, TOOL_CLASS,
                                 SurgicalDetectionDataset, available_datasets,
                                 default_data_root)
-    from common.inference import DEFAULT_CONF, DEFAULT_IOU, Detector, default_model_path
+    from common.inference import (DEFAULT_CONF, DEFAULT_IOU, Detector, dataset_dir,
+                                  default_model_path)
     from common.metrics import DetectionEvaluator
     from common.tipmetrics import TipEvaluator
-
-DEFAULT_RESULTS_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "results")
 
 
 def ground_truth_boxes(labels: np.ndarray, width: int, height: int) -> np.ndarray:
@@ -62,7 +60,8 @@ def main():
     parser = argparse.ArgumentParser(description="Evaluate CLAD-Net on a tooltip-detector dataset")
     parser.add_argument("--dataset", required=True, choices=available_datasets() or None)
     parser.add_argument("--split", default="test", choices=SPLITS)
-    parser.add_argument("--model", default=default_model_path())
+    parser.add_argument("--model", default=None,
+                        help="checkpoint to evaluate (default: data/<dataset>/model.pt)")
     parser.add_argument("--data-root", default=default_data_root())
     parser.add_argument("--device", default=None)
     parser.add_argument("--conf", type=float, default=DEFAULT_CONF,
@@ -75,9 +74,11 @@ def main():
     parser.add_argument("--frame-stride", type=int, default=1,
                         help="evaluate every Nth frame of the split")
     parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument("--output-dir", default=None)
+    parser.add_argument("--output-dir", default=None,
+                        help="where summary.json goes (default: data/<dataset>/results/<split>)")
     args = parser.parse_args()
 
+    args.model = args.model or default_model_path(args.dataset)
     if not os.path.exists(args.model):
         raise SystemExit(f"checkpoint not found: {args.model}\n"
                          "train one first with scripts/train-model.py")
@@ -138,7 +139,7 @@ def main():
     detection_metrics = detection_eval.compute()
     tip_metrics = tip_eval.compute()
 
-    output_dir = args.output_dir or os.path.join(DEFAULT_RESULTS_DIR, args.dataset, args.split)
+    output_dir = args.output_dir or os.path.join(dataset_dir(args.dataset), "results", args.split)
     os.makedirs(output_dir, exist_ok=True)
 
     summary = {
