@@ -10,10 +10,10 @@ Windows에서는 `./baseline/cladnet/run` 대신 `baseline\cladnet\run.bat`을 �
 실험은 **데이터셋(`cholec80`, `erop`) 2개**로 구성되며, 학습·평가 명령도 데이터셋마다
 하나씩이다. 산출물은 데이터셋별로 나뉜다.
 
-| 데이터셋   | 학습 산출물                       | 평가 산출물                                       |
-| ---------- | --------------------------------- | ------------------------------------------------- |
-| `cholec80` | `baseline/cladnet/data/cholec80/` | `baseline/cladnet/data/cholec80/results/<split>/` |
-| `erop`     | `baseline/cladnet/data/erop/`     | `baseline/cladnet/data/erop/results/<split>/`     |
+| 데이터셋   | 학습 산출물                             | 평가 산출물                                       |
+| ---------- | --------------------------------------- | ------------------------------------------------- |
+| `cholec80` | `baseline/cladnet/data/model/cholec80/` | `baseline/cladnet/data/results/cholec80/<split>/` |
+| `erop`     | `baseline/cladnet/data/model/erop/`     | `baseline/cladnet/data/results/erop/<split>/`     |
 
 ## 1. 설치
 
@@ -36,7 +36,7 @@ ls data/dataset/erop       # annotation  images  segmentation
 
 ## 3. 학습
 
-체크포인트는 `baseline/cladnet/data/<dataset>/`에 저장된다 (`model.pt`, `model-last.pt`,
+체크포인트는 `baseline/cladnet/data/model/<dataset>/`에 저장된다 (`model.pt`, `model-last.pt`,
 `train-status.json`, `metric.csv`). 데이터셋별로 디렉터리가 분리되므로 아래 두 명령은
 서로 덮어쓰지 않는다.
 
@@ -67,13 +67,13 @@ ls data/dataset/erop       # annotation  images  segmentation
 
 ```bash
 ./baseline/cladnet/run train-model --dataset cholec80 --rm-combine mean \
-    --output-dir baseline/cladnet/data/cholec80-rm-mean
+    --output-dir baseline/cladnet/data/model/cholec80-rm-mean
 ```
 
 ## 4. 평가
 
-평가할 체크포인트는 `--dataset`에서 정해진다 (`data/<dataset>/model.pt`). 결과는
-`data/<dataset>/results/<split>/`에 `summary.json`·`per_tip.csv`로 저장된다.
+평가할 체크포인트는 `--dataset`에서 정해진다 (`data/model/<dataset>/model.pt`). 결과는
+`data/results/<dataset>/<split>/`에 `summary.json`·`per_tip.csv`로 저장된다.
 
 ```bash
 # ── cholec80 ────────────────────────────────────────────────────────────
@@ -106,8 +106,8 @@ test 스플릿 전체가 오래 걸리면 `--frame-stride`로 부분 평가할 �
 
 ```bash
 ./baseline/cladnet/run eval-model --dataset cholec80 \
-    --model baseline/cladnet/data/cholec80/model-last.pt \
-    --output-dir baseline/cladnet/data/cholec80/results/test-last
+    --model baseline/cladnet/data/model/cholec80/model-last.pt \
+    --output-dir baseline/cladnet/data/results/cholec80/test-last
 ```
 
 ## 5. 탐지 결과 시각화 (선택)
@@ -116,6 +116,6 @@ GUI는 `--dataset`을 받지 않으므로, 학습된 모델이 여러 개면 `--
 `Source` 드롭다운에서 원본 영상과 추출 프레임 디렉터리를 모두 열 수 있다.
 
 ```bash
-./baseline/cladnet/run demo --weights baseline/cladnet/data/cholec80/model.pt
-./baseline/cladnet/run demo --weights baseline/cladnet/data/erop/model.pt
+./baseline/cladnet/run demo --weights baseline/cladnet/data/model/cholec80/model.pt
+./baseline/cladnet/run demo --weights baseline/cladnet/data/model/erop/model.pt
 ```

@@ -26,19 +26,24 @@ def data_dir() -> str:
     return os.path.join(os.path.dirname(here), "data")
 
 
-def dataset_dir(dataset: str) -> str:
-    """Where one dataset's checkpoints and results live: data/<dataset>/."""
-    return os.path.join(data_dir(), dataset)
+def model_dir(dataset: str) -> str:
+    """Where one dataset's checkpoints live: data/model/<dataset>/."""
+    return os.path.join(data_dir(), "model", dataset)
+
+
+def results_dir(dataset: str) -> str:
+    """Where one dataset's evaluation output lives: data/results/<dataset>/."""
+    return os.path.join(data_dir(), "results", dataset)
 
 
 def default_model_path(dataset: str | None = None) -> str:
     """Checkpoint of one dataset, or -- for the demo, which has no --dataset --
-    the first trained one under data/, in alphabetical order."""
+    the first trained one under data/model/, in alphabetical order."""
     if dataset:
-        return os.path.join(dataset_dir(dataset), "model.pt")
-    for path in sorted(glob.glob(os.path.join(data_dir(), "*", "model.pt"))):
+        return os.path.join(model_dir(dataset), "model.pt")
+    for path in sorted(glob.glob(os.path.join(data_dir(), "model", "*", "model.pt"))):
         return path
-    return os.path.join(data_dir(), "<dataset>", "model.pt")
+    return os.path.join(data_dir(), "model", "<dataset>", "model.pt")
 
 
 def save_checkpoint(path: str, model, arch: dict, image_size: int, dataset: str,

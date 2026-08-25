@@ -2,7 +2,7 @@
 """GUI demo for the CLAD-Net surgical-tool baseline.
 
 Plays a laparoscopic video -- or a directory of extracted dataset frames --
-through a trained CLAD-Net checkpoint (`baseline/cladnet/data/<dataset>/model.pt`,
+through a trained CLAD-Net checkpoint (`baseline/cladnet/data/model/<dataset>/model.pt`,
 the alphabetically first one by default) and draws what it predicts on every
 frame:
 
@@ -431,7 +431,7 @@ def main():
         description="GUI demo for the CLAD-Net surgical tool + tip detection baseline")
     parser.add_argument("--weights", default=default_model_path(),
                         help="path to the checkpoint; with several datasets trained, "
-                             "pass data/<dataset>/model.pt explicitly "
+                             "pass data/model/<dataset>/model.pt explicitly "
                              f"(default: {default_model_path()})")
     parser.add_argument("--device", default=None,
                         help="torch device, e.g. cuda:0 or cpu (default: cuda if available)")

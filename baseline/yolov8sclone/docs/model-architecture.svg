@@ -1,0 +1,281 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1660 1160" width="1660" height="1160"
+     font-family="DejaVu Sans, Helvetica, Arial, sans-serif">
+  <title>YOLOv8s clone architecture as implemented in baseline/yolov8sclone</title>
+  <desc>CSPDarknet backbone with C2f blocks, PAN-FPN neck, and an anchor-free
+        decoupled head with Distribution Focal Loss. Shapes are for a 640x640
+        input and 2 classes. Module numbers follow the published YOLOv8 layout.</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#37474f"/>
+    </marker>
+    <marker id="arrow-td" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#3f77b5"/>
+    </marker>
+    <marker id="arrow-bu" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c2445c"/>
+    </marker>
+  </defs>
+
+  <rect width="1660" height="1160" fill="#ffffff"/>
+
+  <!-- ══ title ══════════════════════════════════════════════════════════ -->
+  <text x="40" y="42" font-size="26" font-weight="bold" fill="#1a2327">YOLOv8s clone</text>
+  <text x="272" y="42" font-size="17" fill="#546e7a">a plain-PyTorch rebuild — nothing here imports ultralytics</text>
+  <text x="40" y="66" font-size="13" fill="#78909c">11.136 M parameters at 2 classes (backbone 5.08 M · neck 3.94 M · Detect 2.12 M). Module numbers follow the published YOLOv8 layout. Shapes are C×H×W for a 640×640 input.</text>
+
+  <!-- ══ row guides ═════════════════════════════════════════════════════ -->
+  <g font-size="12" fill="#b0bec5" text-anchor="end">
+    <text x="100" y="128">stride 32</text>
+    <text x="100" y="218">stride 16</text>
+    <text x="100" y="308">stride 8</text>
+    <text x="100" y="398">stride 4</text>
+    <text x="100" y="488">stride 2</text>
+  </g>
+
+  <!-- ══ column headings ════════════════════════════════════════════════ -->
+  <g font-size="13" font-weight="bold" fill="#546e7a" text-anchor="middle">
+    <text x="245" y="92">backbone (C2f + SPPF)</text>
+    <text x="497" y="92">top-down</text>
+    <text x="742" y="92">bottom-up (PAN)</text>
+    <text x="987" y="92">Detect — anchor-free</text>
+  </g>
+
+  <!-- ══ backbone ═══════════════════════════════════════════════════════ -->
+  <g>
+    <rect x="175" y="98"  width="140" height="44" rx="6" fill="#dff0d8" stroke="#5a9e46" stroke-width="1.5"/>
+    <text x="245" y="116" font-size="13.5" font-weight="bold" text-anchor="middle" fill="#2e5322">9  SPPF  —  P5</text>
+    <text x="245" y="132" font-size="11" text-anchor="middle" fill="#4a6b3d">512 × 20 × 20</text>
+
+    <rect x="175" y="188" width="140" height="44" rx="6" fill="#dff0d8" stroke="#5a9e46" stroke-width="1.5"/>
+    <text x="245" y="206" font-size="13.5" font-weight="bold" text-anchor="middle" fill="#2e5322">6  C2f  —  P4</text>
+    <text x="245" y="222" font-size="11" text-anchor="middle" fill="#4a6b3d">256 × 40 × 40</text>
+
+    <rect x="175" y="278" width="140" height="44" rx="6" fill="#dff0d8" stroke="#5a9e46" stroke-width="1.5"/>
+    <text x="245" y="296" font-size="13.5" font-weight="bold" text-anchor="middle" fill="#2e5322">4  C2f  —  P3</text>
+    <text x="245" y="312" font-size="11" text-anchor="middle" fill="#4a6b3d">128 × 80 × 80</text>
+
+    <rect x="175" y="368" width="140" height="44" rx="6" fill="#dff0d8" stroke="#5a9e46" stroke-width="1.5"/>
+    <text x="245" y="386" font-size="13.5" font-weight="bold" text-anchor="middle" fill="#2e5322">2  C2f</text>
+    <text x="245" y="402" font-size="11" text-anchor="middle" fill="#4a6b3d">64 × 160 × 160</text>
+
+    <rect x="175" y="458" width="140" height="44" rx="6" fill="#dff0d8" stroke="#5a9e46" stroke-width="1.5"/>
+    <text x="245" y="476" font-size="13.5" font-weight="bold" text-anchor="middle" fill="#2e5322">0  Conv 3×3 s2</text>
+    <text x="245" y="492" font-size="11" text-anchor="middle" fill="#4a6b3d">32 × 320 × 320</text>
+  </g>
+
+  <rect x="40" y="548" width="180" height="46" rx="6" fill="#eceff1" stroke="#78909c" stroke-width="1.5"/>
+  <text x="130" y="567" font-size="13" font-weight="bold" text-anchor="middle" fill="#37474f">Input</text>
+  <text x="130" y="583" font-size="11" text-anchor="middle" fill="#546e7a">3 × 640 × 640</text>
+  <path d="M 130 548 L 130 520 L 245 520 L 245 502" fill="none" stroke="#37474f" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <g stroke="#37474f" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <path d="M 245 458 L 245 412"/>
+    <path d="M 245 368 L 245 322"/>
+    <path d="M 245 278 L 245 232"/>
+    <path d="M 245 188 L 245 142"/>
+  </g>
+  <g font-size="10" fill="#78909c" text-anchor="end">
+    <text x="168" y="438">1  Conv s2</text>
+    <text x="168" y="348">3  Conv s2</text>
+    <text x="168" y="258">5  Conv s2</text>
+    <text x="168" y="164">7  Conv s2</text>
+    <text x="168" y="178">8  C2f</text>
+  </g>
+
+  <!-- ══ top-down ═══════════════════════════════════════════════════════ -->
+  <rect x="420" y="188" width="155" height="44" rx="6" fill="#dce9f7" stroke="#3f77b5" stroke-width="1.5"/>
+  <text x="497" y="206" font-size="13.5" font-weight="bold" text-anchor="middle" fill="#1e3f66">12  C2f</text>
+  <text x="497" y="222" font-size="11" text-anchor="middle" fill="#34567f">256 × 40 × 40</text>
+
+  <!-- P5 -> node 11, and P4 -> node 11 -->
+  <g stroke="#3f77b5" stroke-width="1.8" fill="none" marker-end="url(#arrow-td)">
+    <path d="M 315 128 L 390 128 L 390 202 L 420 202"/>
+    <path d="M 315 214 L 420 214"/>
+  </g>
+  <text x="398" y="166" font-size="10" fill="#3f77b5">10  Upsample ×2</text>
+  <text x="398" y="180" font-size="10" fill="#3f77b5">11  Concat  768 ch</text>
+
+  <!-- ══ bottom-up / PAN ════════════════════════════════════════════════ -->
+  <g>
+    <rect x="665" y="98"  width="155" height="44" rx="6" fill="#fadadd" stroke="#c2445c" stroke-width="1.5"/>
+    <text x="742" y="116" font-size="13.5" font-weight="bold" text-anchor="middle" fill="#7a1f33">21  C2f  —  N5</text>
+    <text x="742" y="132" font-size="11" text-anchor="middle" fill="#96304a">512 × 20 × 20</text>
+
+    <rect x="665" y="188" width="155" height="44" rx="6" fill="#fadadd" stroke="#c2445c" stroke-width="1.5"/>
+    <text x="742" y="206" font-size="13.5" font-weight="bold" text-anchor="middle" fill="#7a1f33">18  C2f  —  N4</text>
+    <text x="742" y="222" font-size="11" text-anchor="middle" fill="#96304a">256 × 40 × 40</text>
+
+    <rect x="665" y="278" width="155" height="44" rx="6" fill="#fadadd" stroke="#c2445c" stroke-width="1.5"/>
+    <text x="742" y="296" font-size="13.5" font-weight="bold" text-anchor="middle" fill="#7a1f33">15  C2f  —  N3</text>
+    <text x="742" y="312" font-size="11" text-anchor="middle" fill="#96304a">128 × 80 × 80</text>
+  </g>
+
+  <!-- 12 -> node 14 -> N3, and P3 -> node 14 -->
+  <g stroke="#3f77b5" stroke-width="1.8" fill="none" marker-end="url(#arrow-td)">
+    <path d="M 530 232 L 530 292 L 665 292"/>
+    <path d="M 315 308 L 665 308"/>
+  </g>
+  <text x="540" y="262" font-size="10" fill="#3f77b5">13  Upsample ×2</text>
+  <text x="660" y="278" font-size="10" text-anchor="end" fill="#3f77b5">14  Concat  384 ch</text>
+
+  <!-- skip connections into the bottom-up path -->
+  <g stroke="#c2445c" stroke-width="1.8" fill="none" marker-end="url(#arrow-bu)">
+    <path d="M 575 196 L 665 196"/>
+    <path d="M 315 112 L 665 112"/>
+  </g>
+  <text x="620" y="184" font-size="10" text-anchor="middle" fill="#c2445c">17  Concat  384 ch</text>
+  <text x="490" y="106" font-size="10" text-anchor="middle" fill="#c2445c">20  Concat  768 ch  (skip from P5)</text>
+
+  <!-- bottom-up chain -->
+  <g stroke="#c2445c" stroke-width="2" fill="none" marker-end="url(#arrow-bu)">
+    <path d="M 700 278 L 700 232"/>
+    <path d="M 700 188 L 700 142"/>
+  </g>
+  <g font-size="10" fill="#c2445c" text-anchor="end">
+    <text x="694" y="262">16  Conv s2</text>
+    <text x="694" y="172">19  Conv s2</text>
+  </g>
+
+  <!-- ══ Detect ═════════════════════════════════════════════════════════ -->
+  <g>
+    <rect x="900" y="98"  width="175" height="44" rx="6" fill="#fde8cd" stroke="#d18114" stroke-width="1.5"/>
+    <text x="987" y="116" font-size="13" font-weight="bold" text-anchor="middle" fill="#7a4a06">22  Detect  —  P5</text>
+    <text x="987" y="132" font-size="11" text-anchor="middle" fill="#96600d">66 × 20 × 20</text>
+
+    <rect x="900" y="188" width="175" height="44" rx="6" fill="#fde8cd" stroke="#d18114" stroke-width="1.5"/>
+    <text x="987" y="206" font-size="13" font-weight="bold" text-anchor="middle" fill="#7a4a06">22  Detect  —  P4</text>
+    <text x="987" y="222" font-size="11" text-anchor="middle" fill="#96600d">66 × 40 × 40</text>
+
+    <rect x="900" y="278" width="175" height="44" rx="6" fill="#fde8cd" stroke="#d18114" stroke-width="1.5"/>
+    <text x="987" y="296" font-size="13" font-weight="bold" text-anchor="middle" fill="#7a4a06">22  Detect  —  P3</text>
+    <text x="987" y="312" font-size="11" text-anchor="middle" fill="#96600d">66 × 80 × 80</text>
+  </g>
+  <g stroke="#37474f" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <path d="M 820 120 L 900 120"/>
+    <path d="M 820 210 L 900 210"/>
+    <path d="M 820 300 L 900 300"/>
+  </g>
+  <text x="987" y="342" font-size="10.5" text-anchor="middle" fill="#96600d">66 = 4 × 16 DFL bins  +  2 classes</text>
+
+  <!-- decode -->
+  <rect x="1130" y="176" width="170" height="68" rx="8" fill="#eceff1" stroke="#78909c" stroke-width="1.5"/>
+  <text x="1215" y="198" font-size="12.5" font-weight="bold" text-anchor="middle" fill="#37474f">decode</text>
+  <text x="1215" y="216" font-size="11" text-anchor="middle" fill="#546e7a">8400 anchor points</text>
+  <text x="1215" y="232" font-size="11" text-anchor="middle" fill="#546e7a">80² + 40² + 20²</text>
+  <g stroke="#37474f" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <path d="M 1075 120 L 1102 120 L 1102 194 L 1130 194"/>
+    <path d="M 1075 210 L 1130 210"/>
+    <path d="M 1075 300 L 1102 300 L 1102 226 L 1130 226"/>
+  </g>
+
+  <!-- ══ C2f inset ══════════════════════════════════════════════════════ -->
+  <rect x="900" y="382" width="420" height="176" rx="8" fill="#f4faf1" stroke="#5a9e46" stroke-width="1.3"/>
+  <text x="916" y="404" font-size="13" font-weight="bold" fill="#2e5322">C2f — YOLOv8's CSP block (replaces YOLOv5's C3)</text>
+  <text x="916" y="426" font-size="11.5" fill="#3f5c33">Conv1×1 splits the input into two halves of c channels.</text>
+  <text x="916" y="445" font-size="11.5" fill="#3f5c33">One half is chained through n bottlenecks — and every</text>
+  <text x="916" y="464" font-size="11.5" fill="#3f5c33">intermediate output is kept, not just the last one.</text>
+  <text x="916" y="488" font-size="11.5" fill="#3f5c33">Concat[ half₀, half₁, b₁, … b_n ] → Conv1×1 → c_out</text>
+  <text x="916" y="512" font-size="11" fill="#6b8560">so the fusion convolution sees 2 + n branches, where C3</text>
+  <text x="916" y="529" font-size="11" fill="#6b8560">sees 2 — more gradient paths at the same channel width.</text>
+  <text x="916" y="550" font-size="11" fill="#6b8560">example, module 4: c = 64, n = 2, Conv1×1 fuses 256 → 128 ch</text>
+
+  <!-- ══ right sidebar ══════════════════════════════════════════════════ -->
+  <rect x="1350" y="98" width="270" height="140" rx="8" fill="#f2f8f0" stroke="#5a9e46" stroke-width="1.4"/>
+  <text x="1366" y="120" font-size="12.5" font-weight="bold" fill="#2e5322">verified against the reference</text>
+  <text x="1366" y="140" font-size="11" fill="#3f5c33">All 17 parameterised modules match</text>
+  <text x="1366" y="156" font-size="11" fill="#3f5c33">yolov8s_cholec80.pt exactly at nc = 7:</text>
+  <text x="1366" y="178" font-size="12" font-weight="bold" fill="#2e5322">11,138,309 = 11,138,309</text>
+  <text x="1366" y="199" font-size="11" fill="#6b8560">That checkpoint needs ultralytics to</text>
+  <text x="1366" y="214" font-size="11" fill="#6b8560">unpickle, so its weights are not reused —</text>
+  <text x="1366" y="229" font-size="11" fill="#6b8560">training here starts from scratch.</text>
+
+  <rect x="1350" y="252" width="270" height="132" rx="8" fill="#f7f9fa" stroke="#90a4ae" stroke-width="1.2"/>
+  <text x="1366" y="274" font-size="12" font-weight="bold" fill="#37474f">two detection classes</text>
+  <rect x="1366" y="287" width="14" height="14" rx="3" fill="#3CB44B"/>
+  <text x="1388" y="299" font-size="11.5" fill="#37474f">tool — annotated bounding box</text>
+  <rect x="1366" y="311" width="14" height="14" rx="3" fill="#E6194B"/>
+  <text x="1388" y="323" font-size="11.5" fill="#37474f">tip — 32 × 32 px box on the tip</text>
+  <text x="1366" y="347" font-size="11" fill="#78909c">32 px is the default because a tip box must</text>
+  <text x="1366" y="362" font-size="11" fill="#78909c">hold more anchor points than the assigner's</text>
+  <text x="1366" y="377" font-size="11" fill="#78909c">topk = 10; at 16 px the median is only 4.</text>
+
+  <g transform="translate(1350, 394)">
+    <rect x="0" y="0" width="270" height="164" rx="8" fill="#f7f9fa" stroke="#90a4ae" stroke-width="1.2"/>
+    <text x="16" y="22" font-size="12" font-weight="bold" fill="#37474f">legend</text>
+    <rect x="16" y="33" width="16" height="14" rx="3" fill="#dff0d8" stroke="#5a9e46"/>
+    <text x="42" y="45" font-size="11.5" fill="#37474f">backbone feature</text>
+    <rect x="16" y="55" width="16" height="14" rx="3" fill="#dce9f7" stroke="#3f77b5"/>
+    <text x="42" y="67" font-size="11.5" fill="#37474f">top-down feature</text>
+    <rect x="16" y="77" width="16" height="14" rx="3" fill="#fadadd" stroke="#c2445c"/>
+    <text x="42" y="89" font-size="11.5" fill="#37474f">bottom-up (PAN) feature</text>
+    <rect x="16" y="99" width="16" height="14" rx="3" fill="#fde8cd" stroke="#d18114"/>
+    <text x="42" y="111" font-size="11.5" fill="#37474f">Detect head</text>
+    <text x="16" y="136" font-size="11" fill="#78909c">There is no objectness branch and there</text>
+    <text x="16" y="151" font-size="11" fill="#78909c">are no anchor boxes — see the panels below.</text>
+  </g>
+
+  <!-- ══ divider ════════════════════════════════════════════════════════ -->
+  <line x1="40" y1="600" x2="1620" y2="600" stroke="#cfd8dc" stroke-width="1"/>
+  <text x="40" y="632" font-size="17" font-weight="bold" fill="#1a2327">What makes it YOLOv8 and not YOLOv5</text>
+  <text x="450" y="632" font-size="13" fill="#78909c">the head predicts a distribution instead of an offset, and the labels are assigned dynamically</text>
+
+  <!-- ══ head panel ═════════════════════════════════════════════════════ -->
+  <rect x="40" y="652" width="790" height="440" rx="10" fill="#fffaf2" stroke="#d18114" stroke-width="1.5"/>
+  <text x="60" y="680" font-size="15" font-weight="bold" fill="#7a4a06">Detect — anchor-free head with Distribution Focal Loss</text>
+
+  <rect x="60" y="700" width="330" height="112" rx="8" fill="#fdf2e2" stroke="#d18114" stroke-width="1.3"/>
+  <text x="76" y="722" font-size="12.5" font-weight="bold" fill="#7a4a06">box branch  (hidden 64 ch)</text>
+  <text x="76" y="744" font-size="11.5" fill="#5d4037">Conv3×3 → Conv3×3 → Conv1×1</text>
+  <text x="76" y="766" font-size="11.5" fill="#5d4037">out: 4 sides × 16 bins = 64 logits</text>
+  <text x="76" y="790" font-size="11" fill="#8d6e63">l, t, r, b — distances from the anchor point</text>
+
+  <rect x="440" y="700" width="330" height="112" rx="8" fill="#fdf2e2" stroke="#d18114" stroke-width="1.3"/>
+  <text x="456" y="722" font-size="12.5" font-weight="bold" fill="#7a4a06">class branch  (hidden 128 ch)</text>
+  <text x="456" y="744" font-size="11.5" fill="#5d4037">Conv3×3 → Conv3×3 → Conv1×1</text>
+  <text x="456" y="766" font-size="11.5" fill="#5d4037">out: 2 logits — tool, tip</text>
+  <text x="456" y="790" font-size="11" fill="#8d6e63">the class score *is* the confidence; there is</text>
+  <text x="456" y="806" font-size="11" fill="#8d6e63">no objectness term to multiply in</text>
+
+  <rect x="60" y="836" width="710" height="128" rx="8" fill="#ffffff" stroke="#d18114" stroke-width="1.2"/>
+  <text x="76" y="858" font-size="12.5" font-weight="bold" fill="#7a4a06">DFL — turning 16 logits per side into one distance</text>
+  <text x="76" y="882" font-size="12" fill="#5d4037">distance = Σᵢ  i · softmax(logits)ᵢ   —   i = 0 … 15, in grid units</text>
+  <text x="76" y="906" font-size="12" fill="#5d4037">box  =  dist2bbox( distance, anchor point ) × stride</text>
+  <text x="76" y="932" font-size="11" fill="#8d6e63">anchor point = cell centre + 0.5 — a point, not a box. Nothing in the model depends on</text>
+  <text x="76" y="948" font-size="11" fill="#8d6e63">a prior box shape, so there are no anchors to tune for this dataset.</text>
+
+  <text x="60" y="998" font-size="12" fill="#7a4a06">Predicting a distribution rather than a single number lets the head express uncertainty about a</text>
+  <text x="60" y="1016" font-size="12" fill="#7a4a06">blurred or occluded edge: the softmax spreads out instead of committing to one wrong distance.</text>
+  <text x="60" y="1044" font-size="11" fill="#a1887f">Li et al., "Generalized Focal Loss", NeurIPS 2020</text>
+  <text x="60" y="1072" font-size="11" fill="#a1887f">8400 = 80² + 40² + 20² anchor points per image at 640 × 640</text>
+
+  <!-- ══ assigner / loss panel ══════════════════════════════════════════ -->
+  <rect x="860" y="652" width="760" height="440" rx="10" fill="#fbf9fd" stroke="#7b52ab" stroke-width="1.5"/>
+  <text x="880" y="680" font-size="15" font-weight="bold" fill="#432d63">TaskAlignedAssigner — dynamic label assignment</text>
+
+  <rect x="880" y="700" width="720" height="124" rx="8" fill="#f2ecf8" stroke="#7b52ab" stroke-width="1.3"/>
+  <text x="896" y="724" font-size="13" font-weight="bold" fill="#432d63">alignment  =  class score ^ 0.5  ×  CIoU ^ 6</text>
+  <text x="896" y="750" font-size="11.5" fill="#5c3f80">candidates — anchor points whose centre falls inside the ground-truth box</text>
+  <text x="896" y="770" font-size="11.5" fill="#5c3f80">positives  — the topk = 10 best-aligned candidates of each box</text>
+  <text x="896" y="790" font-size="11.5" fill="#5c3f80">conflicts  — an anchor claimed by several boxes goes to the one it overlaps most</text>
+  <text x="896" y="812" font-size="11.5" fill="#5c3f80">target     — the rescaled alignment becomes the *soft* class target, not 0/1</text>
+  <text x="880" y="846" font-size="11" fill="#8d78a1">Which predictions are positive is therefore decided by how well the model is currently doing,</text>
+  <text x="880" y="864" font-size="11" fill="#8d78a1">not by the shape of the box — the opposite of YOLOv5's ≤ 4× anchor-ratio matching.</text>
+
+  <rect x="880" y="884" width="720" height="128" rx="8" fill="#ffffff" stroke="#7b52ab" stroke-width="1.2"/>
+  <text x="896" y="908" font-size="13" font-weight="bold" fill="#432d63">Loss  =  7.5 · L_box  +  0.5 · L_cls  +  1.5 · L_dfl</text>
+  <text x="896" y="932" font-size="11.5" fill="#5c3f80">L_box  =  1 − CIoU</text>
+  <text x="896" y="952" font-size="11.5" fill="#5c3f80">L_cls  =  BCE against the alignment score  (not against 0/1)</text>
+  <text x="896" y="972" font-size="11.5" fill="#5c3f80">L_dfl  =  cross-entropy toward the two bins bracketing the true distance</text>
+  <text x="896" y="996" font-size="11" fill="#8d78a1">No objectness term appears anywhere in the loss.</text>
+
+  <text x="880" y="1042" font-size="11.5" fill="#c2445c">Implementation note: the loss runs in fp32 even under AMP. In half precision the CIoU box-area products</text>
+  <text x="880" y="1060" font-size="11.5" fill="#c2445c">overflow (a 640 px box has area 4 × 10⁵ against a 65504 ceiling) and the whole loss goes NaN within ~20 steps.</text>
+
+  <!-- ══ footer ═════════════════════════════════════════════════════════ -->
+  <text x="40" y="1136" font-size="11" fill="#90a4ae">Architecture: Ultralytics YOLOv8 · reference checkpoint: cesaraha/yolov8s-surgical-instrument-detection-cholec80 · assignment: Feng et al., "TOOD", ICCV 2021 — this is an independent reimplementation, not a fork.</text>
+</svg>

@@ -1,0 +1,383 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1660 1120" width="1660" height="1120"
+     font-family="DejaVu Sans, Helvetica, Arial, sans-serif">
+  <title>CLAD-Net architecture as implemented in baseline/cladnet</title>
+  <desc>CSPDarknet53 backbone, cross-layer aggregation attention neck (RM + CAM),
+        and an anchor-based decoupled head. Shapes are for a 640x640 input,
+        2 classes and 3 anchors per level.</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#37474f"/>
+    </marker>
+    <marker id="arrow-lat" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#e07b00"/>
+    </marker>
+    <marker id="arrow-dim" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#90a4ae"/>
+    </marker>
+  </defs>
+
+  <rect width="1660" height="1120" fill="#ffffff"/>
+
+  <!-- ══ title ══════════════════════════════════════════════════════════ -->
+  <text x="40" y="42" font-size="26" font-weight="bold" fill="#1a2327">CLAD-Net</text>
+  <text x="205" y="42" font-size="17" fill="#546e7a">cross-layer aggregation attention network — as implemented in baseline/cladnet</text>
+  <text x="40" y="66" font-size="13" fill="#78909c">7.488 M parameters (backbone 4.17 M · neck 2.28 M · heads 1.04 M) — the paper reports 7.5 M. Shapes are C×H×W for a 640×640 input, 2 classes, 3 anchors per level.</text>
+
+  <!-- ══ row guides ═════════════════════════════════════════════════════ -->
+  <g font-size="12" fill="#b0bec5" text-anchor="end">
+    <text x="100" y="128">stride 32</text>
+    <text x="100" y="218">stride 16</text>
+    <text x="100" y="308">stride 8</text>
+    <text x="100" y="398">stride 4</text>
+    <text x="100" y="488">stride 2</text>
+  </g>
+
+  <!-- ══ column headings ════════════════════════════════════════════════ -->
+  <g font-size="13" font-weight="bold" fill="#546e7a" text-anchor="middle">
+    <text x="240" y="92">CSPDarknet53 backbone</text>
+    <text x="470" y="92">top-down (FPN)</text>
+    <text x="672" y="92">lateral + RM</text>
+    <text x="840" y="92">bottom-up + CAM</text>
+    <text x="1075" y="92">decoupled head</text>
+  </g>
+
+  <!-- ══ backbone column ════════════════════════════════════════════════ -->
+  <g>
+    <rect x="175" y="98"  width="130" height="44" rx="6" fill="#dff0d8" stroke="#5a9e46" stroke-width="1.5"/>
+    <text x="240" y="116" font-size="14" font-weight="bold" text-anchor="middle" fill="#2e5322">C5</text>
+    <text x="240" y="132" font-size="11" text-anchor="middle" fill="#4a6b3d">512 × 20 × 20</text>
+
+    <rect x="175" y="188" width="130" height="44" rx="6" fill="#dff0d8" stroke="#5a9e46" stroke-width="1.5"/>
+    <text x="240" y="206" font-size="14" font-weight="bold" text-anchor="middle" fill="#2e5322">C4</text>
+    <text x="240" y="222" font-size="11" text-anchor="middle" fill="#4a6b3d">256 × 40 × 40</text>
+
+    <rect x="175" y="278" width="130" height="44" rx="6" fill="#dff0d8" stroke="#5a9e46" stroke-width="1.5"/>
+    <text x="240" y="296" font-size="14" font-weight="bold" text-anchor="middle" fill="#2e5322">C3</text>
+    <text x="240" y="312" font-size="11" text-anchor="middle" fill="#4a6b3d">128 × 80 × 80</text>
+
+    <rect x="175" y="368" width="130" height="44" rx="6" fill="#dff0d8" stroke="#5a9e46" stroke-width="1.5"/>
+    <text x="240" y="386" font-size="14" font-weight="bold" text-anchor="middle" fill="#2e5322">C2</text>
+    <text x="240" y="402" font-size="11" text-anchor="middle" fill="#4a6b3d">64 × 160 × 160</text>
+
+    <rect x="175" y="458" width="130" height="44" rx="6" fill="#eef6ea" stroke="#8ab97a" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <text x="240" y="476" font-size="14" font-weight="bold" text-anchor="middle" fill="#4a6b3d">C1</text>
+    <text x="240" y="492" font-size="11" text-anchor="middle" fill="#6b8560">32 × 320 × 320</text>
+  <text x="318" y="484" font-size="10" fill="#8ab97a">not used by the neck</text>
+  </g>
+
+  <!-- input -->
+  <rect x="40" y="548" width="180" height="46" rx="6" fill="#eceff1" stroke="#78909c" stroke-width="1.5"/>
+  <text x="130" y="567" font-size="13" font-weight="bold" text-anchor="middle" fill="#37474f">Input</text>
+  <text x="130" y="583" font-size="11" text-anchor="middle" fill="#546e7a">3 × 640 × 640</text>
+  <path d="M 130 548 L 130 505 L 175 505 L 175 490" fill="none" stroke="#37474f" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- backbone chain, bottom to top -->
+  <g stroke="#37474f" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <path d="M 240 458 L 240 412"/>
+    <path d="M 240 368 L 240 322"/>
+    <path d="M 240 278 L 240 232"/>
+    <path d="M 240 188 L 240 142"/>
+  </g>
+  <g font-size="10" fill="#78909c" text-anchor="end">
+    <text x="168" y="438">Conv s2 + C3</text>
+    <text x="168" y="348">Conv s2 + C3</text>
+    <text x="168" y="258">Conv s2 + C3</text>
+    <text x="168" y="168">Conv s2 + C3</text>
+    <text x="168" y="182">+ SPPF</text>
+  </g>
+
+  <!-- ══ top-down column ════════════════════════════════════════════════ -->
+  <g>
+    <rect x="405" y="98"  width="130" height="44" rx="6" fill="#dce9f7" stroke="#3f77b5" stroke-width="1.5"/>
+    <text x="470" y="116" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e3f66">P5</text>
+    <text x="470" y="132" font-size="11" text-anchor="middle" fill="#34567f">112 × 20 × 20</text>
+
+    <rect x="405" y="188" width="130" height="44" rx="6" fill="#dce9f7" stroke="#3f77b5" stroke-width="1.5"/>
+    <text x="470" y="206" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e3f66">P4</text>
+    <text x="470" y="222" font-size="11" text-anchor="middle" fill="#34567f">112 × 40 × 40</text>
+
+    <rect x="405" y="278" width="130" height="44" rx="6" fill="#dce9f7" stroke="#3f77b5" stroke-width="1.5"/>
+    <text x="470" y="296" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e3f66">P3</text>
+    <text x="470" y="312" font-size="11" text-anchor="middle" fill="#34567f">112 × 80 × 80</text>
+
+    <rect x="405" y="368" width="130" height="44" rx="6" fill="#dce9f7" stroke="#3f77b5" stroke-width="1.5"/>
+    <text x="470" y="386" font-size="14" font-weight="bold" text-anchor="middle" fill="#1e3f66">P2</text>
+    <text x="470" y="402" font-size="11" text-anchor="middle" fill="#34567f">112 × 160 × 160</text>
+  </g>
+
+  <!-- C -> P alignment arrows -->
+  <g stroke="#37474f" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <path d="M 305 120 L 405 120"/>
+    <path d="M 305 210 L 405 210"/>
+    <path d="M 305 300 L 405 300"/>
+    <path d="M 305 390 L 405 390"/>
+  </g>
+  <text x="355" y="113" font-size="10" text-anchor="middle" fill="#78909c">1×1</text>
+  <text x="355" y="203" font-size="10" text-anchor="middle" fill="#78909c">1×1</text>
+  <text x="355" y="293" font-size="10" text-anchor="middle" fill="#78909c">1×1</text>
+  <text x="355" y="383" font-size="10" text-anchor="middle" fill="#78909c">1×1</text>
+
+  <!-- top-down upsample chain -->
+  <g stroke="#3f77b5" stroke-width="2" fill="none" marker-end="url(#arrow)">
+    <path d="M 380 142 L 380 188" transform="translate(0,0)"/>
+    <path d="M 380 232 L 380 278"/>
+    <path d="M 380 322 L 380 368"/>
+  </g>
+  <g font-size="10" fill="#3f77b5" text-anchor="end">
+    <text x="374" y="170">upsample ⊕ C3 block</text>
+    <text x="374" y="260">upsample ⊕ C3 block</text>
+    <text x="374" y="350">upsample ⊕ C3 block</text>
+  </g>
+
+  <!-- ══ lateral (depthwise separable) + RM ═════════════════════════════ -->
+  <g>
+    <rect x="620" y="98"  width="104" height="44" rx="6" fill="#e8ddf2" stroke="#7b52ab" stroke-width="1.5"/>
+    <text x="672" y="116" font-size="13" font-weight="bold" text-anchor="middle" fill="#432d63">RM</text>
+    <text x="672" y="132" font-size="11" text-anchor="middle" fill="#5c3f80">224 × 20 × 20</text>
+
+    <rect x="620" y="188" width="104" height="44" rx="6" fill="#e8ddf2" stroke="#7b52ab" stroke-width="1.5"/>
+    <text x="672" y="206" font-size="13" font-weight="bold" text-anchor="middle" fill="#432d63">RM</text>
+    <text x="672" y="222" font-size="11" text-anchor="middle" fill="#5c3f80">224 × 40 × 40</text>
+
+    <rect x="620" y="278" width="104" height="44" rx="6" fill="#e8ddf2" stroke="#7b52ab" stroke-width="1.5"/>
+    <text x="672" y="296" font-size="13" font-weight="bold" text-anchor="middle" fill="#432d63">RM</text>
+    <text x="672" y="312" font-size="11" text-anchor="middle" fill="#5c3f80">224 × 80 × 80</text>
+  </g>
+
+  <!-- P -> RM -->
+  <g stroke="#3f77b5" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <path d="M 535 128 L 620 128"/>
+    <path d="M 535 218 L 620 218"/>
+    <path d="M 535 308 L 620 308"/>
+  </g>
+
+  <!-- lateral C3/C4/C5 -> RM, routed under each row -->
+  <g stroke="#e07b00" stroke-width="1.8" fill="none" marker-end="url(#arrow-lat)" stroke-dasharray="6 3">
+    <path d="M 305 134 L 340 134 L 340 160 L 600 160 L 600 112 L 620 112"/>
+    <path d="M 305 224 L 340 224 L 340 250 L 600 250 L 600 202 L 620 202"/>
+    <path d="M 305 314 L 340 314 L 340 340 L 600 340 L 600 292 L 620 292"/>
+  </g>
+  <g font-size="10" fill="#e07b00" text-anchor="middle">
+    <text x="470" y="153">depthwise separable conv</text>
+    <text x="470" y="243">depthwise separable conv</text>
+    <text x="470" y="333">depthwise separable conv</text>
+  </g>
+
+  <!-- ══ bottom-up + CAM ════════════════════════════════════════════════ -->
+  <g>
+    <rect x="790" y="98"  width="130" height="44" rx="6" fill="#fadadd" stroke="#c2445c" stroke-width="1.5"/>
+    <text x="855" y="116" font-size="14" font-weight="bold" text-anchor="middle" fill="#7a1f33">N5 = CAM</text>
+    <text x="855" y="132" font-size="11" text-anchor="middle" fill="#96304a">112 × 20 × 20</text>
+
+    <rect x="790" y="188" width="130" height="44" rx="6" fill="#fadadd" stroke="#c2445c" stroke-width="1.5"/>
+    <text x="855" y="206" font-size="14" font-weight="bold" text-anchor="middle" fill="#7a1f33">N4 = CAM</text>
+    <text x="855" y="222" font-size="11" text-anchor="middle" fill="#96304a">112 × 40 × 40</text>
+
+    <rect x="790" y="278" width="130" height="44" rx="6" fill="#fadadd" stroke="#c2445c" stroke-width="1.5"/>
+    <text x="855" y="296" font-size="14" font-weight="bold" text-anchor="middle" fill="#7a1f33">N3 = CAM</text>
+    <text x="855" y="312" font-size="11" text-anchor="middle" fill="#96304a">112 × 80 × 80</text>
+
+    <rect x="790" y="368" width="130" height="44" rx="6" fill="#dce9f7" stroke="#3f77b5" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <text x="855" y="386" font-size="13" font-weight="bold" text-anchor="middle" fill="#1e3f66">N2 = P2</text>
+    <text x="855" y="402" font-size="11" text-anchor="middle" fill="#34567f">112 × 160 × 160</text>
+  </g>
+
+  <!-- RM -> concat -> CAM -->
+  <g stroke="#7b52ab" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <path d="M 724 120 L 790 120"/>
+    <path d="M 724 210 L 790 210"/>
+    <path d="M 724 300 L 790 300"/>
+  </g>
+
+  <!-- P2 -> N2 -->
+  <path d="M 535 390 L 790 390" fill="none" stroke="#90a4ae" stroke-width="1.6"
+        stroke-dasharray="5 4" marker-end="url(#arrow-dim)"/>
+  <text x="662" y="379" font-size="10" text-anchor="middle" fill="#90a4ae">seeds the bottom-up path only</text>
+
+  <!-- bottom-up downsample chain -->
+  <g stroke="#c2445c" stroke-width="2" fill="none" marker-end="url(#arrow)">
+    <path d="M 762 368 L 762 322"/>
+    <path d="M 762 278 L 762 232"/>
+    <path d="M 762 188 L 762 142"/>
+  </g>
+  <g font-size="10" fill="#c2445c" text-anchor="end">
+    <text x="756" y="352">Conv s2 ⊕ RM</text>
+    <text x="756" y="262">Conv s2 ⊕ RM</text>
+    <text x="756" y="172">Conv s2 ⊕ RM</text>
+  </g>
+  <text x="855" y="345" font-size="10" text-anchor="middle" fill="#96304a">concat 336 ch → CAM → 112 ch</text>
+
+  <!-- ══ head ═══════════════════════════════════════════════════════════ -->
+  <g>
+    <rect x="985" y="98"  width="180" height="44" rx="6" fill="#fde8cd" stroke="#d18114" stroke-width="1.5"/>
+    <text x="1075" y="116" font-size="13" font-weight="bold" text-anchor="middle" fill="#7a4a06">Decoupled head</text>
+    <text x="1075" y="132" font-size="11" text-anchor="middle" fill="#96600d">3 × 20 × 20 × 7</text>
+
+    <rect x="985" y="188" width="180" height="44" rx="6" fill="#fde8cd" stroke="#d18114" stroke-width="1.5"/>
+    <text x="1075" y="206" font-size="13" font-weight="bold" text-anchor="middle" fill="#7a4a06">Decoupled head</text>
+    <text x="1075" y="222" font-size="11" text-anchor="middle" fill="#96600d">3 × 40 × 40 × 7</text>
+
+    <rect x="985" y="278" width="180" height="44" rx="6" fill="#fde8cd" stroke="#d18114" stroke-width="1.5"/>
+    <text x="1075" y="296" font-size="13" font-weight="bold" text-anchor="middle" fill="#7a4a06">Decoupled head</text>
+    <text x="1075" y="312" font-size="11" text-anchor="middle" fill="#96600d">3 × 80 × 80 × 7</text>
+  </g>
+  <g stroke="#37474f" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <path d="M 920 120 L 985 120"/>
+    <path d="M 920 210 L 985 210"/>
+    <path d="M 920 300 L 985 300"/>
+  </g>
+
+  <!-- head internals -->
+  <rect x="985" y="360" width="380" height="128" rx="8" fill="#fffaf2" stroke="#d18114" stroke-width="1.2"/>
+  <text x="1000" y="381" font-size="12" font-weight="bold" fill="#7a4a06">inside one head (hidden 96 ch)</text>
+  <text x="1000" y="402" font-size="11.5" fill="#5d4037">stem Conv 1×1  →  two parallel branches of Conv 3×3 ×2</text>
+  <text x="1000" y="424" font-size="11.5" fill="#5d4037">reg branch  →  Reg 3×4  ·  Obj 3×1</text>
+  <text x="1000" y="443" font-size="11.5" fill="#5d4037">cls branch  →  Cls 3×2   (tool, tip)</text>
+  <text x="1000" y="468" font-size="11" fill="#8d6e63">anchor-based: 3 anchors per level, decoded as YOLOv5 does</text>
+
+  <!-- outputs -->
+  <g>
+    <rect x="1215" y="98" width="150" height="44" rx="6" fill="#eceff1" stroke="#78909c" stroke-width="1.5"/>
+    <text x="1290" y="116" font-size="12.5" font-weight="bold" text-anchor="middle" fill="#37474f">Obj / Reg / Cls</text>
+    <text x="1290" y="132" font-size="11" text-anchor="middle" fill="#546e7a">per anchor, per cell</text>
+  </g>
+  <path d="M 1165 120 L 1215 120" fill="none" stroke="#37474f" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <path d="M 1165 210 L 1195 210 L 1195 142" fill="none" stroke="#37474f" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <path d="M 1165 300 L 1205 300 L 1205 148 L 1215 148" fill="none" stroke="#37474f" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- prediction box -->
+  <rect x="1395" y="98" width="230" height="130" rx="8" fill="#f7f9fa" stroke="#90a4ae" stroke-width="1.2"/>
+  <text x="1410" y="119" font-size="12" font-weight="bold" fill="#37474f">two detection classes</text>
+  <rect x="1410" y="132" width="14" height="14" rx="3" fill="#3CB44B"/>
+  <text x="1432" y="144" font-size="11.5" fill="#37474f">tool — annotated bounding box</text>
+  <rect x="1410" y="156" width="14" height="14" rx="3" fill="#E6194B"/>
+  <text x="1432" y="168" font-size="11.5" fill="#37474f">tip — 10 × 10 px box on the tip</text>
+  <text x="1410" y="192" font-size="11" fill="#78909c">the tip box centre is the predicted</text>
+  <text x="1410" y="207" font-size="11" fill="#78909c">tip coordinate, so one detector</text>
+  <text x="1410" y="222" font-size="11" fill="#78909c">yields both AP and hit-rate @ N px</text>
+
+  <!-- legend -->
+  <g transform="translate(1395, 248)">
+    <rect x="0" y="0" width="230" height="176" rx="8" fill="#f7f9fa" stroke="#90a4ae" stroke-width="1.2"/>
+    <text x="15" y="21" font-size="12" font-weight="bold" fill="#37474f">legend</text>
+    <rect x="15" y="32" width="16" height="14" rx="3" fill="#dff0d8" stroke="#5a9e46"/>
+    <text x="40" y="44" font-size="11.5" fill="#37474f">backbone feature</text>
+    <rect x="15" y="54" width="16" height="14" rx="3" fill="#dce9f7" stroke="#3f77b5"/>
+    <text x="40" y="66" font-size="11.5" fill="#37474f">top-down feature</text>
+    <rect x="15" y="76" width="16" height="14" rx="3" fill="#e8ddf2" stroke="#7b52ab"/>
+    <text x="40" y="88" font-size="11.5" fill="#37474f">RM — refinement module</text>
+    <rect x="15" y="98" width="16" height="14" rx="3" fill="#fadadd" stroke="#c2445c"/>
+    <text x="40" y="110" font-size="11.5" fill="#37474f">CAM — composite attention</text>
+    <rect x="15" y="120" width="16" height="14" rx="3" fill="#fde8cd" stroke="#d18114"/>
+    <text x="40" y="132" font-size="11.5" fill="#37474f">detection head</text>
+    <line x1="15" y1="150" x2="33" y2="150" stroke="#e07b00" stroke-width="1.8" stroke-dasharray="6 3"/>
+    <text x="40" y="154" font-size="11.5" fill="#37474f">cross-layer lateral</text>
+  </g>
+
+  <!-- ══ divider ════════════════════════════════════════════════════════ -->
+  <line x1="40" y1="612" x2="1620" y2="612" stroke="#cfd8dc" stroke-width="1"/>
+  <text x="40" y="644" font-size="17" font-weight="bold" fill="#1a2327">The two modules the paper contributes</text>
+  <text x="430" y="644" font-size="13" fill="#78909c">reconstructed from Figs. 2–3; every unstated choice is marked PAPER: in common/modules.py</text>
+
+  <!-- ══ CAM panel ══════════════════════════════════════════════════════ -->
+  <rect x="40" y="664" width="790" height="416" rx="10" fill="#fffafb" stroke="#c2445c" stroke-width="1.5"/>
+  <text x="60" y="692" font-size="15" font-weight="bold" fill="#7a1f33">CAM — Composite Attention Mechanism</text>
+  <text x="60" y="712" font-size="12" fill="#96304a">F_y = Conv1×1( Concat[ AAB(F_x) , MSAB(F_x) ] )   —   paper Eq. 1</text>
+
+  <rect x="60" y="732" width="88" height="40" rx="6" fill="#eceff1" stroke="#78909c" stroke-width="1.4"/>
+  <text x="104" y="757" font-size="14" text-anchor="middle" fill="#37474f">F_x</text>
+
+  <!-- AAB -->
+  <rect x="196" y="726" width="440" height="112" rx="8" fill="#fdeef1" stroke="#c2445c" stroke-width="1.3"/>
+  <text x="212" y="748" font-size="13" font-weight="bold" fill="#7a1f33">AAB — adaptive attention branching</text>
+  <text x="212" y="770" font-size="11.5" fill="#5d2130">AdaptiveAvgPool → 1, 2, 3, 6   (four scales, each Conv1×1 then upsampled back)</text>
+  <text x="212" y="789" font-size="11.5" fill="#5d2130">Concat → Conv1×1 → BN → ReLU → Conv3×3 → Sigmoid  =  f_a</text>
+  <text x="212" y="812" font-size="11.5" fill="#5d2130">F₁ = f_a ⊗ F_x  —  handles instruments of very different sizes</text>
+  <text x="212" y="830" font-size="10.5" fill="#a1707d">pool sizes are not stated in the paper; PSPNet's 1/2/3/6 are used</text>
+
+  <!-- MSAB -->
+  <rect x="196" y="852" width="440" height="112" rx="8" fill="#fdeef1" stroke="#c2445c" stroke-width="1.3"/>
+  <text x="212" y="874" font-size="13" font-weight="bold" fill="#7a1f33">MSAB — multi-scale attention branching</text>
+  <text x="212" y="896" font-size="11.5" fill="#5d2130">GCA:  GAP → Conv1×1 → BN → ReLU → Conv1×1  =  f_g   (C × 1 × 1)</text>
+  <text x="212" y="915" font-size="11.5" fill="#5d2130">LCA:        Conv1×1 → BN → ReLU → Conv1×1  =  f_l   (C × H × W)</text>
+  <text x="212" y="938" font-size="11.5" fill="#5d2130">F₂ = σ(f_g + f_l) ⊗ F_x  —  handles low foreground/background contrast</text>
+  <text x="212" y="956" font-size="10.5" fill="#a1707d">one weight per channel, plus one per channel per pixel</text>
+
+  <g stroke="#c2445c" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <path d="M 148 752 L 172 752 L 172 782 L 196 782"/>
+    <path d="M 148 752 L 172 752 L 172 908 L 196 908"/>
+    <path d="M 636 782 L 690 782 L 690 838 L 706 838"/>
+    <path d="M 636 908 L 690 908 L 690 872 L 706 872"/>
+  </g>
+
+  <rect x="706" y="826" width="46" height="58" rx="6" fill="#eceff1" stroke="#78909c" stroke-width="1.4"/>
+  <text x="729" y="850" font-size="11" text-anchor="middle" fill="#37474f">con-</text>
+  <text x="729" y="866" font-size="11" text-anchor="middle" fill="#37474f">cat</text>
+  <path d="M 752 855 L 776 855" fill="none" stroke="#c2445c" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <rect x="776" y="826" width="48" height="58" rx="6" fill="#fadadd" stroke="#c2445c" stroke-width="1.4"/>
+  <text x="800" y="850" font-size="11" text-anchor="middle" fill="#7a1f33">1×1</text>
+  <text x="800" y="866" font-size="11.5" font-weight="bold" text-anchor="middle" fill="#7a1f33">F_y</text>
+  <text x="60" y="1000" font-size="11" fill="#96304a">In the neck, CAM also does the channel reduction: concat[ down(N), RM ] 336 ch → F_y 112 ch.</text>
+  <text x="60" y="1022" font-size="11" fill="#96304a">Its trailing 1×1 is the paper's own Conv1, so no block the paper does not describe is inserted.</text>
+  <text x="60" y="1050" font-size="11" fill="#a1707d">⊗ element-wise multiply · σ sigmoid · GAP global average pool</text>
+
+  <!-- ══ RM panel ═══════════════════════════════════════════════════════ -->
+  <rect x="860" y="664" width="760" height="416" rx="10" fill="#fbf9fd" stroke="#7b52ab" stroke-width="1.5"/>
+  <text x="880" y="692" font-size="15" font-weight="bold" fill="#432d63">RM — Refinement Module</text>
+  <text x="880" y="712" font-size="12" fill="#5c3f80">F_x = Concat[ ω · F_a , (1 − ω) · F_b ]   —   paper Eq. 2</text>
+
+  <rect x="880" y="744" width="92" height="42" rx="6" fill="#eef6ea" stroke="#5a9e46" stroke-width="1.4"/>
+  <text x="926" y="763" font-size="13" text-anchor="middle" fill="#2e5322">F_a</text>
+  <text x="926" y="778" font-size="10" text-anchor="middle" fill="#4a6b3d">lateral (C3/C4/C5)</text>
+
+  <rect x="880" y="880" width="92" height="42" rx="6" fill="#dce9f7" stroke="#3f77b5" stroke-width="1.4"/>
+  <text x="926" y="899" font-size="13" text-anchor="middle" fill="#1e3f66">F_b</text>
+  <text x="926" y="914" font-size="10" text-anchor="middle" fill="#34567f">top-down (P3/P4/P5)</text>
+
+  <rect x="1010" y="738" width="330" height="54" rx="6" fill="#f2ecf8" stroke="#7b52ab" stroke-width="1.3"/>
+  <text x="1025" y="759" font-size="11.5" fill="#432d63">GAP → Conv1×1 → SiLU → Conv1×1 → Sigmoid</text>
+  <text x="1025" y="779" font-size="11.5" fill="#5c3f80">= ω₁    (one weight per channel)</text>
+
+  <rect x="1010" y="874" width="330" height="54" rx="6" fill="#f2ecf8" stroke="#7b52ab" stroke-width="1.3"/>
+  <text x="1025" y="895" font-size="11.5" fill="#432d63">GAP → Conv1×1 → SiLU → Conv1×1 → Sigmoid</text>
+  <text x="1025" y="915" font-size="11.5" fill="#5c3f80">= ω₂    (one weight per channel)</text>
+
+  <g stroke="#7b52ab" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <path d="M 972 765 L 1010 765"/>
+    <path d="M 972 901 L 1010 901"/>
+    <path d="M 1340 765 L 1378 765 L 1378 820"/>
+    <path d="M 1340 901 L 1378 901 L 1378 846"/>
+  </g>
+
+  <circle cx="1378" cy="833" r="15" fill="#ffffff" stroke="#7b52ab" stroke-width="1.6"/>
+  <text x="1378" y="839" font-size="15" text-anchor="middle" fill="#432d63">+</text>
+  <text x="1352" y="815" font-size="12" text-anchor="end" fill="#432d63">ω = ω₁ + ω₂</text>
+
+  <rect x="1420" y="744" width="180" height="42" rx="6" fill="#e8ddf2" stroke="#7b52ab" stroke-width="1.4"/>
+  <text x="1510" y="770" font-size="12" text-anchor="middle" fill="#432d63">ω ⊗ F_a</text>
+  <rect x="1420" y="880" width="180" height="42" rx="6" fill="#e8ddf2" stroke="#7b52ab" stroke-width="1.4"/>
+  <text x="1510" y="906" font-size="12" text-anchor="middle" fill="#432d63">(1 − ω) ⊗ F_b</text>
+
+  <g stroke="#7b52ab" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+    <path d="M 1393 826 L 1410 826 L 1410 786"/>
+    <path d="M 1393 840 L 1410 840 L 1410 880"/>
+    <path d="M 1510 786 L 1510 812"/>
+    <path d="M 1510 880 L 1510 854"/>
+  </g>
+  <rect x="1440" y="812" width="140" height="42" rx="6" fill="#e8ddf2" stroke="#7b52ab" stroke-width="1.6"/>
+  <text x="1510" y="831" font-size="12.5" font-weight="bold" text-anchor="middle" fill="#432d63">Concat → F_x</text>
+  <text x="1510" y="847" font-size="10.5" text-anchor="middle" fill="#5c3f80">224 ch = 112 + 112</text>
+
+  <text x="880" y="978" font-size="11.5" fill="#5c3f80">ω₁ and ω₂ are each a sigmoid, so ω ∈ [0, 2] and (1 − ω) can go negative — F_b may be subtracted.</text>
+  <text x="880" y="996" font-size="11.5" fill="#5c3f80">Fig. 3 draws a plain sum with nothing squashing it, so that is the default; --rm-combine mean halves it.</text>
+  <text x="880" y="1020" font-size="11" fill="#8d78a1">Both inputs are aligned to 112 channels by 1×1 convolutions first; the paper never states the channel bookkeeping.</text>
+  <text x="880" y="1044" font-size="11" fill="#8d78a1">Purpose: rebalance how much detail (lateral) versus semantics (top-down) each level carries.</text>
+
+  <!-- ══ footer ═════════════════════════════════════════════════════════ -->
+  <text x="40" y="1098" font-size="11" fill="#90a4ae">Zhao et al., "CLAD-Net: cross-layer aggregation attention network for real-time endoscopic instrument detection", Health Inf Sci Syst 11:58 (2023) — no official code; this is a reconstruction from the paper text and Figs. 1–3.</text>
+</svg>

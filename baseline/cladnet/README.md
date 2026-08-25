@@ -32,6 +32,11 @@
 
 논문 Fig. 1–3과 본문에서 재구성한 것이다.
 
+![CLAD-Net 구조](docs/images/model-architecture.png)
+
+*텐서 모양은 이 구현에서 실제로 뽑은 값이다 (640 × 640 입력, 2클래스, 레벨당 앵커 3개).
+원본 벡터 파일: [docs/model-architecture.svg](docs/model-architecture.svg)*
+
 ```text
 입력 640 × 640
     │
@@ -118,12 +123,15 @@ baseline/cladnet/
 │   └── demo.py               # 탐지 결과 시각화 GUI
 ├── docs/
 │   └── commands.md           # 데이터셋별 학습·평가 재현 명령 모음
-└── data/<dataset>/           # 체크포인트·평가 결과 (git 추적 제외)
-    ├── model.pt              #   최고 성능 체크포인트
-    ├── model-last.pt         #   마지막 에포크 (+ 재개용 optimizer/EMA 상태)
-    ├── train-status.json     #   진행 상황
-    ├── metric.csv            #   에포크별 학습 곡선
-    └── results/<split>/{summary.json, per_tip.csv}
+└── data/                     # 체크포인트·평가 결과 (git 추적 제외)
+    ├── model/<dataset>/      #   학습 산출물
+    │   ├── model.pt          #     최고 성능 체크포인트
+    │   ├── model-last.pt     #     마지막 에포크 (+ 재개용 optimizer/EMA 상태)
+    │   ├── train-status.json #     진행 상황
+    │   └── metric.csv        #     에포크별 학습 곡선
+    └── results/<dataset>/<split>/
+        ├── summary.json      #     전체 지표 + 실행 파라미터
+        └── per_tip.csv       #     GT 팁 1개당 1행
 ```
 
 ## 설치
@@ -163,7 +171,8 @@ uv sync --project baseline/cladnet
 `model-last.pt`가 있으면 **기본 동작이 재개**다. optimizer·스케줄러·EMA 상태까지 저장하므로
 중단 지점에서 그대로 이어진다. `model.pt`는 val mAP@0.5:0.95가 갱신될 때마다 저장된다.
 
-체크포인트는 `data/<dataset>/`에 데이터셋별로 나뉘어 저장되므로 cholec80과 erop 학습을
+체크포인트는 `data/model/<dataset>/`에, 평가 결과는 `data/results/<dataset>/<split>/`에
+데이터셋별로 나뉘어 저장되므로 cholec80과 erop 학습을
 동시에 돌려도 서로 덮어쓰지 않는다. 같은 데이터셋으로 설정만 바꿔 여러 번 돌릴 때만
 `--output-dir`를 따로 준다.
 
@@ -184,8 +193,8 @@ uv sync --project baseline/cladnet
   수치와 직접 비교할 수 있다.
 
 거리는 모두 letterbox된 640 × 640이 아니라 **원본 프레임 좌표계(736 × 480)** 에서 잰다.
-결과는 `data/<dataset>/results/<split>/`에 `summary.json`과 `per_tip.csv`로 저장된다.
-평가할 체크포인트도 `--dataset`에서 정해진다 (`data/<dataset>/model.pt`, `--model`로 변경).
+결과는 `data/results/<dataset>/<split>/`에 `summary.json`과 `per_tip.csv`로 저장된다.
+평가할 체크포인트도 `--dataset`에서 정해진다 (`data/model/<dataset>/model.pt`, `--model`로 변경).
 
 ### 3. 데모 GUI
 
@@ -193,11 +202,11 @@ uv sync --project baseline/cladnet
 ./baseline/cladnet/run demo
 ```
 
-`data/<dataset>/model.pt` 중 사전순 첫 번째를 읽어 영상을 프레임 단위로 처리하며 `tool` 박스와
+`data/model/<dataset>/model.pt` 중 사전순 첫 번째를 읽어 영상을 프레임 단위로 처리하며 `tool` 박스와
 `tip` 박스(중심에 십자 마커)를 그린다. 다른 데이터셋의 모델을 쓰려면 `--weights`를 지정한다.
 
 ```bash
-./baseline/cladnet/run demo --weights baseline/cladnet/data/erop/model.pt
+./baseline/cladnet/run demo --weights baseline/cladnet/data/model/erop/model.pt
 ```
 
 | 조작                      | 동작                                                                 |

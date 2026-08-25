@@ -73,6 +73,11 @@ P3의 격자 간격이 8 px이다.
 
 ## 구조
 
+![YOLOv8s 클론 구조](docs/images/model-architecture.png)
+
+*텐서 모양은 이 구현에서 실제로 뽑은 값이다 (640 × 640 입력, 2클래스).
+원본 벡터 파일: [docs/model-architecture.svg](docs/model-architecture.svg)*
+
 ```text
 입력 640 × 640
     │
