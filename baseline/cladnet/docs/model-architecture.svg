@@ -256,7 +256,7 @@
   <rect x="1410" y="132" width="14" height="14" rx="3" fill="#3CB44B"/>
   <text x="1432" y="144" font-size="11.5" fill="#37474f">tool — annotated bounding box</text>
   <rect x="1410" y="156" width="14" height="14" rx="3" fill="#E6194B"/>
-  <text x="1432" y="168" font-size="11.5" fill="#37474f">tip — 10 × 10 px box on the tip</text>
+  <text x="1432" y="168" font-size="11.5" fill="#37474f">tip — 32 × 32 px box on the tip</text>
   <text x="1410" y="192" font-size="11" fill="#78909c">the tip box centre is the predicted</text>
   <text x="1410" y="207" font-size="11" fill="#78909c">tip coordinate, so one detector</text>
   <text x="1410" y="222" font-size="11" fill="#78909c">yields both AP and hit-rate @ N px</text>

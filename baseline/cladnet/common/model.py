@@ -4,7 +4,7 @@ Two detection classes, both derived from this repository's own annotations
 (see common/dataset.py):
 
     0  tool   the annotated bounding box of the instrument
-    1  tip    a fixed 10 x 10 px box centred on the annotated tool tip
+    1  tip    a square box centred on the annotated tool tip (32 px by default)
 
 The head is anchor-based with a separate objectness branch, decoded the way
 YOLOv5 decodes: that is what the paper's loss weights (0.05 / 1.0 / 0.5, the

@@ -4,7 +4,12 @@ A checkpoint stores the weights *and* the architecture arguments that produced
 them, so a demo never has to be told how the model was built:
 
     {"model": state_dict, "arch": {...}, "class_names": (...),
-     "image_size": 640, "dataset": "cholec80", "epoch": 30, "metrics": {...}}
+     "image_size": 640, "tip_box_size": 32.0, "dataset": "cholec80",
+     "epoch": 150, "metrics": {...}}
+
+`tip_box_size` matters at read time: it is the side of the box the model was
+taught to draw around a tool tip, and scoring a 32 px model against 10 px
+labels would be silently wrong rather than an error.
 """
 
 import glob
@@ -15,6 +20,7 @@ import numpy as np
 import torch
 
 from .boxes import letterbox, non_max_suppression, undo_letterbox
+from .dataset import DEFAULT_TIP_BOX_SIZE
 from .model import CLASS_NAMES, build, decode
 
 DEFAULT_CONF = 0.25
@@ -46,14 +52,15 @@ def default_model_path(dataset: str | None = None) -> str:
     return os.path.join(data_dir(), "model", "<dataset>", "model.pt")
 
 
-def save_checkpoint(path: str, model, arch: dict, image_size: int, dataset: str,
-                    epoch: int, metrics: dict | None = None) -> None:
+def save_checkpoint(path: str, model, arch: dict, image_size: int, tip_box_size: float,
+                    dataset: str, epoch: int, metrics: dict | None = None) -> None:
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     torch.save({
         "model": model.state_dict(),
         "arch": arch,
         "class_names": list(CLASS_NAMES),
         "image_size": image_size,
+        "tip_box_size": tip_box_size,
         "dataset": dataset,
         "epoch": epoch,
         "metrics": metrics or {},
@@ -73,6 +80,16 @@ class Detector:
         self.arch = checkpoint.get("arch", {})
         self.class_names = tuple(checkpoint.get("class_names", CLASS_NAMES))
         self.image_size = int(checkpoint.get("image_size", 640))
+        # Checkpoints written before --tip-box-size existed carry no value. They
+        # were all trained at 10 px, but assuming that here would bake a legacy
+        # constant into the loader; say so instead, because silently scoring a
+        # 10 px model against 32 px labels looks like a bad model, not a bug.
+        if "tip_box_size" not in checkpoint:
+            print(f"WARNING: {os.path.basename(weights)} records no tip_box_size "
+                  f"(pre-dates the option). Assuming the current default "
+                  f"{DEFAULT_TIP_BOX_SIZE:g} px — if it was trained at another size, "
+                  f"every tip metric from it is meaningless.")
+        self.tip_box_size = float(checkpoint.get("tip_box_size", DEFAULT_TIP_BOX_SIZE))
         self.dataset = checkpoint.get("dataset")
         self.epoch = checkpoint.get("epoch")
         self.metrics = checkpoint.get("metrics", {})

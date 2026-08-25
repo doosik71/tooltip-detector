@@ -43,19 +43,32 @@ ls data/dataset/erop       # annotation  images  segmentation
 ```bash
 # ── cholec80 ────────────────────────────────────────────────────────────
 ./baseline/cladnet/run train-model --dataset cholec80 \
-    --epochs 30 --frame-stride 5 --val-frames 1500 \
+    --frame-stride 5 --val-frames 1500 \
     --batch-size 16 --workers 12 --device cuda:1
 
 # ── erop ────────────────────────────────────────────────────────────────
 ./baseline/cladnet/run train-model --dataset erop \
-    --epochs 30 --frame-stride 5 --val-frames 1500 \
+    --frame-stride 5 --val-frames 1500 \
     --batch-size 16 --workers 12 --device cuda:2
 ```
+
+> **`data/`에 있는 기존 결과와 기본값이 다르다.** 지금 들어 있는 체크포인트와
+> [실험결과 보고서](experimental-results.md)의 수치는 기본값이 30이던 시절에 `--epochs 30`으로
+> 학습한 것이다. 그 결과를 그대로 재현하려면 위 명령에 `--epochs 30`을 붙인다.
+> 기본값 150으로 돌리면 학습 시간이 5배가 된다 (cholec80 약 9.5시간, erop 약 14.5시간).
+>
+> **끝난 30에포크 런을 이어서 150까지 돌리려는 경우 주의한다.** 학습 재개는 스케줄러의
+> `last_epoch`만 복원하고 cosine 곡선 자체는 새 `--epochs`로 다시 계산한다. 30에포크 스케줄의
+> 마지막 학습률은 0.000133인데 150에포크 스케줄의 30번째 지점은 0.009199라 **69배 뛴다.**
+> 사실상 warm restart이므로, 의도한 것이 아니라면 `--no-resume`으로 처음부터 다시 학습하는 편이
+> 결과를 해석하기 쉽다.
 
 - `--frame-stride 5` — 영상 프레임은 서로 거의 같으므로 5장마다 1장만 쓴다. 에포크 시간이
   1/5로 줄어든다. 논문 그대로 전 프레임을 쓰려면 이 인수를 뺀다.
 - `--val-frames 1500` — 에포크마다 재는 val 프레임 수 상한. 0이면 전체.
-- `--epochs 30` — 논문은 150이다. 30은 루트 프로젝트의 학습 조건과 맞춘 값이다.
+- `--epochs` — 기본값 150으로, 논문의 학습 길이와 같다. 짧게 확인만 하려면 줄여서 준다.
+- `--tip-box-size` — 기본값 32 px. 근거는 [실험결과 보고서 §7](experimental-results.md)에 있다.
+  값이 체크포인트에 기록되므로 평가 때 따로 지정할 필요가 없다.
 - `--device` — 한 실행은 GPU 하나만 쓰므로 두 데이터셋을 다른 GPU에 나눠 동시에 돌릴 수 있다.
   뒤에 `&`를 붙이면 백그라운드로 함께 진행된다.
 

@@ -10,7 +10,15 @@ There are no instrument-class labels, so the detector is trained on two
 classes derived from that same annotation:
 
     0  tool   the annotated bounding box
-    1  tip    a fixed TIP_BOX_SIZE x TIP_BOX_SIZE box centred on the tip
+    1  tip    a square box of side `tip_box_size` centred on the tip
+
+The tip box side is a real hyper-parameter, not a formality. The loss makes a
+prediction's objectness target its CIoU with the ground-truth box, so the
+confidence a correct tip prediction can reach is bounded by that IoU -- and for
+a tiny box the IoU collapses under sub-pixel error. At the original 10 px the
+measured ceiling was 0.694 and a correct prediction's median confidence was
+0.188, which is why 39 % of tips fell below the 0.25 threshold. See
+docs/experimental-results.md section 7 for the derivation of the 32 px default.
 
 Training uses the mosaic augmentation the paper specifies ("selects four
 images for random scaling, cropping, flipping and stitching"); validation and
@@ -32,9 +40,12 @@ from .boxes import letterbox
 CLASS_NAMES = ("tool", "tip")
 TOOL_CLASS, TIP_CLASS = 0, 1
 
-# The tip is a point annotation; it becomes a box of this side length, centred
-# on the point, so it can be learned by a box detector.
-TIP_BOX_SIZE = 10.0
+# The tip is a point annotation; it becomes a square box of this side length,
+# centred on the point, so it can be learned by a box detector. Recorded in the
+# checkpoint, because a model trained at 32 px is not comparable with one
+# trained at 10 px -- and evaluating one against the other's labels is silently
+# wrong rather than an error.
+DEFAULT_TIP_BOX_SIZE = 32.0
 
 SPLITS = ("train", "val", "test")
 
@@ -64,7 +75,8 @@ def available_datasets(data_root: str | None = None) -> list[str]:
                   if os.path.isdir(os.path.join(data_root, name, "images")))
 
 
-def load_annotation(path: str, width: float, height: float) -> np.ndarray:
+def load_annotation(path: str, width: float, height: float,
+                    tip_box_size: float = DEFAULT_TIP_BOX_SIZE) -> np.ndarray:
     """Read one annotation JSON as (n, 5) normalised [class, cx, cy, w, h].
 
     A frame with no visible instrument yields an empty array -- those frames
@@ -88,7 +100,7 @@ def load_annotation(path: str, width: float, height: float) -> np.ndarray:
         tip = item.get("tip")
         if tip is not None:
             rows.append((TIP_CLASS, tip["x"] / width, tip["y"] / height,
-                         TIP_BOX_SIZE / width, TIP_BOX_SIZE / height))
+                         tip_box_size / width, tip_box_size / height))
     if not rows:
         return np.zeros((0, 5), dtype=np.float32)
     return np.asarray(rows, dtype=np.float32)
@@ -99,13 +111,15 @@ class SurgicalDetectionDataset(Dataset):
 
     def __init__(self, dataset: str, split: str, image_size: int = 640,
                  augment: bool = False, data_root: str | None = None,
-                 frame_stride: int = 1, limit: int | None = None):
+                 frame_stride: int = 1, limit: int | None = None,
+                 tip_box_size: float = DEFAULT_TIP_BOX_SIZE):
         if split not in SPLITS:
             raise ValueError(f"split must be one of {SPLITS}")
         self.dataset = dataset
         self.split = split
         self.image_size = image_size
         self.augment = augment
+        self.tip_box_size = tip_box_size
 
         data_root = data_root or default_data_root()
         images_dir = os.path.join(data_root, dataset, "images", split)
@@ -139,7 +153,8 @@ class SurgicalDetectionDataset(Dataset):
             raise OSError(f"could not read {self.image_paths[index]}")
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         h, w = image.shape[:2]
-        return image, load_annotation(self._annotation_path(index), w, h)
+        return image, load_annotation(self._annotation_path(index), w, h,
+                                      self.tip_box_size)
 
     # ── Augmentation ──────────────────────────────────────────────────────
 

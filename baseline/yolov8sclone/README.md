@@ -168,7 +168,7 @@ uv sync        # 루트에서 한 번 (이미 했다면 불필요)
 | `--dataset`                | (필수) | `data/dataset/` 아래 디렉터리 이름 (`cholec80` / `erop`)                                  |
 | `--tip-box-size`           | 32     | 팁 박스 한 변의 길이 (원본 프레임 px). 체크포인트에 기록된다                              |
 | `--scale`                  | `s`    | YOLOv8 깊이·폭 스케일 (`n`/`s`/`m`/`l`/`x`). `s`가 참조 크기                              |
-| `--epochs`                 | 30     |                                                                                           |
+| `--epochs`                 | 150    |                                                                                           |
 | `--batch-size`             | 16     |                                                                                           |
 | `--lr`                     | 0.01   | SGD, momentum 0.937, nesterov                                                             |
 | `--image-size`             | 640    |                                                                                           |

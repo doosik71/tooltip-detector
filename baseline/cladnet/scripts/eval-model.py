@@ -86,11 +86,14 @@ def main():
     detector = Detector(args.model, args.device)
     print(f"model   : {args.model}  [{detector.device}]")
     print(f"trained : dataset={detector.dataset} epoch={detector.epoch} "
-          f"image_size={detector.image_size}")
+          f"image_size={detector.image_size} tip_box={detector.tip_box_size:g} px")
 
+    # The tip box side is whatever the checkpoint was trained with; using a
+    # different one here would score the model against labels it never saw.
     dataset = SurgicalDetectionDataset(args.dataset, args.split, detector.image_size,
                                        augment=False, data_root=args.data_root,
-                                       frame_stride=args.frame_stride, limit=args.limit)
+                                       frame_stride=args.frame_stride, limit=args.limit,
+                                       tip_box_size=detector.tip_box_size)
     print(f"frames  : {len(dataset):,}  ({args.dataset}/{args.split})")
 
     detection_eval = DetectionEvaluator(len(CLASS_NAMES), CLASS_NAMES)
@@ -154,6 +157,7 @@ def main():
         "iou_threshold": args.iou,
         "frame_stride": args.frame_stride,
         "image_size": detector.image_size,
+        "tip_box_size": detector.tip_box_size,
         "device": str(detector.device),
         "ms_per_frame": round(total_ms / max(1, n_frames), 2),
         "fps": round(1000.0 * n_frames / max(1e-9, total_ms), 1),

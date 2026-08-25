@@ -2,7 +2,7 @@
 """Train CLAD-Net on this repository's surgical-tool annotations.
 
 Two classes are learned from one annotation file (see common/dataset.py):
-`tool` (the annotated bounding box) and `tip` (a 10 x 10 px box centred on the
+`tool` (the annotated bounding box) and `tip` (a `--tip-box-size` px box centred on the
 annotated tool tip), so one detector produces both the instrument box and the
 tip coordinate the root project's metrics are defined on.
 
@@ -21,7 +21,7 @@ Outputs, all under baseline/cladnet/data/model/<dataset>/ by default:
 
 Usage:
     ./baseline/cladnet/run train-model --dataset cholec80
-    ./baseline/cladnet/run train-model --dataset cholec80 --epochs 150 --device cuda:1
+    ./baseline/cladnet/run train-model --dataset cholec80 --epochs 30 --device cuda:1
 """
 
 import argparse
@@ -41,8 +41,8 @@ if True:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
     from common.boxes import non_max_suppression, xywh_to_xyxy
-    from common.dataset import (CLASS_NAMES, SurgicalDetectionDataset, available_datasets,
-                                collate, default_data_root)
+    from common.dataset import (CLASS_NAMES, DEFAULT_TIP_BOX_SIZE, SurgicalDetectionDataset,
+                                available_datasets, collate, default_data_root)
     from common.inference import model_dir, save_checkpoint
     from common.loss import DetectionLoss
     from common.metrics import DetectionEvaluator
@@ -151,8 +151,8 @@ def main():
     parser.add_argument("--dataset", required=True, choices=available_datasets() or None,
                         help="dataset directory under data/dataset (e.g. cholec80)")
     parser.add_argument("--data-root", default=default_data_root())
-    parser.add_argument("--epochs", type=int, default=30,
-                        help="paper trains 150; 30 matches the root project's runs (default: 30)")
+    parser.add_argument("--epochs", type=int, default=150,
+                        help="matches the paper's schedule (default: 150)")
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--lr", type=float, default=0.01)
     parser.add_argument("--momentum", type=float, default=0.937)
@@ -168,6 +168,9 @@ def main():
                         help="where the checkpoints go (default: data/model/<dataset>)")
     parser.add_argument("--neck-channels", type=int, default=112)
     parser.add_argument("--head-hidden", type=int, default=96)
+    parser.add_argument("--tip-box-size", type=float, default=DEFAULT_TIP_BOX_SIZE,
+                        help="side of the square box drawn around each annotated tip, in "
+                             f"original-frame px (default: {DEFAULT_TIP_BOX_SIZE:g})")
     parser.add_argument("--rm-combine", default="sum", choices=("sum", "mean"),
                         help="RM weight combination; see common.modules.RM")
     parser.add_argument("--conf", type=float, default=0.001,
@@ -194,13 +197,16 @@ def main():
     arch = {"neck_channels": args.neck_channels, "head_hidden": args.head_hidden,
             "rm_combine": args.rm_combine}
     model = build(num_classes=len(CLASS_NAMES), **arch).to(device)
-    print(f"CLAD-Net  {parameter_count(model) / 1e6:.3f} M parameters  (paper: 7.5 M)  [{device}]")
+    print(f"CLAD-Net  {parameter_count(model) / 1e6:.3f} M parameters  (paper: 7.5 M)  "
+          f"[{device}]  tip box {args.tip_box_size:g} px")
 
     train_set = SurgicalDetectionDataset(args.dataset, "train", args.image_size, augment=True,
-                                         data_root=args.data_root, frame_stride=args.frame_stride)
+                                         data_root=args.data_root, frame_stride=args.frame_stride,
+                                         tip_box_size=args.tip_box_size)
     val_set = SurgicalDetectionDataset(args.dataset, "val", args.image_size, augment=False,
                                        data_root=args.data_root,
-                                       limit=args.val_frames or None)
+                                       limit=args.val_frames or None,
+                                       tip_box_size=args.tip_box_size)
     print(f"train frames: {len(train_set):,}   val frames: {len(val_set):,}")
 
     train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True,
@@ -287,14 +293,15 @@ def main():
                     "ema_updates": ema.updates if ema is not None else 0,
                     "epoch": epoch, "best_fitness": best_fitness,
                     "arch": arch, "image_size": args.image_size,
+                    "tip_box_size": args.tip_box_size,
                     "class_names": list(CLASS_NAMES), "dataset": args.dataset}, last_path)
 
         if fitness > best_fitness:
             best_fitness = fitness
             saved = build(num_classes=len(CLASS_NAMES), **arch)
             saved.load_state_dict(state)
-            save_checkpoint(best_path, saved, arch, args.image_size, args.dataset,
-                            epoch + 1, metrics)
+            save_checkpoint(best_path, saved, arch, args.image_size, args.tip_box_size,
+                            args.dataset, epoch + 1, metrics)
             print(f"  saved {best_path} (mAP@0.5:0.95 {fitness:.4f})")
 
         with open(status_path, "w", encoding="utf-8") as handle:

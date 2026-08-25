@@ -7,7 +7,8 @@ the alphabetically first one by default) and draws what it predicts on every
 frame:
 
   tool   the instrument's bounding box
-  tip    a 10 x 10 px box on the instrument tip, marked with a cross at its
+  tip    a square box on the instrument tip (32 px by default, whatever the
+         checkpoint was trained with), marked with a cross at its
          centre, which is the coordinate the tip metrics are computed from
 
 Sources

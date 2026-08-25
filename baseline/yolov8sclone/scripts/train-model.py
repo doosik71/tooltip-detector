@@ -154,8 +154,8 @@ def main():
     parser.add_argument("--dataset", required=True, choices=available_datasets() or None,
                         help="dataset directory under data/dataset (e.g. cholec80)")
     parser.add_argument("--data-root", default=default_data_root())
-    parser.add_argument("--epochs", type=int, default=30,
-                        help="matches the root project's runs (default: 30)")
+    parser.add_argument("--epochs", type=int, default=150,
+                        help="(default: 150)")
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--lr", type=float, default=0.01)
     parser.add_argument("--momentum", type=float, default=0.937)
