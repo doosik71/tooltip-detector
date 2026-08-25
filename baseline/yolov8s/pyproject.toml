@@ -1,0 +1,36 @@
+# Standalone uv project for the YOLOv8s baseline.
+#
+# Kept separate from the repository root on purpose: ultralytics requires
+# `opencv-python`, while the root project already pulls in
+# `opencv-python-headless` through albumentations. Both ship the same `cv2`
+# package, so installing them into one environment would clobber the training
+# environment. A private .venv here keeps the two apart, and gives every future
+# baseline room to bring its own (often conflicting) dependency set.
+[project]
+name = "yolov8s-baseline"
+version = "0.1.0"
+description = "YOLOv8s surgical instrument detection baseline (cesaraha/yolov8s-surgical-instrument-detection-cholec80)"
+readme = "README.md"
+requires-python = ">=3.12"
+
+dependencies = [
+    "numpy>=2.0",
+    "pillow>=12.2.0",
+    "torch>=2.7.1",
+    "torchvision==0.22.1",
+    "ultralytics>=8.4.21",
+]
+
+[tool.uv]
+# `common/` is imported via sys.path (same convention as the root project's
+# `ttd/`), so there is nothing here to build or install.
+package = false
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
