@@ -17,9 +17,9 @@ behind. Re-running is cheap: an already-downloaded file whose checksum matches
 is left alone.
 
 Usage:
-    uv run python baseline/yolov8s/scripts/download-model.py
-    uv run python baseline/yolov8s/scripts/download-model.py --force
-    uv run python baseline/yolov8s/scripts/download-model.py --output /tmp/y.pt
+    ./baseline/yolov8s/run download-model
+    ./baseline/yolov8s/run download-model --force
+    ./baseline/yolov8s/run download-model --output /tmp/y.pt
 """
 
 import argparse

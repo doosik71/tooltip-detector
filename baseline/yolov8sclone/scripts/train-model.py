@@ -1,27 +1,28 @@
 #!/usr/bin/env python3
-"""Train CLAD-Net on this repository's surgical-tool annotations.
+"""Train the YOLOv8s clone on this repository's surgical-tool annotations.
 
 Two classes are learned from one annotation file (see common/dataset.py):
-`tool` (the annotated bounding box) and `tip` (a 10 x 10 px box centred on the
-annotated tool tip), so one detector produces both the instrument box and the
-tip coordinate the root project's metrics are defined on.
+`tool` (the annotated bounding box) and `tip` (a square box of
+`--tip-box-size` px centred on the annotated tool tip), so one detector
+produces both the instrument box and the tip coordinate the root project's
+metrics are defined on.
 
-Training follows the paper's recipe -- 640 x 640, mosaic, SGD, lr 0.01, batch
-16, loss 0.05/1.0/0.5 -- with three additions the paper does not mention but
-that this loss/assignment recipe needs in practice, each switchable:
-a short linear warmup, a cosine learning-rate decay, and a weight EMA
-(`--no-ema` turns the last one off).
+The recipe is YOLOv8's: 640 x 640, mosaic, SGD with a short linear warmup and
+cosine decay, a weight EMA (`--no-ema` to disable), and the
+box/cls/dfl = 7.5/0.5/1.5 loss over TaskAlignedAssigner labels. No pretrained
+weights are used -- the reference checkpoint cannot be loaded without
+`ultralytics`, and nothing here depends on it.
 
-Outputs, all under baseline/cladnet/data/<dataset>/ by default:
+Outputs, all under baseline/yolov8sclone/data/model/<dataset>/ by default:
 
     model.pt            best checkpoint by val mAP@0.5:0.95
     model-last.pt       last epoch, plus optimizer/EMA state for --resume
     train-status.json   epochs completed, best fitness, run arguments
-    metric.csv          one row per epoch (losses, mAP, tip hit-rate, lr, time)
+    metric.csv          one row per epoch (losses, mAP, lr, time)
 
 Usage:
-    ./baseline/cladnet/run train-model --dataset cholec80
-    ./baseline/cladnet/run train-model --dataset cholec80 --epochs 150 --device cuda:1
+    ./baseline/yolov8sclone/run train-model --dataset cholec80
+    ./baseline/yolov8sclone/run train-model --dataset cholec80 --tip-box-size 10 --device cuda:1
 """
 
 import argparse
@@ -41,16 +42,17 @@ if True:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
     from common.boxes import non_max_suppression, xywh_to_xyxy
-    from common.dataset import (CLASS_NAMES, SurgicalDetectionDataset, available_datasets,
-                                collate, default_data_root)
-    from common.inference import dataset_dir, save_checkpoint
+    from common.dataset import (CLASS_NAMES, DEFAULT_TIP_BOX_SIZE, SurgicalDetectionDataset,
+                                available_datasets, collate, default_data_root)
+    from common.inference import model_dir, save_checkpoint
     from common.loss import DetectionLoss
     from common.metrics import DetectionEvaluator
     from common.progress import progress
-    from common.model import build, decode, parameter_count
+    from common.model import YOLOv8, build, decode, parameter_count
 
 WARMUP_EPOCHS = 3.0
 FINAL_LR_FACTOR = 0.01      # cosine decays lr to lr * this
+GRAD_CLIP_NORM = 10.0       # matches the reference YOLOv8 trainer
 
 
 class ModelEMA:
@@ -106,18 +108,18 @@ def lr_lambda(epoch: float, epochs: int) -> float:
 def validate(model, loader, criterion, device, conf: float, iou: float) -> dict:
     model.eval()
     evaluator = DetectionEvaluator(len(CLASS_NAMES), CLASS_NAMES)
-    totals = {"box": 0.0, "obj": 0.0, "cls": 0.0}
+    totals = {"box": 0.0, "cls": 0.0, "dfl": 0.0}
     batches = 0
 
     for images, targets, _ in progress(loader, desc="  val", leave=False):
         images = images.to(device, non_blocking=True).float().div_(255.0)
-        outputs = model(images)
+        outputs = [o.float() for o in model(images)]
         _, parts = criterion(outputs, targets)
         for key in totals:
             totals[key] += parts[key]
         batches += 1
 
-        predictions = decode(outputs, model.anchors, model.strides)
+        predictions = decode(outputs, model)
         detections = non_max_suppression(predictions, conf, iou)
         size = images.shape[-1]
         for i, detection in enumerate(detections):
@@ -131,8 +133,8 @@ def validate(model, loader, criterion, device, conf: float, iou: float) -> dict:
     metrics = evaluator.compute()
     batches = max(1, batches)
     metrics["val_box_loss"] = round(totals["box"] / batches, 5)
-    metrics["val_obj_loss"] = round(totals["obj"] / batches, 5)
     metrics["val_cls_loss"] = round(totals["cls"] / batches, 5)
+    metrics["val_dfl_loss"] = round(totals["dfl"] / batches, 5)
     metrics["val_loss"] = round(sum(totals.values()) / batches, 5)
     return metrics
 
@@ -147,12 +149,13 @@ def append_metric_row(path: str, row: dict) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train CLAD-Net on a tooltip-detector dataset")
+    parser = argparse.ArgumentParser(
+        description="Train the YOLOv8s clone on a tooltip-detector dataset")
     parser.add_argument("--dataset", required=True, choices=available_datasets() or None,
                         help="dataset directory under data/dataset (e.g. cholec80)")
     parser.add_argument("--data-root", default=default_data_root())
     parser.add_argument("--epochs", type=int, default=30,
-                        help="paper trains 150; 30 matches the root project's runs (default: 30)")
+                        help="matches the root project's runs (default: 30)")
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--lr", type=float, default=0.01)
     parser.add_argument("--momentum", type=float, default=0.937)
@@ -165,11 +168,12 @@ def main():
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--device", default=None)
     parser.add_argument("--output-dir", default=None,
-                        help="where the checkpoints go (default: data/<dataset>)")
-    parser.add_argument("--neck-channels", type=int, default=112)
-    parser.add_argument("--head-hidden", type=int, default=96)
-    parser.add_argument("--rm-combine", default="sum", choices=("sum", "mean"),
-                        help="RM weight combination; see common.modules.RM")
+                        help="where the checkpoints go (default: data/model/<dataset>)")
+    parser.add_argument("--scale", default="s", choices=tuple(YOLOv8.SCALES),
+                        help="YOLOv8 depth/width scale (default: s, the reference size)")
+    parser.add_argument("--tip-box-size", type=float, default=DEFAULT_TIP_BOX_SIZE,
+                        help="side of the square box drawn around each annotated tip, in "
+                             f"original-frame px (default: {DEFAULT_TIP_BOX_SIZE:g})")
     parser.add_argument("--conf", type=float, default=0.001,
                         help="confidence threshold used when scoring validation mAP")
     parser.add_argument("--iou", type=float, default=0.6, help="NMS IoU for validation")
@@ -178,29 +182,26 @@ def main():
                         help="ignore an existing model-last.pt and start over")
     args = parser.parse_args()
 
-    if args.batch_size < 2:
-        # MSAB/RM pool to 1 x 1 before a BatchNorm, which needs >= 2 samples.
-        parser.error("--batch-size must be at least 2")
-
     device = torch.device(args.device or ("cuda:0" if torch.cuda.is_available() else "cpu"))
     # resolved back into args so train-status.json records the real path
-    args.output_dir = args.output_dir or dataset_dir(args.dataset)
+    args.output_dir = args.output_dir or model_dir(args.dataset)
     os.makedirs(args.output_dir, exist_ok=True)
     best_path = os.path.join(args.output_dir, "model.pt")
     last_path = os.path.join(args.output_dir, "model-last.pt")
     status_path = os.path.join(args.output_dir, "train-status.json")
     metric_path = os.path.join(args.output_dir, "metric.csv")
 
-    arch = {"neck_channels": args.neck_channels, "head_hidden": args.head_hidden,
-            "rm_combine": args.rm_combine}
+    arch = {"scale": args.scale}
     model = build(num_classes=len(CLASS_NAMES), **arch).to(device)
-    print(f"CLAD-Net  {parameter_count(model) / 1e6:.3f} M parameters  (paper: 7.5 M)  [{device}]")
+    print(f"YOLOv8{args.scale} clone  {parameter_count(model) / 1e6:.3f} M parameters  "
+          f"[{device}]  tip box {args.tip_box_size:g} px")
 
     train_set = SurgicalDetectionDataset(args.dataset, "train", args.image_size, augment=True,
-                                         data_root=args.data_root, frame_stride=args.frame_stride)
+                                         data_root=args.data_root, frame_stride=args.frame_stride,
+                                         tip_box_size=args.tip_box_size)
     val_set = SurgicalDetectionDataset(args.dataset, "val", args.image_size, augment=False,
-                                       data_root=args.data_root,
-                                       limit=args.val_frames or None)
+                                       data_root=args.data_root, limit=args.val_frames or None,
+                                       tip_box_size=args.tip_box_size)
     print(f"train frames: {len(train_set):,}   val frames: {len(val_set):,}")
 
     train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True,
@@ -231,16 +232,22 @@ def main():
     for epoch in range(start_epoch, args.epochs):
         model.train()
         epoch_start = time.perf_counter()
-        running = {"box": 0.0, "obj": 0.0, "cls": 0.0}
+        running = {"box": 0.0, "cls": 0.0, "dfl": 0.0}
         steps = 0
 
         bar = progress(train_loader, desc=f"epoch {epoch + 1}/{args.epochs}")
         for images, targets, _ in bar:
             images = images.to(device, non_blocking=True).float().div_(255.0)
             with torch.amp.autocast("cuda", enabled=device.type == "cuda"):
-                loss, parts = criterion(model(images), targets)
+                outputs = model(images)
+            # The loss runs in fp32 even under AMP. In half precision the CIoU
+            # term's box-area products overflow and the whole loss goes NaN
+            # within ~20 steps; the conv-heavy forward above keeps the speedup.
+            loss, parts = criterion([o.float() for o in outputs], targets)
             optimizer.zero_grad(set_to_none=True)
             scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=GRAD_CLIP_NORM)
             scaler.step(optimizer)
             scaler.update()
             if ema is not None:
@@ -250,8 +257,8 @@ def main():
                 running[key] += parts[key]
             steps += 1
             bar.set_postfix(box=f"{running['box'] / steps:.4f}",
-                            obj=f"{running['obj'] / steps:.4f}",
-                            cls=f"{running['cls'] / steps:.4f}")
+                                 cls=f"{running['cls'] / steps:.4f}",
+                                 dfl=f"{running['dfl'] / steps:.4f}")
 
         scheduler.step()
         evaluated = ema.ema if ema is not None else model
@@ -268,12 +275,12 @@ def main():
         append_metric_row(metric_path, {
             "epoch": epoch + 1,
             "train_box_loss": round(running["box"] / max(1, steps), 5),
-            "train_obj_loss": round(running["obj"] / max(1, steps), 5),
             "train_cls_loss": round(running["cls"] / max(1, steps), 5),
+            "train_dfl_loss": round(running["dfl"] / max(1, steps), 5),
             "val_loss": metrics["val_loss"],
             "val_box_loss": metrics["val_box_loss"],
-            "val_obj_loss": metrics["val_obj_loss"],
             "val_cls_loss": metrics["val_cls_loss"],
+            "val_dfl_loss": metrics["val_dfl_loss"],
             "map50": metrics["map50"], "map50_95": metrics["map50_95"],
             "tool_ap50": per_class["tool"]["ap50"], "tip_ap50": per_class["tip"]["ap50"],
             "lr": round(optimizer.param_groups[0]["lr"], 6),
@@ -287,14 +294,15 @@ def main():
                     "ema_updates": ema.updates if ema is not None else 0,
                     "epoch": epoch, "best_fitness": best_fitness,
                     "arch": arch, "image_size": args.image_size,
+                    "tip_box_size": args.tip_box_size,
                     "class_names": list(CLASS_NAMES), "dataset": args.dataset}, last_path)
 
         if fitness > best_fitness:
             best_fitness = fitness
             saved = build(num_classes=len(CLASS_NAMES), **arch)
             saved.load_state_dict(state)
-            save_checkpoint(best_path, saved, arch, args.image_size, args.dataset,
-                            epoch + 1, metrics)
+            save_checkpoint(best_path, saved, arch, args.image_size, args.tip_box_size,
+                            args.dataset, epoch + 1, metrics)
             print(f"  saved {best_path} (mAP@0.5:0.95 {fitness:.4f})")
 
         with open(status_path, "w", encoding="utf-8") as handle:

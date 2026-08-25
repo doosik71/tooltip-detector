@@ -41,6 +41,7 @@ baseline/yolov8s/
 │   ├── detector.py           #   체크포인트 로드 + 프레임 1장 추론 (YoloDetector)
 │   ├── sources.py            #   영상 / 추출 프레임 디렉터리를 같은 인터페이스로 읽기
 │   └── draw.py               #   예측 박스·GT 오버레이 그리기
+├── run(.bat)                 # `run <script> [args...]` → scripts/<script>.py 실행
 ├── scripts/                  # 사용자가 실행하는 스크립트
 │   ├── download-model.py     #   HF에서 가중치 다운로드
 │   └── demo.py               #   탐지 결과 시각화 GUI
@@ -64,12 +65,14 @@ uv sync --project baseline/yolov8s
 
 ## 사용법
 
-두 스크립트 모두 저장소 루트에서 실행한다. `--project`가 이 서브 프로젝트의 `.venv`를 지정한다.
+두 스크립트 모두 `run`으로 실행한다. 루트 프로젝트의 `run`과 같은 방식이며, 이 서브 프로젝트의
+`.venv`에서 스크립트를 돌린다. 어느 디렉터리에서 실행해도 된다. Windows에서는 `run.bat`을 쓴다.
+인자 없이 `run`만 실행하면 사용 가능한 스크립트 목록이 나온다.
 
 ### 1. 모델 다운로드
 
 ```bash
-uv run --project baseline/yolov8s python baseline/yolov8s/scripts/download-model.py
+./baseline/yolov8s/run download-model
 ```
 
 `yolov8s_cholec80.pt`(22.5 MB)를 `baseline/yolov8s/data/`에 내려받는다.
@@ -84,7 +87,7 @@ uv run --project baseline/yolov8s python baseline/yolov8s/scripts/download-model
 ### 2. 데모 GUI
 
 ```bash
-uv run --project baseline/yolov8s python baseline/yolov8s/scripts/demo.py
+./baseline/yolov8s/run demo
 ```
 
 ![데모 오버레이 예시](images/demo-overlay.png)

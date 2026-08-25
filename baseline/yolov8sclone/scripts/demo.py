@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""GUI demo for the YOLOv8s surgical-instrument-detection baseline.
+"""GUI demo for the YOLOv8s-clone surgical-tool baseline.
 
 Plays a laparoscopic video -- or a directory of extracted dataset frames --
-through `data/yolov8s_cholec80.pt` and draws the predicted instrument boxes on
-every frame.
+through a trained checkpoint (`baseline/yolov8sclone/data/model/<dataset>/model.pt`,
+the alphabetically first one by default) and draws what it predicts on every
+frame:
+
+  tool   the instrument's bounding box
+  tip    a small square box on the instrument tip (32 px by default, whatever
+         the checkpoint was trained with), marked with a cross at its centre,
+         which is the coordinate the tip metrics are computed from
 
 Sources
 -------
@@ -15,17 +21,10 @@ keeps footage (see common/sources.py):
 
 "Open File..." takes any other video from disk. Frames from a dataset
 directory also carry ground truth, so "Show GT" overlays the annotated boxes
-and tool tips in white next to the coloured predictions -- that side-by-side is
-the point of the demo, since this baseline predicts *instrument boxes* while
-tooltip-detector predicts *tool tips*.
+and tips in white next to the coloured predictions.
 
-What this demo is not
----------------------
-It is a viewer, not an evaluation. Nothing here computes mAP, and the numbers
-in the info panel are per-frame observations only. Note also that the
-checkpoint was fine-tuned on Cholec80 videos 41-45, which fall inside this
-project's cholec80 *test* split -- predictions on those frames are training-set
-predictions and look better than the model's real generalisation.
+This is a viewer, not an evaluation -- nothing here computes AP or hit-rate.
+Use scripts/eval-model.py for that.
 
 Controls
 --------
@@ -39,8 +38,8 @@ Controls
 
 Usage
 -----
-    ./baseline/yolov8s/run demo
-    ./baseline/yolov8s/run demo --device cpu
+    ./baseline/yolov8sclone/run demo
+    ./baseline/yolov8sclone/run demo --device cpu
 """
 
 import argparse
@@ -52,7 +51,7 @@ from tkinter import ttk, filedialog, messagebox
 import numpy as np
 from PIL import Image, ImageTk
 
-# NOTE: deliberately not a top-level import. `common.*` needs baseline/yolov8s
+# NOTE: deliberately not a top-level import. `common.*` needs baseline/yolov8sclone
 # on sys.path, which only exists after the insert() below runs. Nesting the
 # imports under `if True:` keeps an editor's "organize imports" from hoisting
 # them back above the sys.path fix-up.
@@ -60,24 +59,13 @@ if True:
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-    from common.detector import DEFAULT_CONF, DEFAULT_IOU, YoloDetector
     from common.draw import CLASS_COLORS, draw_detections, draw_ground_truth
-    from common.sources import (
-        FRAME_H,
-        FRAME_W,
-        SourceSpec,
-        default_frames_root,
-        default_videos_root,
-        discover_sources,
-        open_source,
-    )
+    from common.inference import (DEFAULT_CONF, DEFAULT_IOU, Detector,
+                                  default_model_path)
+    from common.sources import (FRAME_H, FRAME_W, SourceSpec, default_frames_root,
+                                default_videos_root, discover_sources, open_source)
 
-DEFAULT_WEIGHTS = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data", "yolov8s_cholec80.pt",
-)
-
-# On-screen panel size: the frames are already 736x480, so this is 1:1.
+# On-screen panel size: the sources already hand back 736 x 480, so this is 1:1.
 PANEL_W, PANEL_H = FRAME_W, FRAME_H
 
 
@@ -85,15 +73,15 @@ def _to_photo(frame_rgb: np.ndarray) -> ImageTk.PhotoImage:
     return ImageTk.PhotoImage(Image.fromarray(frame_rgb))
 
 
-class Yolov8sDemoApp(tk.Tk):
+class Yolov8sCloneDemoApp(tk.Tk):
     def __init__(self, weights: str, device: str | None,
                  videos_root: str, frames_root: str):
         super().__init__()
-        self.title("YOLOv8s Surgical Instrument Detection — Baseline Demo")
+        self.title("YOLOv8s clone — Surgical Tool & Tip Detection Demo")
         self.resizable(True, True)
 
         self._weights = weights
-        self._detector: YoloDetector | None = None
+        self._detector: Detector | None = None
         self._source = None
         self._last_frame: np.ndarray | None = None
         self._last_index = 0
@@ -126,14 +114,15 @@ class Yolov8sDemoApp(tk.Tk):
 
     # ── Model ────────────────────────────────────────────────────────────
 
-    def _load_detector(self, weights: str, device: str | None) -> YoloDetector | None:
+    def _load_detector(self, weights: str, device: str | None) -> Detector | None:
         if not os.path.exists(weights):
-            print(f"WARNING: weights not found: {weights}\n"
-                  "         run scripts/download-model.py first")
+            print(f"WARNING: checkpoint not found: {weights}\n"
+                  "         train one first with scripts/train-model.py")
             return None
         try:
-            detector = YoloDetector(weights, device=device)
-            print(f"Model loaded: {weights}  [{detector.device}]")
+            detector = Detector(weights, device=device)
+            print(f"Model loaded: {weights}  [{detector.device}]  "
+                  f"trained on {detector.dataset}, epoch {detector.epoch}")
             return detector
         except Exception as exc:
             print(f"WARNING: could not load {weights} — {exc}")
@@ -172,8 +161,7 @@ class Yolov8sDemoApp(tk.Tk):
         self._frame_lbl = tk.Label(ctrl, text="— / —", width=16, anchor="w")
         self._frame_lbl.pack(side=tk.LEFT)
 
-        tk.Label(ctrl, text="<- -> : step one frame",
-                 fg="gray").pack(side=tk.RIGHT)
+        tk.Label(ctrl, text="<- -> : step one frame", fg="gray").pack(side=tk.RIGHT)
 
         # ── Row 2: detection parameters ────────────────────────────────────
         param = tk.Frame(self, pady=4, padx=8)
@@ -208,9 +196,8 @@ class Yolov8sDemoApp(tk.Tk):
         self._refresh_status()
 
         # ── Row 3: class legend ────────────────────────────────────────────
-        # Each class is drawn in its own colour, so the legend has to be
-        # coloured too -- a Tk Label renders a single colour, hence one small
-        # Label per class rather than one line of text.
+        # A Tk Label renders one colour, so the legend is one small Label per
+        # class rather than a single line of text.
         legend = tk.Frame(self, padx=8)
         legend.pack(fill=tk.X)
         tk.Label(legend, text="classes:").pack(side=tk.LEFT, padx=(0, 4))
@@ -223,14 +210,12 @@ class Yolov8sDemoApp(tk.Tk):
         # ── Row 4: frame panel ─────────────────────────────────────────────
         panel = tk.LabelFrame(self, text="Prediction overlay", padx=4, pady=4)
         panel.pack(padx=8, pady=4)
-        self._lbl_frame = tk.Label(panel, width=PANEL_W, height=PANEL_H,
-                                   bg="#1a1a1a")
+        self._lbl_frame = tk.Label(panel, width=PANEL_W, height=PANEL_H, bg="#1a1a1a")
         self._lbl_frame.pack()
 
         # A Label sizes itself in characters/lines until an image is assigned;
         # without this placeholder the empty panel would balloon the window.
-        self._photo = _to_photo(
-            np.full((PANEL_H, PANEL_W, 3), 26, dtype=np.uint8))
+        self._photo = _to_photo(np.full((PANEL_H, PANEL_W, 3), 26, dtype=np.uint8))
         self._lbl_frame.config(image=self._photo)
 
         # ── Row 5: per-frame info ──────────────────────────────────────────
@@ -261,14 +246,18 @@ class Yolov8sDemoApp(tk.Tk):
 
     def _refresh_status(self):
         if self._detector is None:
-            self._status_var.set(
-                f"model NOT loaded: {os.path.basename(self._weights)}")
+            self._status_var.set(f"model NOT loaded: {os.path.basename(self._weights)}")
             self._status_lbl.config(fg="#aa0000")
-        else:
-            self._status_var.set(
-                f"{os.path.basename(self._weights)}  [{self._detector.device}]  "
-                f"{len(self._detector.names)} classes")
-            self._status_lbl.config(fg="#005500")
+            return
+        metrics = self._detector.metrics or {}
+        suffix = ""
+        if metrics.get("map50") is not None:
+            suffix = f"  val mAP@0.5 {metrics['map50']:.3f}"
+        self._status_var.set(
+            f"{os.path.basename(self._weights)}  [{self._detector.device}]  "
+            f"{self._detector.dataset} ep{self._detector.epoch} "
+            f"tip{self._detector.tip_box_size:g}{suffix}")
+        self._status_lbl.config(fg="#005500")
 
     # ── Source handling ──────────────────────────────────────────────────
 
@@ -300,8 +289,7 @@ class Yolov8sDemoApp(tk.Tk):
         self._source = source
         self._source_var.set(spec.label)
 
-        self._seekbar.config(state=tk.NORMAL,
-                             to=max(1, source.frame_count - 1))
+        self._seekbar.config(state=tk.NORMAL, to=max(1, source.frame_count - 1))
         self._seek_end_lbl.config(text=str(max(0, source.frame_count - 1)))
         self._play_btn.config(state=tk.NORMAL)
         self._goto(0)
@@ -331,14 +319,14 @@ class Yolov8sDemoApp(tk.Tk):
             self._lbl_frame.config(image=self._photo)
             self._set_info(
                 f"{self._source.frame_name(index)}\n"
-                "model not loaded — showing the raw frame.\n"
-                "Run scripts/download-model.py, then restart the demo.")
+                "no checkpoint loaded — showing the raw frame.\n"
+                "Train one with scripts/train-model.py, then restart the demo.")
             return
 
         detections, infer_ms = self._detector.detect(
             frame, conf=self._conf_var.get(), iou=self._iou_var.get())
 
-        display = draw_detections(frame.copy(), detections)
+        display = draw_detections(frame.copy(), detections, self._detector.class_names)
 
         annotations = self._source.ground_truth(index)
         if self._show_gt_var.get() and annotations:
@@ -347,20 +335,21 @@ class Yolov8sDemoApp(tk.Tk):
         self._photo = _to_photo(display)
         self._lbl_frame.config(image=self._photo)
 
+        names = self._detector.class_names
+        tools = [d for d in detections if names[int(d[5])] == "tool"]
+        tips = [d for d in detections if names[int(d[5])] == "tip"]
+        tip_text = ", ".join(f"({(d[0] + d[2]) / 2:.0f}, {(d[1] + d[3]) / 2:.0f}) {d[4]:.2f}"
+                             for d in tips) or "(none)"
         if annotations is None:
             gt_line = "ground truth: none (unlabelled source)"
         else:
             gt_line = f"ground truth: {len(annotations)} tool(s) annotated"
 
-        if detections:
-            listed = ", ".join(f"{d.label} {d.conf:.2f}" for d in detections)
-        else:
-            listed = "(none above the confidence threshold)"
-
         self._set_info(
             f"{self._source.frame_name(index)}\n"
             f"inference: {infer_ms:.1f} ms  ({1000.0 / max(infer_ms, 1e-6):.1f} FPS)\n"
-            f"detections: {len(detections)} — {listed}\n"
+            f"tool boxes: {len(tools)}   tip boxes: {len(tips)}\n"
+            f"predicted tips: {tip_text}\n"
             f"{gt_line}")
 
     def _update_frame_label(self):
@@ -411,17 +400,16 @@ class Yolov8sDemoApp(tk.Tk):
         if self._play_after_id is not None:
             self.after_cancel(self._play_after_id)
             self._play_after_id = None
-        self._play_btn.config(
-            state=tk.NORMAL if self._source else tk.DISABLED)
+        self._play_btn.config(state=tk.NORMAL if self._source else tk.DISABLED)
         self._pause_btn.config(state=tk.DISABLED)
 
     def _play_tick(self):
         if not self._playing or self._source is None:
             return
 
-        # Wall-clock pacing: the target frame is derived from elapsed time, so
-        # when inference is slower than the source's frame rate the playback
-        # drops frames instead of falling behind. It never goes backwards.
+        # Wall-clock pacing: the target frame comes from elapsed time, so when
+        # inference is slower than the source's frame rate playback drops
+        # frames instead of falling behind. It never goes backwards.
         elapsed = time.perf_counter() - self._play_start_wall
         target = self._play_start_index + int(elapsed * self._source.fps)
         target = max(target, self._last_index + 1)
@@ -442,9 +430,11 @@ class Yolov8sDemoApp(tk.Tk):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="GUI demo for the YOLOv8s surgical instrument detection baseline")
-    parser.add_argument("--weights", default=DEFAULT_WEIGHTS,
-                        help=f"path to the checkpoint (default: {DEFAULT_WEIGHTS})")
+        description="GUI demo for the YOLOv8s-clone surgical tool + tip detection baseline")
+    parser.add_argument("--weights", default=default_model_path(),
+                        help="path to the checkpoint; with several datasets trained, "
+                             "pass data/<dataset>/model.pt explicitly "
+                             f"(default: {default_model_path()})")
     parser.add_argument("--device", default=None,
                         help="torch device, e.g. cuda:0 or cpu (default: cuda if available)")
     parser.add_argument("--videos-root", default=default_videos_root(),
@@ -455,9 +445,8 @@ def main():
                              f"(default: {default_frames_root()})")
     args = parser.parse_args()
 
-    app = Yolov8sDemoApp(weights=args.weights, device=args.device,
-                         videos_root=args.videos_root,
-                         frames_root=args.frames_root)
+    app = Yolov8sCloneDemoApp(weights=args.weights, device=args.device,
+                         videos_root=args.videos_root, frames_root=args.frames_root)
     app.mainloop()
 
 

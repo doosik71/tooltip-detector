@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Evaluate a trained CLAD-Net checkpoint on a dataset split.
+"""Evaluate a trained YOLOv8s-clone checkpoint on a dataset split.
 
 Two families of numbers are reported, because this baseline is being compared
 in two directions:
 
   detection   AP@0.5, AP@0.5:0.95, precision and recall for both classes
-              (`tool`, `tip`) -- the metrics the CLAD-Net paper reports.
+              (`tool`, `tip`) -- the usual object-detection metrics.
   tip         miss rate, hit-rate @ 10/20/50 px and match distances, computed
               from the centres of the predicted `tip` boxes with the same
               matching rules as the root project's scripts/eval-model.py, so
@@ -14,15 +14,15 @@ in two directions:
 Everything is measured in original frame pixels (736 x 480), not in the
 letterboxed 640 x 640 network input.
 
-Outputs, under baseline/cladnet/data/<dataset>/results/<split>/ by default:
+Outputs, under baseline/yolov8sclone/data/results/<dataset>/<split>/ by default:
 
     summary.json   all metrics plus the run parameters
     per_tip.csv    one row per ground-truth tip (coordinates, nearest
                    prediction, distance, whether it was missed)
 
 Usage:
-    ./baseline/cladnet/run eval-model --dataset cholec80
-    ./baseline/cladnet/run eval-model --dataset cholec80 --split val --limit 2000
+    ./baseline/yolov8sclone/run eval-model --dataset cholec80
+    ./baseline/yolov8sclone/run eval-model --dataset cholec80 --split val --limit 2000
 """
 
 import argparse
@@ -40,7 +40,7 @@ if True:
     from common.dataset import (CLASS_NAMES, SPLITS, TIP_CLASS, TOOL_CLASS,
                                 SurgicalDetectionDataset, available_datasets,
                                 default_data_root)
-    from common.inference import (DEFAULT_CONF, DEFAULT_IOU, Detector, dataset_dir,
+    from common.inference import (DEFAULT_CONF, DEFAULT_IOU, Detector, results_dir,
                                   default_model_path)
     from common.metrics import DetectionEvaluator
     from common.progress import progress
@@ -57,7 +57,8 @@ def ground_truth_boxes(labels: np.ndarray, width: int, height: int) -> np.ndarra
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate CLAD-Net on a tooltip-detector dataset")
+    parser = argparse.ArgumentParser(
+        description="Evaluate the YOLOv8s clone on a tooltip-detector dataset")
     parser.add_argument("--dataset", required=True, choices=available_datasets() or None)
     parser.add_argument("--split", default="test", choices=SPLITS)
     parser.add_argument("--model", default=None,
@@ -86,11 +87,14 @@ def main():
     detector = Detector(args.model, args.device)
     print(f"model   : {args.model}  [{detector.device}]")
     print(f"trained : dataset={detector.dataset} epoch={detector.epoch} "
-          f"image_size={detector.image_size}")
+          f"image_size={detector.image_size} tip_box={detector.tip_box_size:g} px")
 
+    # The tip box side is whatever the checkpoint was trained with; using a
+    # different one here would score the model against labels it never saw.
     dataset = SurgicalDetectionDataset(args.dataset, args.split, detector.image_size,
                                        augment=False, data_root=args.data_root,
-                                       frame_stride=args.frame_stride, limit=args.limit)
+                                       frame_stride=args.frame_stride, limit=args.limit,
+                                       tip_box_size=detector.tip_box_size)
     print(f"frames  : {len(dataset):,}  ({args.dataset}/{args.split})")
 
     detection_eval = DetectionEvaluator(len(CLASS_NAMES), CLASS_NAMES)
@@ -139,7 +143,7 @@ def main():
     detection_metrics = detection_eval.compute()
     tip_metrics = tip_eval.compute()
 
-    output_dir = args.output_dir or os.path.join(dataset_dir(args.dataset), "results", args.split)
+    output_dir = args.output_dir or os.path.join(results_dir(args.dataset), args.split)
     os.makedirs(output_dir, exist_ok=True)
 
     summary = {
@@ -154,6 +158,7 @@ def main():
         "iou_threshold": args.iou,
         "frame_stride": args.frame_stride,
         "image_size": detector.image_size,
+        "tip_box_size": detector.tip_box_size,
         "device": str(detector.device),
         "ms_per_frame": round(total_ms / max(1, n_frames), 2),
         "fps": round(1000.0 * n_frames / max(1e-9, total_ms), 1),

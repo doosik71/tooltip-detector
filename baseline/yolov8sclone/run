@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Same convention as the repository root's `run`, but bound to this
+# sub-project's scripts. Unlike the other baselines this one has no private
+# virtualenv: it needs nothing beyond the packages the root project already
+# depends on, so `--project` points back at the repository root.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$SCRIPT_DIR"
+
+script="${1:-}"
+if [ -z "$script" ]; then
+  echo "Usage: run <script> [args...]"
+  echo
+  echo "Available scripts:"
+  for f in scripts/*.py; do
+    echo "  $(basename "$f" .py)"
+  done
+  exit 1
+fi
+shift
+
+uv run --project "$REPO_ROOT" python "scripts/$script.py" "$@"

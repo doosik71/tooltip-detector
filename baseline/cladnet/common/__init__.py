@@ -11,5 +11,6 @@ same convention the root project uses for its `ttd` package.
   dataset    data/dataset/<name> annotations -> 2-class detection labels
   loss       YOLOv5-style label assignment and the paper's loss
   metrics    AP@0.5, AP@0.5:0.95, recall
+  progress   shared tqdm settings (ASCII bar, fixed width)
   tipmetrics hit-rate @ N px, mirroring the root project's tip evaluation
 """
