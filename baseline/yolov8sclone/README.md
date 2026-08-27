@@ -186,6 +186,8 @@ uv sync        # 루트에서 한 번 (이미 했다면 불필요)
     --output-dir baseline/yolov8sclone/data/model/cholec80-tip16
 ```
 
+데이터셋별 전체 재현 명령은 [docs/commands.md](docs/commands.md)에 있다.
+
 ### 2. 평가
 
 ```bash
@@ -209,8 +211,17 @@ uv sync        # 루트에서 한 번 (이미 했다면 불필요)
 ./baseline/yolov8sclone/run demo
 ```
 
-`data/model/<dataset>/model.pt`를 읽어 영상을 프레임 단위로 처리하며 `tool` 박스와 `tip` 박스(중심에
-십자 마커)를 그린다. 조작은 [yolov8s 데모](../yolov8s/README.md)와 같다.
+`data/model/<dataset>/model.pt` 중 사전순 첫 번째를 읽어 영상을 프레임 단위로 처리하며 `tool` 박스와
+`tip` 박스(중심에 십자 마커)를 그린다. 조작은 [yolov8s 데모](../yolov8s/README.md)와 같다.
+
+다른 데이터셋의 모델을 쓰려면 `--dataset`을 지정하면 `data/model/<dataset>/model.pt`를 알아서
+찾는다. `data/model/` 밖의 체크포인트나 `model-last.pt`를 열려면 `--weights`로 경로를 직접 준다
+(`--dataset`보다 우선한다).
+
+```bash
+./baseline/yolov8sclone/run demo --dataset erop
+./baseline/yolov8sclone/run demo --weights baseline/yolov8sclone/data/model/erop/model-last.pt
+```
 
 | 조작                      | 동작                                                                 |
 | ------------------------- | -------------------------------------------------------------------- |

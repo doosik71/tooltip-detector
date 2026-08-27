@@ -3,8 +3,8 @@
 
 Plays a laparoscopic video -- or a directory of extracted dataset frames --
 through a trained CLAD-Net checkpoint (`baseline/cladnet/data/model/<dataset>/model.pt`,
-the alphabetically first one by default) and draws what it predicts on every
-frame:
+picked with --dataset, the alphabetically first one by default) and draws what
+it predicts on every frame:
 
   tool   the instrument's bounding box
   tip    a square box on the instrument tip (32 px by default, whatever the
@@ -39,6 +39,7 @@ Controls
 Usage
 -----
     ./baseline/cladnet/run demo
+    ./baseline/cladnet/run demo --dataset erop
     ./baseline/cladnet/run demo --device cpu
 """
 
@@ -59,9 +60,10 @@ if True:
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+    from common.dataset import available_datasets
     from common.draw import CLASS_COLORS, draw_detections, draw_ground_truth
     from common.inference import (DEFAULT_CONF, DEFAULT_IOU, Detector,
-                                  default_model_path)
+                                  default_model_path, trained_datasets)
     from common.sources import (FRAME_H, FRAME_W, SourceSpec, default_frames_root,
                                 default_videos_root, discover_sources, open_source)
 
@@ -430,9 +432,13 @@ class CladNetDemoApp(tk.Tk):
 def main():
     parser = argparse.ArgumentParser(
         description="GUI demo for the CLAD-Net surgical tool + tip detection baseline")
-    parser.add_argument("--weights", default=default_model_path(),
-                        help="path to the checkpoint; with several datasets trained, "
-                             "pass data/model/<dataset>/model.pt explicitly "
+    parser.add_argument("--dataset", default=None,
+                        choices=available_datasets() or None,
+                        help="load data/model/<dataset>/model.pt (trained: "
+                             f"{', '.join(trained_datasets()) or 'none yet'}; "
+                             "default: the first one alphabetically)")
+    parser.add_argument("--weights", default=None,
+                        help="checkpoint path, overriding --dataset "
                              f"(default: {default_model_path()})")
     parser.add_argument("--device", default=None,
                         help="torch device, e.g. cuda:0 or cpu (default: cuda if available)")
@@ -444,7 +450,9 @@ def main():
                              f"(default: {default_frames_root()})")
     args = parser.parse_args()
 
-    app = CladNetDemoApp(weights=args.weights, device=args.device,
+    weights = args.weights or default_model_path(args.dataset)
+
+    app = CladNetDemoApp(weights=weights, device=args.device,
                          videos_root=args.videos_root, frames_root=args.frames_root)
     app.mainloop()
 

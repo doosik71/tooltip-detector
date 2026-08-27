@@ -42,14 +42,19 @@ def results_dir(dataset: str) -> str:
     return os.path.join(data_dir(), "results", dataset)
 
 
+def trained_datasets() -> list[str]:
+    """Dataset names that already have a checkpoint under data/model/<dataset>/."""
+    paths = glob.glob(os.path.join(data_dir(), "model", "*", "model.pt"))
+    return sorted(os.path.basename(os.path.dirname(path)) for path in paths)
+
+
 def default_model_path(dataset: str | None = None) -> str:
-    """Checkpoint of one dataset, or -- for the demo, which has no --dataset --
-    the first trained one under data/model/, in alphabetical order."""
-    if dataset:
-        return os.path.join(model_dir(dataset), "model.pt")
-    for path in sorted(glob.glob(os.path.join(data_dir(), "model", "*", "model.pt"))):
-        return path
-    return os.path.join(data_dir(), "model", "<dataset>", "model.pt")
+    """Checkpoint of one dataset, or -- when no dataset is given -- the first
+    trained one under data/model/, in alphabetical order."""
+    if not dataset:
+        trained = trained_datasets()
+        dataset = trained[0] if trained else "<dataset>"
+    return os.path.join(model_dir(dataset), "model.pt")
 
 
 def save_checkpoint(path: str, model, arch: dict, image_size: int, tip_box_size: float,

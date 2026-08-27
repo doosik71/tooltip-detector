@@ -203,10 +203,18 @@ uv sync --project baseline/cladnet
 ```
 
 `data/model/<dataset>/model.pt` 중 사전순 첫 번째를 읽어 영상을 프레임 단위로 처리하며 `tool` 박스와
-`tip` 박스(중심에 십자 마커)를 그린다. 다른 데이터셋의 모델을 쓰려면 `--weights`를 지정한다.
+`tip` 박스(중심에 십자 마커)를 그린다. 다른 데이터셋의 모델을 쓰려면 `--dataset`을 지정하면
+`data/model/<dataset>/model.pt`를 알아서 찾는다.
 
 ```bash
-./baseline/cladnet/run demo --weights baseline/cladnet/data/model/erop/model.pt
+./baseline/cladnet/run demo --dataset erop
+```
+
+`data/model/` 밖의 체크포인트나 `model-last.pt`를 열려면 `--weights`로 경로를 직접 준다
+(`--dataset`보다 우선한다).
+
+```bash
+./baseline/cladnet/run demo --weights baseline/cladnet/data/model/erop/model-last.pt
 ```
 
 | 조작                      | 동작                                                                 |
