@@ -38,11 +38,11 @@ if True:
 
     from common.inference import data_dir
 
-# TEMPORARY. The completed runs live in data/model-16x16 and data/results-16x16
-# while a fresh training round writes to the unsuffixed directories. Set this to
-# "" once that round finishes and its results are the ones worth reporting;
-# --suffix overrides it for a one-off run.
-DATA_SUFFIX = "-16x16"
+# The reported round is the unsuffixed one: 150 epochs at --frame-stride 5.
+# data/model-16x16 and data/results-16x16 still hold the earlier round (30
+# epochs at --frame-stride 1), which docs/experimental-results.md keeps as a
+# comparison -- pass --suffix "-16x16" to regenerate this document for it.
+DATA_SUFFIX = ""
 
 DEFAULT_OUTPUT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "summary-results.md")

@@ -24,9 +24,7 @@
   <rect width="1660" height="1120" fill="#ffffff"/>
 
   <!-- ══ title ══════════════════════════════════════════════════════════ -->
-  <text x="40" y="42" font-size="26" font-weight="bold" fill="#1a2327">CLAD-Net</text>
-  <text x="205" y="42" font-size="17" fill="#546e7a">cross-layer aggregation attention network — as implemented in baseline/cladnet</text>
-  <text x="40" y="66" font-size="13" fill="#78909c">7.488 M parameters (backbone 4.17 M · neck 2.28 M · heads 1.04 M) — the paper reports 7.5 M. Shapes are C×H×W for a 640×640 input, 2 classes, 3 anchors per level.</text>
+  <text x="40" y="34" font-size="13" fill="#78909c">7.488 M parameters (backbone 4.17 M · neck 2.28 M · heads 1.04 M) — the paper reports 7.5 M. Shapes are C×H×W for a 640×640 input, 2 classes, 3 anchors per level.</text>
 
   <!-- ══ row guides ═════════════════════════════════════════════════════ -->
   <g font-size="12" fill="#b0bec5" text-anchor="end">

@@ -1,0 +1,10 @@
+{
+  "python.analysis.exclude": [
+    "data",
+    ".git",
+    ".venv",
+    "__pycache__",
+    "**/node_modules",
+    "**/.*"
+  ]
+}

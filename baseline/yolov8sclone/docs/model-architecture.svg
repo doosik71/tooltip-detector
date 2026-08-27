@@ -24,9 +24,7 @@
   <rect width="1660" height="1160" fill="#ffffff"/>
 
   <!-- ══ title ══════════════════════════════════════════════════════════ -->
-  <text x="40" y="42" font-size="26" font-weight="bold" fill="#1a2327">YOLOv8s clone</text>
-  <text x="272" y="42" font-size="17" fill="#546e7a">a plain-PyTorch rebuild — nothing here imports ultralytics</text>
-  <text x="40" y="66" font-size="13" fill="#78909c">11.136 M parameters at 2 classes (backbone 5.08 M · neck 3.94 M · Detect 2.12 M). Module numbers follow the published YOLOv8 layout. Shapes are C×H×W for a 640×640 input.</text>
+  <text x="40" y="34" font-size="13" fill="#78909c">11.136 M parameters at 2 classes (backbone 5.08 M · neck 3.94 M · Detect 2.12 M). Module numbers follow the published YOLOv8 layout. Shapes are C×H×W for a 640×640 input.</text>
 
   <!-- ══ row guides ═════════════════════════════════════════════════════ -->
   <g font-size="12" fill="#b0bec5" text-anchor="end">

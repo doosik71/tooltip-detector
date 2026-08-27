@@ -32,10 +32,9 @@
 
 논문 Fig. 1–3과 본문에서 재구성한 것이다.
 
-![CLAD-Net 구조](docs/images/model-architecture.png)
+![CLAD-Net 구조. 텐서 모양은 이 구현에서 실제로 뽑은 값이다 (640 × 640 입력, 2클래스, 레벨당 앵커 3개).](docs/images/model-architecture.png)
 
-*텐서 모양은 이 구현에서 실제로 뽑은 값이다 (640 × 640 입력, 2클래스, 레벨당 앵커 3개).
-원본 벡터 파일: [docs/model-architecture.svg](docs/model-architecture.svg)*
+벡터 원본은 [docs/model-architecture.svg](docs/model-architecture.svg)에 있다.
 
 ```text
 입력 640 × 640

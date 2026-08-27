@@ -42,7 +42,7 @@ if True:
 # while a fresh training round writes to the unsuffixed directories. Set this to
 # "" once that round finishes and its results are the ones worth reporting;
 # --suffix overrides it for a one-off run.
-DATA_SUFFIX = "-16x16"
+DATA_SUFFIX = ""
 
 DEFAULT_OUTPUT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "summary-results.md")
