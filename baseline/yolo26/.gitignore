@@ -1,0 +1,4 @@
+# yolo26 baseline: private virtualenv, the prepared YOLO dataset, checkpoints
+# and evaluation output all stay out of git.
+.venv/
+data/

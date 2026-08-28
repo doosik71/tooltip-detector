@@ -1,0 +1,42 @@
+# Standalone uv project for the YOLO26 baseline.
+#
+# Kept separate from the repository root for the same reason as the YOLOv8s
+# baseline next door: ultralytics requires `opencv-python`, while the root
+# project already pulls in `opencv-python-headless` through albumentations.
+# Both ship the same `cv2` package, so installing them into one environment
+# would clobber the training environment.
+#
+# `scipy` and `tqdm` are on top of what the YOLOv8s baseline needs: the tip
+# metrics use a Hungarian assignment (scipy) and the evaluation loop reports
+# progress the same way the other baselines do (tqdm). Ultralytics 8.4 no
+# longer depends on either.
+[project]
+name = "yolo26-baseline"
+version = "0.1.0"
+description = "YOLO26 surgical tool + tip detection baseline (Ultralytics)"
+readme = "README.md"
+requires-python = ">=3.12"
+
+dependencies = [
+    "numpy>=2.0",
+    "pillow>=12.2.0",
+    "scipy>=1.14",
+    "torch>=2.7.1",
+    "torchvision==0.22.1",
+    "tqdm>=4.67",
+    "ultralytics>=8.4.128",
+]
+
+[tool.uv]
+# `common/` is imported via sys.path (same convention as the root project's
+# `ttd/`), so there is nothing here to build or install.
+package = false
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

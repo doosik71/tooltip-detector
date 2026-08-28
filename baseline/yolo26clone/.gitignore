@@ -1,0 +1,3 @@
+# yolo26clone: checkpoints, evaluation results and the extracted reference
+# weights all stay out of git.
+data/
