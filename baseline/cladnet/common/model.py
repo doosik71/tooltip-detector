@@ -19,7 +19,7 @@ import torch
 import torch.nn as nn
 
 from .backbone import CSPDarknet
-from .modules import Conv
+from .modules import Conv, fuse_conv_bn_eval
 from .neck import CrossLayerAggregationNeck
 
 CLASS_NAMES = ("tool", "tip")
@@ -134,6 +134,38 @@ def decode(outputs, anchors, strides):
 
 def build(num_classes: int = len(CLASS_NAMES), **kwargs) -> CLADNet:
     return CLADNet(num_classes=num_classes, **kwargs)
+
+
+def fuse(model: nn.Module) -> nn.Module:
+    """Fold every BatchNorm into the convolution in front of it. Returns `model`.
+
+    Two shapes of Conv+BN exist in this network and both are handled: the
+    `Conv` block, and the bare `nn.Conv2d` -> `nn.BatchNorm2d` pairs inside
+    the attention blocks' `nn.Sequential`s (AAB's fuse, MSAB's gca and lca).
+
+    Call it on an eval-mode model that already holds its trained weights: the
+    fold reads BatchNorm's running statistics, and it rewrites `state_dict`
+    keys (`*.bn.*` disappears, a bias appears on the convolution). So a fused
+    model can no longer load or save a normal checkpoint, which is why this is
+    not part of `build` and why `Detector` calls it only after
+    `load_state_dict`.
+    """
+    if model.training:
+        raise RuntimeError("fuse() needs an eval-mode model: BatchNorm's running "
+                           "statistics are what gets folded in")
+    for module in model.modules():
+        if isinstance(module, Conv):
+            module.fuse()
+        elif isinstance(module, nn.Sequential):
+            # `nn.Sequential` is indexable, so a BatchNorm that directly
+            # follows a convolution can be folded in place and replaced by an
+            # Identity, keeping every other index where it was.
+            for i in range(len(module) - 1):
+                conv, bn = module[i], module[i + 1]
+                if isinstance(conv, nn.Conv2d) and isinstance(bn, nn.BatchNorm2d):
+                    module[i] = fuse_conv_bn_eval(conv, bn)
+                    module[i + 1] = nn.Identity()
+    return model
 
 
 def parameter_count(model: nn.Module) -> int:

@@ -41,6 +41,7 @@ import math
 
 import torch
 import torch.nn as nn
+from torch.nn.utils.fusion import fuse_conv_bn_eval
 
 CLASS_NAMES = ("tool", "tip")
 STRIDES = (8, 16, 32)
@@ -68,6 +69,18 @@ class Conv(nn.Module):
 
     def forward(self, x):
         return self.act(self.bn(self.conv(x)))
+
+    def fuse(self) -> None:
+        """Fold `bn` into `conv`. Inference only, and not reversible.
+
+        In eval mode BatchNorm is a fixed affine map, so folding it into the
+        preceding convolution's weight and bias computes the same thing with
+        one kernel instead of two. Doing nothing when `bn` is already gone
+        keeps this idempotent.
+        """
+        if isinstance(self.bn, nn.BatchNorm2d):
+            self.conv = fuse_conv_bn_eval(self.conv, self.bn)
+            self.bn = nn.Identity()
 
 
 class Bottleneck(nn.Module):
@@ -287,6 +300,27 @@ def decode(outputs, model) -> torch.Tensor:
 
 def build(num_classes: int = len(CLASS_NAMES), scale: str = "s") -> YOLOv8:
     return YOLOv8(num_classes=num_classes, scale=scale)
+
+
+def fuse(model: nn.Module) -> nn.Module:
+    """Fold every `Conv`'s BatchNorm into its convolution. Returns `model`.
+
+    Call it on an eval-mode model that already holds its trained weights: the
+    fold reads BatchNorm's running statistics, and it rewrites `state_dict`
+    keys (`*.bn.*` disappears, `*.conv.bias` appears). So a fused model can no
+    longer load or save a normal checkpoint, which is why this is not part of
+    `build` and why `Detector` calls it only after `load_state_dict`.
+
+    Ultralytics fuses the same way when `AutoBackend` loads a checkpoint, so
+    this is what the reference runs at inference too.
+    """
+    if model.training:
+        raise RuntimeError("fuse() needs an eval-mode model: BatchNorm's running "
+                           "statistics are what gets folded in")
+    for module in model.modules():
+        if isinstance(module, Conv):
+            module.fuse()
+    return model
 
 
 def parameter_count(model: nn.Module) -> int:

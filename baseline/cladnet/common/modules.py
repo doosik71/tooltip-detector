@@ -12,6 +12,7 @@ revisit if a reproduction attempt falls short of the published numbers.
 
 import torch
 import torch.nn as nn
+from torch.nn.utils.fusion import fuse_conv_bn_eval
 import torch.nn.functional as F
 
 
@@ -31,6 +32,18 @@ class Conv(nn.Module):
 
     def forward(self, x):
         return self.act(self.bn(self.conv(x)))
+
+    def fuse(self) -> None:
+        """Fold `bn` into `conv`. Inference only, and not reversible.
+
+        In eval mode BatchNorm is a fixed affine map, so folding it into the
+        preceding convolution's weight and bias computes the same thing with
+        one kernel instead of two. Doing nothing when `bn` is already gone
+        keeps this idempotent.
+        """
+        if isinstance(self.bn, nn.BatchNorm2d):
+            self.conv = fuse_conv_bn_eval(self.conv, self.bn)
+            self.bn = nn.Identity()
 
 
 class DWConv(nn.Module):

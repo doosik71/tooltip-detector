@@ -6,6 +6,11 @@
 # package, so installing them into one environment would clobber the training
 # environment. A private .venv here keeps the two apart, and gives every future
 # baseline room to bring its own (often conflicting) dependency set.
+#
+# `scipy` and `tqdm` are here for the training/evaluation scripts, not the
+# demo: the tip metrics use a Hungarian assignment (scipy) and the evaluation
+# loop reports progress the way the other baselines do (tqdm). Ultralytics 8.4
+# no longer depends on either.
 [project]
 name = "yolov8s-baseline"
 version = "0.1.0"
@@ -16,8 +21,10 @@ requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.0",
     "pillow>=12.2.0",
+    "scipy>=1.14",
     "torch>=2.7.1",
     "torchvision==0.22.1",
+    "tqdm>=4.67",
     "ultralytics>=8.4.21",
 ]
 

@@ -25,7 +25,7 @@ import torch
 
 from .boxes import letterbox, undo_letterbox
 from .dataset import DEFAULT_TIP_BOX_SIZE
-from .model import CLASS_NAMES, MAX_DET, build, decode, postprocess
+from .model import CLASS_NAMES, MAX_DET, build, decode, fuse, postprocess
 
 DEFAULT_CONF = 0.25
 DEFAULT_MAX_DET = MAX_DET
@@ -97,6 +97,27 @@ class Detector:
         self.model = build(num_classes=len(self.class_names), **self.arch)
         self.model.load_state_dict(checkpoint["model"])
         self.model.to(self.device).eval()
+        # Two inference-only shortcuts, both applied after `load_state_dict`
+        # so the checkpoint format is untouched. Together they take about a
+        # third off the frame.
+        #
+        # `detect` reads the one-to-one branch and nothing else, so let the
+        # head skip the other one. Detections are bit-identical: it is the
+        # same tensors, just not computing the ones nobody reads. A plain
+        # attribute, so `load_state_dict` never carries it.
+        self.model.detect.one2one_only = True
+        # Folding BatchNorm into the preceding convolution rewrites
+        # `state_dict` keys, so it has to come last. The reference fuses the
+        # same way when `AutoBackend` loads a checkpoint.
+        #
+        # This one is exact in real arithmetic but not on this hardware: TF32
+        # convolutions keep ~10 mantissa bits, and folding changes the weight
+        # magnitudes the rounding sees. Measured over 60 cholec80 frames the
+        # scores move by up to 1.2e-2 and one anchor in 278 crosses conf=0.25;
+        # with TF32 off the same comparison is 7.2e-6 and no crossings. That
+        # is the size of the noise TF32 already puts on the unfused path, so
+        # it is accepted here rather than paid for with fp32 convolutions.
+        fuse(self.model)
 
     @torch.no_grad()
     def detect(self, frame_rgb: np.ndarray, conf: float = DEFAULT_CONF,

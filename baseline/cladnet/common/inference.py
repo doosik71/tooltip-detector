@@ -21,7 +21,7 @@ import torch
 
 from .boxes import letterbox, non_max_suppression, undo_letterbox
 from .dataset import DEFAULT_TIP_BOX_SIZE
-from .model import CLASS_NAMES, build, decode
+from .model import CLASS_NAMES, build, decode, fuse
 
 DEFAULT_CONF = 0.25
 DEFAULT_IOU = 0.45
@@ -102,6 +102,16 @@ class Detector:
         self.model = build(num_classes=len(self.class_names), **self.arch)
         self.model.load_state_dict(checkpoint["model"])
         self.model.to(self.device).eval()
+        # Folding BatchNorm into the preceding convolution is worth about a
+        # fifth of the frame time. It has to come after `load_state_dict`,
+        # since folding rewrites `state_dict` keys; the checkpoint format on
+        # disk and the training path are untouched.
+        #
+        # Exact in real arithmetic, but not on TF32 hardware: folding changes
+        # the weight magnitudes the rounding sees, so a detection sitting
+        # exactly on the confidence threshold can flip. That is the size of
+        # the noise TF32 already puts on the unfused path.
+        fuse(self.model)
 
     @torch.no_grad()
     def detect(self, frame_rgb: np.ndarray, conf: float = DEFAULT_CONF,

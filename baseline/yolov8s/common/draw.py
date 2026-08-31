@@ -14,9 +14,15 @@ it, which is convenient: white reads as "reference" against the colours.
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-# One colour per class of the published checkpoint. Unknown ids fall back to
-# _FALLBACK_COLOR, so an extended checkpoint still draws.
+# One colour per class, for both checkpoints this baseline can show: the two
+# classes scripts/train-model.py produces, and the seven of the published
+# instrument classifier. Unknown ids fall back to _FALLBACK_COLOR, so an
+# extended checkpoint still draws.
 CLASS_COLORS = {
+    # trained here: tool box and the 32 px box on the tool tip
+    "tool": "#3CB44B",
+    "tip": "#E6194B",
+    # the published 7-class Hugging Face checkpoint
     "Bag": "#F58231",
     "Bipolar": "#4363D8",
     "Clipper": "#911EB4",

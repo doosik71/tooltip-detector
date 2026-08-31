@@ -57,6 +57,7 @@ import math
 
 import torch
 import torch.nn as nn
+from torch.nn.utils.fusion import fuse_conv_bn_eval
 
 CLASS_NAMES = ("tool", "tip")
 STRIDES = (8, 16, 32)
@@ -96,6 +97,18 @@ class Conv(nn.Module):
 
     def forward(self, x):
         return self.act(self.bn(self.conv(x)))
+
+    def fuse(self) -> None:
+        """Fold `bn` into `conv`. Inference only, and not reversible.
+
+        In eval mode BatchNorm is a fixed affine map, so folding it into the
+        preceding convolution's weight and bias computes the same thing with
+        one kernel instead of two. Doing nothing when `bn` is already gone
+        keeps this idempotent.
+        """
+        if isinstance(self.bn, nn.BatchNorm2d):
+            self.conv = fuse_conv_bn_eval(self.conv, self.bn)
+            self.bn = nn.Identity()
 
 
 class DWConv(Conv):
@@ -286,6 +299,10 @@ class Detect(nn.Module):
         self.no = nc + reg_max * 4
         self.stride = torch.tensor(STRIDES, dtype=torch.float32)
         self.max_det = MAX_DET
+        # Skip the one-to-many branch, which detection does not read. Off by
+        # default because both the loss and `verify-clone` need that branch;
+        # only `Detector` turns it on. See `forward`.
+        self.one2one_only = False
 
         c2 = max(16, ch[0] // 4, reg_max * 4)
         c3 = max(ch[0], min(nc, 100))
@@ -328,7 +345,17 @@ class Detect(nn.Module):
         The same dict shape is returned in training and in evaluation; turning
         it into boxes is `decode`'s job, so nothing about the head depends on
         which mode it is in.
+
+        `one2one_only` is the one exception. Detection reads `one2one` and
+        throws `one2many` away, so computing the discarded branch costs about
+        15 % of the frame time for nothing. The flag drops it. It cannot be
+        inferred from `self.training`: `verify-clone` compares `one2many`
+        against the reference on a model in eval mode, and the loss needs the
+        branch in every validation pass. So the flag is opt-in, and training
+        mode ignores it rather than losing a branch the loss requires.
         """
+        if self.one2one_only and not self.training:
+            return {"one2one": self._branch(features, self.one2one_cv2, self.one2one_cv3)}
         detached = [f.detach() for f in features] if self.training else features
         return {
             "one2many": self._branch(features, self.cv2, self.cv3),
@@ -500,6 +527,28 @@ def postprocess(decoded: torch.Tensor, max_det: int = MAX_DET) -> torch.Tensor:
 
 def build(num_classes: int = len(CLASS_NAMES), scale: str = "s") -> YOLO26:
     return YOLO26(num_classes=num_classes, scale=scale)
+
+
+def fuse(model: nn.Module) -> nn.Module:
+    """Fold every `Conv`'s BatchNorm into its convolution. Returns `model`.
+
+    Call it on an eval-mode model that already holds its trained weights: the
+    fold reads BatchNorm's running statistics, and it rewrites `state_dict`
+    keys (`*.bn.*` disappears, `*.conv.bias` appears). So a fused model can no
+    longer load or save a normal checkpoint, which is why this is not part of
+    `build` and why `Detector` calls it only after `load_state_dict`.
+
+    The reference does the same thing at inference (`AutoBackend` fuses on
+    load), so this is not a departure from it. Detections are unchanged: in
+    eval mode the two forms are the same function.
+    """
+    if model.training:
+        raise RuntimeError("fuse() needs an eval-mode model: BatchNorm's running "
+                           "statistics are what gets folded in")
+    for module in model.modules():
+        if isinstance(module, Conv):
+            module.fuse()
+    return model
 
 
 def parameter_count(model: nn.Module) -> int:
