@@ -269,7 +269,9 @@ uv sync        # 루트에서 한 번 (이미 했다면 불필요)
 ./baseline/yolo26clone/run generate-summary
 ```
 
-`data/model/`·`data/results/`의 파일만 읽어 `docs/summary-results.md`를 만든다.
+`data/model/`·`data/results/`의 파일만 읽어 [docs/summary-results.md](docs/summary-results.md)를
+만든다. 그 수치를 해석한 실험결과보고서는
+[docs/experimental-results.md](docs/experimental-results.md)에 있다.
 
 ## 구현 메모
 
@@ -285,8 +287,10 @@ uv sync        # 루트에서 한 번 (이미 했다면 불필요)
 
 ## 한계
 
-- **아직 학습 결과가 없다.** 이 서브 프로젝트는 구현과 검증까지다. `docs/summary-results.md`와
-  실험 보고서는 실제 학습을 돌린 뒤에 만들어진다.
+- **학습 결과는 두 데이터셋뿐이고, 후처리 파라미터 탐색은 하지 않았다.** cholec80·erop을
+  각각 150 에포크 학습·평가한 수치가 [docs/summary-results.md](docs/summary-results.md)에,
+  그 분석이 [docs/experimental-results.md](docs/experimental-results.md)에 있다.
+  `conf=0.25`·`max_det=300`은 형제 베이스라인과 맞춘 기본값일 뿐 이 과제에 맞춰 고른 값이 아니다.
 - **학습 루프까지 YOLO26을 따라가지는 않는다.** 모델·손실·assigner·옵티마이저는 참조를
   그대로 옮겼지만, 바깥 루프는 형제 클론들과 동일하게 맞췄다: 3에포크 선형 warmup 뒤
   **cosine** 감쇠(참조는 linear), **그래디언트 누적 없음**(참조는 nominal batch 64에 맞춰
