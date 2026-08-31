@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Interactive GUI for real-time surgical tool tip tracking in video.
 
-Loads a trained TooltipDetector model (heatmap-based, same architecture as
-tooltip-detector.py) and runs per-frame inference on a user-selected video
+Loads one trained model and runs per-frame inference on a user-selected video
 file.  On each frame, an arrow is drawn from the frame center toward the
 detected tool tip.  The arrow represents the direction the endoscope camera
 should move, so its direction and length are only ever allowed to change
@@ -51,23 +50,46 @@ Controls
                         reordered or skipped-then-reprocessed, to keep up)
   <- ->              : single-frame step (always sequential)
   Seek bar            : jump to an arbitrary frame (manual scrub)
-  Threshold / NMS     : same peak-extraction parameters as tooltip-detector
+  Threshold / NMS     : same peak-extraction parameters as tooltip-detector.
+                        NMS radius applies to heatmap models only; a detector
+                        has already reduced each object to one box, so the
+                        slider is disabled for that family.
 
 Each method's own internal blend/noise rates (W1/W2, or Kalman's process
 noise) are fixed in ttd.camera_motion_vector -- only which method runs
 is a GUI control, not its internal tuning.
 
+Which model
+-----------
+The only argument is a path to a checkpoint, because the directory layout it
+sits in already says everything else about it (see ttd/tip_source.py):
+
+    data/models/<dataset>/<target-mode>/<model-type>/best.pt
+        this project's own heatmap models -- peaks of the predicted distance
+        heatmap are the tips.
+
+    baseline/<name>/data/model/<dataset>/model.pt
+        a reimplementation baseline (yolov8sclone, cladnet, yolo26clone) --
+        the centre of a predicted `tip` box is a tip.
+
+The Ultralytics-based baselines (baseline/yolov8s, baseline/yolo26) cannot be
+loaded here: they need `ultralytics`, whose `opencv-python` would clobber this
+environment's `opencv-python-headless`. The reimplementation baselines cover
+the same architectures without that dependency.
+
+The model is fixed for the life of the process, so there is no model dropdown
+-- re-run the tracker to try another one. That is also what keeps the three
+baselines apart: they all name their package `common`, and only one is ever
+imported.
+
 Usage
 -----
-    uv run python scripts/tooltip-tracker.py --dataset cholec80
-    uv run python scripts/tooltip-tracker.py --dataset cholec80 --model-type monai_mini
-    uv run python scripts/tooltip-tracker.py --dataset cholec80 --target-mode gaussian-tip
+    uv run python scripts/tooltip-tracker.py            # list what is on disk
+    uv run python scripts/tooltip-tracker.py data/models/cholec80/gaussian-tip/monai/best.pt
+    uv run python scripts/tooltip-tracker.py baseline/yolo26clone/data/model/erop/model.pt
 
-The dataset, model architecture, and target-mode can also be switched at
-runtime via the GUI's "Dataset", "Model", and "Target" dropdowns, which
-reload data/models/<dataset>/<target-mode>/<model-type>/best.pt for the
-selected combination. Dataset here only selects which checkpoint directory to
-load from -- this GUI processes video files, not dataset frames.
+This GUI processes video files, not dataset frames; the dataset in a
+checkpoint's path only says what the model was trained on.
 """
 import argparse
 import os
@@ -97,12 +119,7 @@ if True:
         DEFAULT_PROCESS_VAR_GROW,
         DEFAULT_MEASUREMENT_VAR,
     )
-    from ttd.checkpoints import default_model_path as _default_model_path
-    from ttd.dataset import DATASETS, DEFAULT_TARGET_MODE, TARGET_MODES
-    from ttd.peaks import find_peaks
-    from ttd.transforms import _eval_transform
-    from ttd.model import build as build_model
-    from ttd.model import REGISTRY as MODEL_REGISTRY
+    from ttd.tip_source import format_available, open_tip_source
 
 
 FRAME_W, FRAME_H = 736, 480          # model input size, and the coordinate
@@ -369,19 +386,16 @@ def _to_photo(arr: np.ndarray) -> ImageTk.PhotoImage:
 # ---------------------------------------------------------------------------
 
 class TooltipTrackerApp(tk.Tk):
-    def __init__(self, model_type: str, model_path: str, dataset_name: str,
-                 target_mode: str = DEFAULT_TARGET_MODE):
+    def __init__(self, tip_source):
         super().__init__()
         self.title("Tooltip Tracker")
         self.resizable(True, True)
 
-        self._model_type = model_type
-        self._dataset_name = dataset_name
-        self._target_mode = target_mode
-        self._model_path = model_path
-        self._device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu")
-        self._transform = _eval_transform()
+        # Loaded before the window exists and never swapped: the checkpoint is
+        # fixed by the command line, so there is no model dropdown to reload
+        # from. Re-run the tracker to try another model.
+        self._tips = tip_source
+        self._device = tip_source.device
 
         self._cap: cv2.VideoCapture | None = None
         self._video_path: str | None = None
@@ -396,8 +410,6 @@ class TooltipTrackerApp(tk.Tk):
         self._play_start_wall: float = 0.0
         self._play_start_frame: int = 0
 
-        self._model = self._load_model(model_type, model_path)
-
         self._build_ui()
 
         self.update_idletasks()
@@ -410,120 +422,34 @@ class TooltipTrackerApp(tk.Tk):
 
     # ── Model ────────────────────────────────────────────────────────────
 
-    def _load_model(self, model_type: str, path: str) -> torch.nn.Module | None:
-        try:
-            model = build_model(model_type, num_classes=2).to(self._device)
-            state = torch.load(
-                path, map_location=self._device, weights_only=False)
-            model.load_state_dict(state)
-            model.eval()
-            print(f"Model loaded: {model_type}  {path}  [{self._device}]")
-            return model
-        except Exception as exc:
-            print(
-                f"WARNING: could not load model '{model_type}' from {path} — {exc}")
-            return None
-
-    def _on_model_change(self, _=None):
-        model_type = self._model_var.get()
-        model_path = _default_model_path(
-            model_type=model_type, dataset_name=self._dataset_name,
-            target_mode=self._target_mode)
-        self._apply_model(model_type, model_path)
-
-    def _on_target_mode_change(self, _=None):
-        self._target_mode = self._target_mode_var.get()
-        model_path = _default_model_path(
-            model_type=self._model_type, dataset_name=self._dataset_name,
-            target_mode=self._target_mode)
-        self._apply_model(self._model_type, model_path)
-
-    def _on_dataset_change(self, _=None):
-        self._dataset_name = self._dataset_var.get()
-        model_path = _default_model_path(
-            model_type=self._model_type, dataset_name=self._dataset_name,
-            target_mode=self._target_mode)
-        self._apply_model(self._model_type, model_path)
-
-    def _apply_model(self, model_type: str, model_path: str):
-        self._model_type = model_type
-        self._model_path = model_path
-        self._model = self._load_model(model_type, model_path)
-        self._refresh_model_status()
-        if self._model is None:
-            messagebox.showwarning(
-                "Model Load Warning",
-                f"Could not load model '{model_type}' from:\n{model_path}",
-            )
-        self._arrow.reset()
-        self._render_current_frame(advance_kf=False)
-
     def _on_method_change(self, _=None):
         self._arrow.set_method(self._method_var.get())
         self._render_current_frame(advance_kf=False)
 
     def _refresh_model_status(self):
-        name = os.path.basename(self._model_path)
-        if self._model:
-            text = f"Model: {self._dataset_name}/{self._model_type}/{self._target_mode} ({name})  [{self._device}]"
-            color = "#005500"
-        else:
-            text = f"Model NOT loaded: {self._dataset_name}/{self._model_type}/{self._target_mode} ({name})"
-            color = "#aa0000"
-        self._model_status_var.set(text)
-        self._model_status_lbl.config(fg=color)
+        spec = self._tips.spec
+        self._model_status_var.set(
+            f"Model: {spec.label} ({os.path.basename(spec.path)})  [{self._device}]")
+        self._model_status_lbl.config(fg="#005500")
 
     # ── Inference ────────────────────────────────────────────────────────
 
     def _infer(self, image: np.ndarray) -> tuple[list[tuple[float, float, float]], float]:
-        if self._model is None:
-            return [], 0.0
+        """Frame -> tip peaks, whichever family of model is loaded.
 
-        tensor = self._transform(image=image)["image"]
-        tensor = tensor.unsqueeze(0).to(self._device, dtype=torch.float32)
-
-        if self._device.type == "cuda":
-            torch.cuda.synchronize()
-        t0 = time.perf_counter()
-        with torch.no_grad():
-            pred = self._model(tensor)
-        if self._device.type == "cuda":
-            torch.cuda.synchronize()
-        infer_ms = (time.perf_counter() - t0) * 1000.0
-
-        heatmap = torch.sigmoid(pred[0, 1]).cpu().numpy()
-        threshold = self._threshold_var.get()
-        nms_radius = int(self._nms_var.get())
-        peaks = find_peaks(heatmap, threshold, nms_radius)
-        return peaks, infer_ms
+        Both the threshold and the NMS radius come from the sliders; what they
+        mean is the tip source's business (see ttd/tip_source.py). For a
+        detector the threshold is a confidence cut-off and the radius does not
+        apply, which is why the slider is disabled for that family.
+        """
+        return self._tips.peaks(image, self._threshold_var.get(),
+                                int(self._nms_var.get()))
 
     # ── UI construction ──────────────────────────────────────────────────
 
     def _build_ui(self):
         ctrl = tk.Frame(self, pady=6, padx=8)
         ctrl.pack(fill=tk.X)
-
-        tk.Label(ctrl, text="Dataset:").pack(side=tk.LEFT)
-        self._dataset_var = tk.StringVar(value=self._dataset_name)
-        dataset_cb = ttk.Combobox(ctrl, textvariable=self._dataset_var,
-                                  values=list(DATASETS), width=10, state="readonly")
-        dataset_cb.pack(side=tk.LEFT, padx=(2, 8))
-        dataset_cb.bind("<<ComboboxSelected>>", self._on_dataset_change)
-
-        tk.Label(ctrl, text="Target:").pack(side=tk.LEFT)
-        self._target_mode_var = tk.StringVar(value=self._target_mode)
-        target_mode_cb = ttk.Combobox(ctrl, textvariable=self._target_mode_var,
-                                      values=list(TARGET_MODES), width=12, state="readonly")
-        target_mode_cb.pack(side=tk.LEFT, padx=(2, 8))
-        target_mode_cb.bind("<<ComboboxSelected>>",
-                            self._on_target_mode_change)
-
-        tk.Label(ctrl, text="Model:").pack(side=tk.LEFT)
-        self._model_var = tk.StringVar(value=self._model_type)
-        model_cb = ttk.Combobox(ctrl, textvariable=self._model_var,
-                                values=list(MODEL_REGISTRY), width=12, state="readonly")
-        model_cb.pack(side=tk.LEFT, padx=(2, 8))
-        model_cb.bind("<<ComboboxSelected>>", self._on_model_change)
 
         tk.Label(ctrl, text="Method:").pack(side=tk.LEFT)
         self._method_var = tk.StringVar(value=self._arrow.method)
@@ -567,13 +493,21 @@ class TooltipTrackerApp(tk.Tk):
         self._thr_lbl = tk.Label(param, text="0.50", width=5)
         self._thr_lbl.pack(side=tk.LEFT, padx=(0, 12))
 
-        tk.Label(param, text="NMS radius:").pack(side=tk.LEFT)
+        # Peak suppression is a heatmap notion. A detector has already reduced
+        # each object to one box, and merging tip centres again by radius would
+        # risk collapsing the two tips one scissors or grasper legitimately
+        # shows, so the slider is disabled rather than quietly ignored.
+        nms_state = tk.NORMAL if self._tips.supports_nms_radius else tk.DISABLED
+        tk.Label(param, text="NMS radius:",
+                 fg="black" if nms_state == tk.NORMAL else "gray").pack(side=tk.LEFT)
         self._nms_var = tk.DoubleVar(value=20)
         ttk.Scale(param, from_=5, to=50, orient=tk.HORIZONTAL,
-                  variable=self._nms_var, length=120,
+                  variable=self._nms_var, length=120, state=nms_state,
                   command=lambda _: self._on_param_change()
                   ).pack(side=tk.LEFT, padx=(4, 2))
-        self._nms_lbl = tk.Label(param, text=" 20px", width=5)
+        self._nms_lbl = tk.Label(
+            param, text=" 20px" if nms_state == tk.NORMAL else "  n/a", width=5,
+            fg="black" if nms_state == tk.NORMAL else "gray")
         self._nms_lbl.pack(side=tk.LEFT, padx=(0, 12))
 
         self._model_status_var = tk.StringVar()
@@ -835,27 +769,23 @@ def main():
     parser = argparse.ArgumentParser(
         description="Interactive GUI for real-time surgical tool tip tracking in video"
     )
-    parser.add_argument("--dataset", required=True,
-                        choices=list(DATASETS),
-                        help="Which dataset's trained checkpoint to load (e.g. cholec80)")
-    parser.add_argument("--model-type", default="monai",
-                        choices=list(MODEL_REGISTRY),
-                        help="Model architecture to load (default: monai)")
-    parser.add_argument("--target-mode", default=DEFAULT_TARGET_MODE,
-                        choices=list(TARGET_MODES),
-                        help="Which trained checkpoint variant to load "
-                             f"(default: {DEFAULT_TARGET_MODE})")
-    parser.add_argument("--model", default=None,
-                        help="Path to trained model weights "
-                             "(default: data/models/<dataset>/<target-mode>/<model-type>/best.pt)")
+    # The one argument. Everything else the tracker used to be told -- dataset,
+    # architecture, target mode -- is already encoded in the checkpoint's
+    # directory layout, so the path says all of it.
+    parser.add_argument("model", nargs="?", default=None,
+                        help="Path to a trained checkpoint. Run with no argument "
+                             "to list the ones on disk.")
     args = parser.parse_args()
 
-    model_path = args.model or _default_model_path(
-        model_type=args.model_type, dataset_name=args.dataset,
-        target_mode=args.target_mode)
+    if args.model is None:
+        print(format_available())
+        raise SystemExit(2)
 
-    app = TooltipTrackerApp(model_type=args.model_type, model_path=model_path,
-                            dataset_name=args.dataset, target_mode=args.target_mode)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    tip_source = open_tip_source(args.model, device)
+    print(f"Model loaded: {tip_source.spec.label}  {args.model}  [{device}]")
+
+    app = TooltipTrackerApp(tip_source)
     app.mainloop()
 
 

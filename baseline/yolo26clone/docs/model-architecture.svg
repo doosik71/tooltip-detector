@@ -1,0 +1,331 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1660 1120" width="1660" height="1120"
+     font-family="DejaVu Sans, Helvetica, Arial, sans-serif">
+  <title>YOLO26 clone architecture as implemented in baseline/yolo26clone</title>
+  <desc>C3k2 backbone closing with SPPF and C2PSA, PAN-FPN neck, and an
+        end-to-end anchor-free head with two parallel branches and no DFL.
+        Shapes are for a 640x640 input and 2 classes. Module numbers follow the
+        published YOLO26 layout.</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#37474f"/>
+    </marker>
+    <marker id="arrow-td" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#3f77b5"/>
+    </marker>
+    <marker id="arrow-bu" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c2445c"/>
+    </marker>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9aa5ab"/>
+    </marker>
+  </defs>
+
+  <rect width="1660" height="1120" fill="#ffffff"/>
+
+  <!-- ══ header note ════════════════════════════════════════════════════ -->
+  <text x="40" y="34" font-size="13" fill="#78909c">9.949 M parameters at 2 classes (backbone 5.44 M · neck 3.57 M · Detect 0.93 M). Module numbers follow the published YOLO26 layout. Shapes are C×H×W for a 640×640 input, scale s (depth 0.50, width 0.50).</text>
+
+  <!-- ══ row guides ═════════════════════════════════════════════════════ -->
+  <g font-size="12" fill="#b0bec5" text-anchor="end">
+    <text x="100" y="128">stride 32</text>
+    <text x="100" y="218">stride 16</text>
+    <text x="100" y="308">stride 8</text>
+    <text x="100" y="398">stride 4</text>
+    <text x="100" y="488">stride 2</text>
+  </g>
+
+  <!-- ══ column headings ════════════════════════════════════════════════ -->
+  <g font-size="13" font-weight="bold" fill="#546e7a" text-anchor="middle">
+    <text x="245" y="92">backbone (C3k2 + SPPF + C2PSA)</text>
+    <text x="497" y="92">top-down</text>
+    <text x="742" y="92">bottom-up (PAN)</text>
+    <text x="1010" y="92">Detect — end-to-end, no NMS</text>
+  </g>
+
+  <!-- ══ backbone ═══════════════════════════════════════════════════════ -->
+  <g>
+    <rect x="175" y="98"  width="140" height="44" rx="6" fill="#dff0d8" stroke="#5a9e46" stroke-width="1.5"/>
+    <text x="245" y="116" font-size="13.5" font-weight="bold" text-anchor="middle" fill="#2e5322">10  C2PSA  —  P5</text>
+    <text x="245" y="132" font-size="11" text-anchor="middle" fill="#4a6b3d">512 × 20 × 20</text>
+
+    <rect x="175" y="188" width="140" height="44" rx="6" fill="#dff0d8" stroke="#5a9e46" stroke-width="1.5"/>
+    <text x="245" y="206" font-size="13.5" font-weight="bold" text-anchor="middle" fill="#2e5322">6  C3k2  —  P4</text>
+    <text x="245" y="222" font-size="11" text-anchor="middle" fill="#4a6b3d">256 × 40 × 40</text>
+
+    <rect x="175" y="278" width="140" height="44" rx="6" fill="#dff0d8" stroke="#5a9e46" stroke-width="1.5"/>
+    <text x="245" y="296" font-size="13.5" font-weight="bold" text-anchor="middle" fill="#2e5322">4  C3k2  —  P3</text>
+    <text x="245" y="312" font-size="11" text-anchor="middle" fill="#4a6b3d">256 × 80 × 80</text>
+
+    <rect x="175" y="368" width="140" height="44" rx="6" fill="#eef5ec" stroke="#8fbf80" stroke-width="1.2"/>
+    <text x="245" y="386" font-size="12.5" text-anchor="middle" fill="#4a6b3d">2  C3k2</text>
+    <text x="245" y="402" font-size="11" text-anchor="middle" fill="#7a9470">128 × 160 × 160</text>
+
+    <rect x="175" y="458" width="140" height="44" rx="6" fill="#eef5ec" stroke="#8fbf80" stroke-width="1.2"/>
+    <text x="245" y="476" font-size="12.5" text-anchor="middle" fill="#4a6b3d">0–1  Conv ×2</text>
+    <text x="245" y="492" font-size="11" text-anchor="middle" fill="#7a9470">64 × 160 × 160</text>
+
+    <rect x="175" y="548" width="140" height="34" rx="6" fill="#f5f5f5" stroke="#b0bec5" stroke-width="1.2"/>
+    <text x="245" y="569" font-size="12" text-anchor="middle" fill="#607d8b">input  3 × 640 × 640</text>
+
+    <!-- backbone flow, bottom to top -->
+    <g stroke="#5a9e46" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+      <path d="M 245 548 L 245 504"/>
+      <path d="M 245 458 L 245 414"/>
+      <path d="M 245 368 L 245 324"/>
+      <path d="M 245 278 L 245 234"/>
+      <path d="M 245 188 L 245 144"/>
+    </g>
+    <g font-size="10.5" fill="#8fa88a" text-anchor="start">
+      <text x="252" y="530">Conv s2 ×2</text>
+      <text x="252" y="440">3  Conv s2</text>
+      <text x="252" y="350">5  Conv s2</text>
+      <text x="252" y="260">7  Conv s2 → 8  C3k2 → 9  SPPF</text>
+    </g>
+  </g>
+
+  <!-- ══ top-down ═══════════════════════════════════════════════════════ -->
+  <g>
+    <rect x="427" y="188" width="140" height="44" rx="6" fill="#dce9f7" stroke="#3f77b5" stroke-width="1.5"/>
+    <text x="497" y="206" font-size="13.5" font-weight="bold" text-anchor="middle" fill="#1e4977">13  C3k2</text>
+    <text x="497" y="222" font-size="11" text-anchor="middle" fill="#3d6489">256 × 40 × 40</text>
+
+    <!-- P5 -> upsample -> concat with P4 -->
+    <path d="M 315 120 L 380 120 L 380 200 L 421 200" stroke="#3f77b5" stroke-width="1.6"
+          fill="none" marker-end="url(#arrow-td)"/>
+    <text x="384" y="160" font-size="10.5" fill="#3f77b5">11 up ×2</text>
+    <path d="M 315 210 L 421 210" stroke="#3f77b5" stroke-width="1.6" fill="none"
+          marker-end="url(#arrow-td)"/>
+    <text x="330" y="226" font-size="10.5" fill="#3f77b5">12 concat 768</text>
+  </g>
+
+  <!-- ══ bottom-up / PAN ════════════════════════════════════════════════ -->
+  <g>
+    <rect x="672" y="98"  width="140" height="44" rx="6" fill="#fadadd" stroke="#c2445c" stroke-width="1.5"/>
+    <text x="742" y="116" font-size="13.5" font-weight="bold" text-anchor="middle" fill="#8c2437">22  C3k2 attn — N5</text>
+    <text x="742" y="132" font-size="11" text-anchor="middle" fill="#a04456">512 × 20 × 20</text>
+
+    <rect x="672" y="188" width="140" height="44" rx="6" fill="#fadadd" stroke="#c2445c" stroke-width="1.5"/>
+    <text x="742" y="206" font-size="13.5" font-weight="bold" text-anchor="middle" fill="#8c2437">19  C3k2  —  N4</text>
+    <text x="742" y="222" font-size="11" text-anchor="middle" fill="#a04456">256 × 40 × 40</text>
+
+    <rect x="672" y="278" width="140" height="44" rx="6" fill="#fadadd" stroke="#c2445c" stroke-width="1.5"/>
+    <text x="742" y="296" font-size="13.5" font-weight="bold" text-anchor="middle" fill="#8c2437">16  C3k2  —  N3</text>
+    <text x="742" y="312" font-size="11" text-anchor="middle" fill="#a04456">128 × 80 × 80</text>
+
+    <!-- 13 -> upsample -> concat P3 -> 16 -->
+    <path d="M 567 210 L 620 210 L 620 290 L 666 290" stroke="#3f77b5" stroke-width="1.6"
+          fill="none" marker-end="url(#arrow-td)"/>
+    <text x="628" y="238" font-size="10.5" fill="#3f77b5">14 up ×2</text>
+    <path d="M 315 300 L 666 300" stroke="#3f77b5" stroke-width="1.6" fill="none"
+          marker-end="url(#arrow-td)"/>
+    <text x="470" y="294" font-size="10.5" fill="#3f77b5">15 concat 512  (skip from P3)</text>
+
+    <!-- N3 -> N4 -> N5 -->
+    <path d="M 742 278 L 742 234" stroke="#c2445c" stroke-width="1.6" fill="none"
+          marker-end="url(#arrow-bu)"/>
+    <text x="748" y="260" font-size="10" fill="#c2445c">17 Conv s2 → 18 cat 384</text>
+    <path d="M 742 188 L 742 144" stroke="#c2445c" stroke-width="1.6" fill="none"
+          marker-end="url(#arrow-bu)"/>
+    <text x="748" y="170" font-size="10" fill="#c2445c">20 Conv s2 → 21 cat 768</text>
+
+    <!-- lateral skips into the bottom-up path -->
+    <path d="M 497 232 L 497 250 L 640 250 L 640 214 L 666 214" stroke="#c2445c" stroke-width="1.2"
+          stroke-dasharray="4 3" fill="none" marker-end="url(#arrow-bu)"/>
+    <path d="M 315 132 L 350 132 L 350 76 L 640 76 L 640 112 L 666 112" stroke="#c2445c" stroke-width="1.2"
+          stroke-dasharray="4 3" fill="none" marker-end="url(#arrow-bu)"/>
+    <text x="470" y="70" font-size="10.5" fill="#c2445c">skip: 13 → 18,  P5 → 21</text>
+  </g>
+
+  <!-- ══ Detect ═════════════════════════════════════════════════════════ -->
+  <g>
+    <rect x="880" y="98" width="260" height="234" rx="8" fill="#fdf3e3" stroke="#d18114" stroke-width="1.6"/>
+    <text x="1010" y="120" font-size="13.5" font-weight="bold" text-anchor="middle" fill="#8a5406">23  Detect</text>
+
+    <rect x="898" y="134" width="224" height="72" rx="5" fill="#fde8cd" stroke="#d18114" stroke-width="1.2"/>
+    <text x="1010" y="152" font-size="12" font-weight="bold" text-anchor="middle" fill="#8a5406">one2many  (training only)</text>
+    <text x="1010" y="169" font-size="11" text-anchor="middle" fill="#8a5406">cv2 box · cv3 cls   0.47 M</text>
+    <text x="1010" y="185" font-size="10.5" text-anchor="middle" fill="#a07030">topk 10 · shapes the backbone</text>
+    <text x="1010" y="199" font-size="10.5" text-anchor="middle" fill="#a07030">weight decays 0.8 → 0.1</text>
+
+    <rect x="898" y="216" width="224" height="72" rx="5" fill="#fde8cd" stroke="#d18114" stroke-width="1.8"/>
+    <text x="1010" y="234" font-size="12" font-weight="bold" text-anchor="middle" fill="#8a5406">one2one  (read at inference)</text>
+    <text x="1010" y="251" font-size="11" text-anchor="middle" fill="#8a5406">one2one_cv2 · one2one_cv3   0.47 M</text>
+    <text x="1010" y="267" font-size="10.5" text-anchor="middle" fill="#a07030">topk 7 · one box per object</text>
+    <text x="1010" y="281" font-size="10.5" text-anchor="middle" fill="#a07030">sees detached features</text>
+
+    <text x="1010" y="308" font-size="11" text-anchor="middle" fill="#8a5406">structural copies: identical shapes,</text>
+    <text x="1010" y="322" font-size="11" text-anchor="middle" fill="#8a5406">independently initialised weights</text>
+
+    <!-- N3/N4/N5 into the head -->
+    <g stroke="#d18114" stroke-width="1.6" fill="none" marker-end="url(#arrow)">
+      <path d="M 812 120 L 874 120"/>
+      <path d="M 812 210 L 850 210 L 850 160 L 874 160"/>
+      <path d="M 812 300 L 850 300 L 850 200 L 874 200"/>
+    </g>
+    <text x="818" y="352" font-size="10.5" fill="#d18114">N3 · N4 · N5</text>
+  </g>
+
+  <!-- ══ head output ════════════════════════════════════════════════════ -->
+  <g>
+    <rect x="1188" y="134" width="200" height="60" rx="6" fill="#f5f5f5" stroke="#90a4ae" stroke-width="1.3"/>
+    <text x="1288" y="154" font-size="12" font-weight="bold" text-anchor="middle" fill="#455a64">boxes</text>
+    <text x="1288" y="171" font-size="11" text-anchor="middle" fill="#546e7a">4 × 8400</text>
+    <text x="1288" y="186" font-size="10.5" text-anchor="middle" fill="#78909c">ltrb distances, no DFL bins</text>
+
+    <rect x="1188" y="216" width="200" height="60" rx="6" fill="#f5f5f5" stroke="#90a4ae" stroke-width="1.3"/>
+    <text x="1288" y="236" font-size="12" font-weight="bold" text-anchor="middle" fill="#455a64">scores</text>
+    <text x="1288" y="253" font-size="11" text-anchor="middle" fill="#546e7a">2 × 8400</text>
+    <text x="1288" y="268" font-size="10.5" text-anchor="middle" fill="#78909c">no objectness term</text>
+
+    <g stroke="#90a4ae" stroke-width="1.4" fill="none" marker-end="url(#arrow-gray)">
+      <path d="M 1140 164 L 1182 164"/>
+      <path d="M 1140 246 L 1182 246"/>
+    </g>
+
+    <rect x="1188" y="298" width="200" height="34" rx="6" fill="#e8f0e6" stroke="#5a9e46" stroke-width="1.3"/>
+    <text x="1288" y="319" font-size="11.5" text-anchor="middle" fill="#2e5322">top-k 300  →  xyxy, score, class</text>
+    <path d="M 1288 276 L 1288 292" stroke="#90a4ae" stroke-width="1.4" fill="none" marker-end="url(#arrow-gray)"/>
+  </g>
+
+  <!-- ══ anchor budget ══════════════════════════════════════════════════ -->
+  <g font-size="11" fill="#78909c">
+    <text x="1188" y="360">8400 anchor points = 80·80 + 40·40 + 20·20,</text>
+    <text x="1188" y="376">one per cell per level. No anchor boxes.</text>
+  </g>
+
+  <!-- ══ legend ═════════════════════════════════════════════════════════ -->
+  <g transform="translate(1420, 98)">
+    <rect x="0" y="0" width="200" height="176" rx="6" fill="#fafafa" stroke="#cfd8dc"/>
+    <text x="16" y="22" font-size="12" font-weight="bold" fill="#37474f">legend</text>
+    <rect x="16" y="33" width="16" height="14" rx="3" fill="#dff0d8" stroke="#5a9e46"/>
+    <text x="42" y="45" font-size="11.5" fill="#37474f">backbone feature</text>
+    <rect x="16" y="55" width="16" height="14" rx="3" fill="#dce9f7" stroke="#3f77b5"/>
+    <text x="42" y="67" font-size="11.5" fill="#37474f">top-down feature</text>
+    <rect x="16" y="77" width="16" height="14" rx="3" fill="#fadadd" stroke="#c2445c"/>
+    <text x="42" y="89" font-size="11.5" fill="#37474f">bottom-up (PAN) feature</text>
+    <rect x="16" y="99" width="16" height="14" rx="3" fill="#fde8cd" stroke="#d18114"/>
+    <text x="42" y="111" font-size="11.5" fill="#37474f">Detect head</text>
+    <text x="16" y="136" font-size="11" fill="#78909c">No objectness, no anchor boxes,</text>
+    <text x="16" y="151" font-size="11" fill="#78909c">no DFL and no NMS. The panels</text>
+    <text x="16" y="166" font-size="11" fill="#78909c">below say what replaces each.</text>
+  </g>
+
+  <!-- ══ divider ════════════════════════════════════════════════════════ -->
+  <line x1="40" y1="620" x2="1620" y2="620" stroke="#cfd8dc" stroke-width="1"/>
+
+  <!-- ══ C3k2 inset ═════════════════════════════════════════════════════ -->
+  <g transform="translate(40, 648)">
+    <rect x="0" y="0" width="380" height="240" rx="8" fill="#fafafa" stroke="#cfd8dc"/>
+    <text x="18" y="26" font-size="13" font-weight="bold" fill="#37474f">C3k2 — the CSP block, in place of YOLOv8's C2f</text>
+
+    <rect x="18" y="42" width="66" height="30" rx="4" fill="#eceff1" stroke="#90a4ae"/>
+    <text x="51" y="61" font-size="11" text-anchor="middle" fill="#455a64">Conv 1×1</text>
+    <text x="94" y="61" font-size="11" fill="#607d8b">split → 2 halves</text>
+
+    <rect x="18" y="88" width="150" height="30" rx="4" fill="#eceff1" stroke="#90a4ae"/>
+    <text x="93" y="107" font-size="11" text-anchor="middle" fill="#455a64">n × Bottleneck   (c3k=False)</text>
+    <rect x="18" y="126" width="150" height="30" rx="4" fill="#e3ecf5" stroke="#3f77b5"/>
+    <text x="93" y="145" font-size="11" text-anchor="middle" fill="#1e4977">n × C3k          (c3k=True)</text>
+
+    <text x="180" y="107" font-size="10.5" fill="#78909c">layers 2, 4 — early, cheap</text>
+    <text x="180" y="145" font-size="10.5" fill="#78909c">layers 6, 8, 13, 16, 19, 22</text>
+
+    <rect x="18" y="172" width="150" height="30" rx="4" fill="#eceff1" stroke="#90a4ae"/>
+    <text x="93" y="191" font-size="11" text-anchor="middle" fill="#455a64">concat all → Conv 1×1</text>
+
+    <text x="18" y="222" font-size="11" fill="#78909c">Same CSP shape as C2f; what changes is that each</text>
+    <text x="18" y="236" font-size="11" fill="#78909c">branch may itself be a small C3, not a Bottleneck.</text>
+  </g>
+
+  <!-- ══ C2PSA inset ════════════════════════════════════════════════════ -->
+  <g transform="translate(444, 648)">
+    <rect x="0" y="0" width="360" height="240" rx="8" fill="#fafafa" stroke="#cfd8dc"/>
+    <text x="18" y="26" font-size="13" font-weight="bold" fill="#37474f">C2PSA — attention at the backbone end (10)</text>
+
+    <rect x="18" y="42" width="150" height="28" rx="4" fill="#eceff1" stroke="#90a4ae"/>
+    <text x="93" y="60" font-size="11" text-anchor="middle" fill="#455a64">Conv 1×1 → split a, b</text>
+
+    <rect x="18" y="86" width="150" height="28" rx="4" fill="#e8f0e6" stroke="#5a9e46"/>
+    <text x="93" y="104" font-size="11" text-anchor="middle" fill="#2e5322">b + Attention(b)</text>
+    <rect x="18" y="122" width="150" height="28" rx="4" fill="#e8f0e6" stroke="#5a9e46"/>
+    <text x="93" y="140" font-size="11" text-anchor="middle" fill="#2e5322">b + FFN(b)</text>
+
+    <text x="180" y="104" font-size="10.5" fill="#78909c">multi-head, 64 ch per head,</text>
+    <text x="180" y="118" font-size="10.5" fill="#78909c">plus a depthwise positional</text>
+    <text x="180" y="132" font-size="10.5" fill="#78909c">encoding on the values</text>
+
+    <rect x="18" y="166" width="150" height="28" rx="4" fill="#eceff1" stroke="#90a4ae"/>
+    <text x="93" y="184" font-size="11" text-anchor="middle" fill="#455a64">concat a, b → Conv 1×1</text>
+
+    <text x="18" y="216" font-size="11" fill="#78909c">0.99 M parameters on a 512 × 20 × 20 map.</text>
+    <text x="18" y="230" font-size="11" fill="#78909c">YOLOv8 has no counterpart: it ends at SPPF.</text>
+  </g>
+
+  <!-- ══ head panel ═════════════════════════════════════════════════════ -->
+  <g transform="translate(828, 648)">
+    <rect x="0" y="0" width="380" height="240" rx="8" fill="#fafafa" stroke="#cfd8dc"/>
+    <text x="18" y="26" font-size="13" font-weight="bold" fill="#37474f">Per-level branch shapes (ch = 128 / 256 / 512)</text>
+
+    <text x="18" y="52" font-size="11.5" font-weight="bold" fill="#455a64">box  (cv2, one2one_cv2)</text>
+    <text x="18" y="70" font-size="11" fill="#607d8b">Conv 3×3 → 32   ·   Conv 3×3 → 32</text>
+    <text x="18" y="86" font-size="11" fill="#607d8b">Conv 1×1 → 4 = 4 × reg_max, reg_max = 1</text>
+
+    <text x="18" y="114" font-size="11.5" font-weight="bold" fill="#455a64">cls  (cv3, one2one_cv3)</text>
+    <text x="18" y="132" font-size="11" fill="#607d8b">DWConv 3×3 → Conv 1×1 → 128</text>
+    <text x="18" y="148" font-size="11" fill="#607d8b">DWConv 3×3 → Conv 1×1 → 128</text>
+    <text x="18" y="164" font-size="11" fill="#607d8b">Conv 1×1 → 2 classes (tool, tip)</text>
+
+    <line x1="18" y1="180" x2="362" y2="180" stroke="#e0e0e0"/>
+    <text x="18" y="200" font-size="11" fill="#78909c">reg_max = 1 is the YOLOv8 difference that matters:</text>
+    <text x="18" y="215" font-size="11" fill="#78909c">the box branch regresses the four distances directly,</text>
+    <text x="18" y="230" font-size="11" fill="#78909c">so there is no 16-bin distribution and no DFL integral.</text>
+  </g>
+
+  <!-- ══ assignment / loss panel ════════════════════════════════════════ -->
+  <g transform="translate(1232, 648)">
+    <rect x="0" y="0" width="388" height="240" rx="8" fill="#fafafa" stroke="#cfd8dc"/>
+    <text x="18" y="26" font-size="13" font-weight="bold" fill="#37474f">Why there is no NMS</text>
+
+    <text x="18" y="52" font-size="11" fill="#607d8b">The one-to-many branch assigns up to 10 anchors per</text>
+    <text x="18" y="67" font-size="11" fill="#607d8b">object, which trains features well but leaves duplicates.</text>
+    <text x="18" y="83" font-size="11" fill="#607d8b">The one-to-one branch assigns 7 candidates and keeps</text>
+    <text x="18" y="98" font-size="11" fill="#607d8b">one, so its output needs no duplicate removal.</text>
+
+    <text x="18" y="126" font-size="11" fill="#607d8b">Inference reads one2one only. `postprocess` takes the</text>
+    <text x="18" y="141" font-size="11" fill="#607d8b">top 300 (anchor, class) pairs by score. That is all.</text>
+
+    <line x1="18" y1="158" x2="370" y2="158" stroke="#e0e0e0"/>
+    <text x="18" y="178" font-size="11.5" font-weight="bold" fill="#455a64">loss = one2many · w  +  one2one</text>
+    <text x="18" y="196" font-size="11" fill="#607d8b">w decays 0.8 → 0.1 over training, so the shared trunk is</text>
+    <text x="18" y="211" font-size="11" fill="#607d8b">shaped early and the single-box branch dominates later.</text>
+    <text x="18" y="230" font-size="11" fill="#607d8b">Each branch: 7.5·CIoU + 0.5·BCE(cls) + 1.5·L1(ltrb).</text>
+  </g>
+
+  <!-- ══ parameter bar ══════════════════════════════════════════════════ -->
+  <g transform="translate(40, 924)">
+    <text x="0" y="14" font-size="12" font-weight="bold" fill="#37474f">Where the 9,949,412 parameters sit</text>
+
+    <rect x="0"    y="26" width="864"  height="26" rx="3" fill="#dff0d8" stroke="#5a9e46"/>
+    <rect x="864"  y="26" width="568"  height="26" rx="3" fill="#fadadd" stroke="#c2445c"/>
+    <rect x="1432" y="26" width="148"  height="26" rx="3" fill="#fde8cd" stroke="#d18114"/>
+
+    <text x="432"  y="44" font-size="12" text-anchor="middle" fill="#2e5322">backbone 0–10   5,441,984  (54.7 %)</text>
+    <text x="1148" y="44" font-size="12" text-anchor="middle" fill="#8c2437">neck 11–22   3,574,016  (35.9 %)</text>
+    <text x="1506" y="44" font-size="12" text-anchor="middle" fill="#8a5406">Detect   0.93 M</text>
+
+    <text x="0" y="76" font-size="11" fill="#78909c">Detect splits evenly between the two branches: 466,706 parameters each. The one-to-many half is training-only, so 4.7 % of the</text>
+    <text x="0" y="91" font-size="11" fill="#78909c">network never runs at inference — and `Detector` skips it, which is worth about 1 ms per frame.</text>
+  </g>
+
+  <!-- ══ footer ═════════════════════════════════════════════════════════ -->
+  <g font-size="11" fill="#90a4ae">
+    <text x="40" y="1064">Every number here was read off the built model (`common/model.py`, scale s, 2 classes, 640 × 640 input), not from the published configuration.</text>
+    <text x="40" y="1082">Module indices are the reference's, so `state_dict` keys line up one-to-one with `ultralytics` — that is what `verify-clone` checks.</text>
+  </g>
+</svg>

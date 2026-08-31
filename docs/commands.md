@@ -125,9 +125,31 @@ GPU가 여러 개인 장비에서 사용할 장치를 지정하려면 `--device 
 
 상세: [tooltip-tracker 설명서](tooltip-tracker.md). 동영상 파일은 GUI에서 연다.
 
+인자는 체크포인트 경로 하나뿐이다. 인자 없이 실행하면 디스크에 있는 모델 목록을 출력하고 종료한다.
+
 ```bash
-./run tooltip-tracker --dataset cholec80 --target-mode gradient-seg --model-type monai
-./run tooltip-tracker --dataset cholec80 --target-mode gaussian-tip --model-type monai
-./run tooltip-tracker --dataset erop     --target-mode gradient-seg --model-type monai
-./run tooltip-tracker --dataset erop     --target-mode gaussian-tip --model-type monai
+./run tooltip-tracker
 ```
+
+이 프로젝트의 히트맵 모델:
+
+```bash
+./run tooltip-tracker data/models/cholec80/gradient-seg/monai/best.pt
+./run tooltip-tracker data/models/cholec80/gaussian-tip/monai/best.pt
+./run tooltip-tracker data/models/erop/gradient-seg/monai/best.pt
+./run tooltip-tracker data/models/erop/gaussian-tip/monai/best.pt
+```
+
+재구현 베이스라인 탐지기(`tip` 박스의 중심을 팁으로 쓴다):
+
+```bash
+./run tooltip-tracker baseline/yolov8sclone/data/model/cholec80/model.pt
+./run tooltip-tracker baseline/cladnet/data/model/cholec80/model.pt
+./run tooltip-tracker baseline/yolo26clone/data/model/erop/model.pt
+```
+
+`baseline/yolov8s`와 `baseline/yolo26`은 열 수 없다. `ultralytics`가 필요하고, 그것이 요구하는
+`opencv-python`이 루트 환경의 `opencv-python-headless`를 깨뜨리기 때문이다. 두 모델의 아키텍처는
+위 재구현 3종이 그대로 커버한다.
+
+모델은 실행 시점에 고정된다. 바꾸려면 tracker를 다시 실행한다.

@@ -107,6 +107,10 @@ uv run --project baseline/yolo26 python baseline/yolo26clone/scripts/export-refe
 
 ## 구조
 
+![YOLO26 구조. 텐서 모양과 파라미터 수는 이 구현에서 실제로 뽑은 값이다 (640 × 640 입력, 2클래스, scale s).](docs/images/model-architecture.png)
+
+벡터 원본은 [docs/model-architecture.svg](docs/model-architecture.svg)에 있다.
+
 ```text
 입력 640 × 640
     │

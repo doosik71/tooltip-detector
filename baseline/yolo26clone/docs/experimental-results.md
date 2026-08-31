@@ -552,7 +552,8 @@ uv run --project baseline/yolo26 python baseline/yolo26clone/scripts/export-refe
 ./baseline/yolo26clone/run verify-clone
 ```
 
-구조 설명은 [README](../README.md), 인수 설명과 추가 실험 명령은 [commands.md](commands.md),
+구조 설명은 [README](../README.md)와 [구조 다이어그램](images/model-architecture.png),
+인수 설명과 추가 실험 명령은 [commands.md](commands.md),
 비교 대상의 상세는 [참조 구현 보고서](../../yolo26/docs/experimental-results.md)·
 [YOLOv8s 클론 보고서](../../yolov8sclone/docs/experimental-results.md)·
 [CLAD-Net 보고서](../../cladnet/docs/experimental-results.md)를 참고한다.

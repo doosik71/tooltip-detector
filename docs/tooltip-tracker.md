@@ -16,23 +16,35 @@
 ## 실행
 
 ```bash
-run tooltip-tracker --dataset cholec80          # Linux / macOS
-run.bat tooltip-tracker --dataset cholec80      # Windows
-```
-
-```bash
-run tooltip-tracker --dataset cholec80 --model-type monai_mini
-run tooltip-tracker --dataset cholec80 --target-mode gaussian-tip
+run tooltip-tracker                                                   # 가용한 모델 목록 출력
+run tooltip-tracker data/models/cholec80/gaussian-tip/monai/best.pt   # Linux / macOS
+run.bat tooltip-tracker data\models\cholec80\gaussian-tip\monai\best.pt   # Windows
 ```
 
 ## 인수
 
-| 인수            | 기본값                                                     | 설명                                                                                |
-| --------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `--dataset`     | (필수)                                                        | 어떤 데이터셋으로 학습한 체크포인트를 로드할지(초기값, `erop` / `cholec80`). GUI의 `Dataset` 드롭다운으로도 전환 가능 — 이 GUI는 동영상만 처리하므로 모델 경로 선택에만 영향을 준다 |
-| `--target-mode` | `gradient-seg`                                                | 로드할 체크포인트의 타겟 생성 방식(초기값). GUI의 `Target` 드롭다운으로도 전환 가능 |
-| `--model-type`  | `monai`                                                       | 모델 아키텍처 (`monai` / `monai_mini`), GUI의 `Model` 드롭다운으로도 전환 가능      |
-| `--model`       | `data/models/<dataset>/<target-mode>/<model-type>/best.pt`    | 학습된 모델 가중치 파일 경로                                                        |
+| 인수           | 기본값 | 설명                                                                       |
+| -------------- | ------ | -------------------------------------------------------------------------- |
+| `<model-path>` | 없음   | 학습된 체크포인트 경로. 생략하면 디스크에 있는 모델 목록을 출력하고 종료한다 |
+
+**인수가 이것 하나뿐인 이유**는 체크포인트가 놓인 디렉터리 규칙이 나머지를 이미 말해 주기 때문이다.
+데이터셋·타겟 생성 방식·모델 종류를 따로 지정할 필요가 없다.
+
+| 경로 규칙                                                  | 해석                                                          |
+| ---------------------------------------------------------- | ------------------------------------------------------------- |
+| `data/models/<dataset>/<target-mode>/<model-type>/best.pt`  | 이 프로젝트의 히트맵 모델. 히트맵의 피크가 팁이다             |
+| `baseline/<name>/data/model/<dataset>/model.pt`             | 재구현 베이스라인 탐지기. `tip` 박스의 중심이 팁이다          |
+
+지원 베이스라인은 `yolov8sclone`·`cladnet`·`yolo26clone` 셋이다. `yolov8s`와 `yolo26`은
+`ultralytics`가 필요하고 그것이 요구하는 `opencv-python`이 루트 환경의 `opencv-python-headless`를
+깨뜨리므로 이 GUI에서는 열 수 없다. 두 모델의 아키텍처는 위 재구현 3종이 의존성 없이 커버한다.
+경로가 두 규칙 중 어느 것에도 맞지 않으면 규칙을 안내하고 종료한다.
+
+모델은 프로세스가 사는 동안 고정되며, GUI에 모델 전환 드롭다운이 없다. 다른 모델을 보려면
+tracker를 다시 실행한다. 세 베이스라인이 모두 패키지 이름으로 `common`을 쓰기 때문에, 한
+프로세스에 하나만 올리는 이 방식이 이름 충돌도 함께 막는다.
+
+경로 해석과 두 모델 계열의 어댑터는 [`ttd/tip_source.py`](../ttd/tip_source.py)에 있다.
 
 동영상 파일은 커맨드라인 인수가 아니라 GUI의 `Open Video...` 버튼으로 선택한다.
 
@@ -40,10 +52,10 @@ run tooltip-tracker --dataset cholec80 --target-mode gaussian-tip
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ Dataset: [erop▼]  Target: [gradient-seg▼]  Model: [monai▼]  Method: [CameraMotionVectorMagnitudeBlend▼]  [Open Video…]  [<-] [->]  [Play] [Pause]│
+│ Method: [CameraMotionVectorMagnitudeBlend▼]  [Open Video…]  [<-] [->]  [Play] [Pause]                                   │
 │  12 / 4523        <- -> : step one frame                                                                                │
 ├────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ Threshold: ──●──── 0.50  NMS radius: ──●──── 20px                    Model: erop/monai/gradient-seg (best.pt)           │
+│ Threshold: ──●──── 0.50  NMS radius: ──●──── 20px            Model: erop/gradient-seg/monai (best.pt)  [cuda]           │
 ├────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
 │ Video [ green arrow: >=1 tip detected  pink arrow: 0 tips  blue o: raw tip candidates                │
 │         red polygon: >3 tips (n-gon, capped at pentagon)   red X: 2 tips, >90° apart ]               │
@@ -63,9 +75,6 @@ run tooltip-tracker --dataset cholec80 --target-mode gaussian-tip
 
 | 요소              | 설명                                                                                                                                                                                                                                |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Dataset` 드롭다운 | `erop` / `cholec80` 전환. 이 GUI는 동영상만 처리하므로 데이터셋 프레임과는 무관하며, 로드할 모델 체크포인트의 경로만 바뀐다                                                                                                        |
-| `Target` 드롭다운 | `gradient-seg` / `gaussian-tip` 전환, 선택한 타겟 모드의 `best.pt`를 다시 로드                                                                                                                                                      |
-| `Model` 드롭다운  | `monai` / `monai_mini` 전환, 선택한 타입의 `best.pt`를 다시 로드                                                                                                                                                                    |
 | `Method` 드롭다운 | 화살표 스무딩 구현 전환 (`CameraMotionVectorMagnitudeBlend` / `CameraMotionVectorBlend` / `CameraMotionVectorKalman`). 전환 시 화살표가 0으로 초기화된다 — 구현마다 내부 상태(칼만 필터의 공분산 등)가 서로 호환되지 않기 때문이다. |
 | `Open Video...`   | 동영상 파일 열기 (`.mp4 .avi .mov .mkv .wmv` 등)                                                                                                                                                                                    |
 | `<-` / `->`       | 이전 / 다음 프레임으로 한 프레임씩 이동 (항상 순차 처리)                                                                                                                                                                            |
@@ -77,7 +86,7 @@ run tooltip-tracker --dataset cholec80 --target-mode gaussian-tip
 | 요소                  | 범위        | 기본값 | 설명                                                   |
 | --------------------- | ----------- | ------ | ------------------------------------------------------ |
 | `Threshold` 슬라이더  | 0.05 ~ 0.95 | 0.50   | 히트맵 피크 탐지 임계값 (`tooltip-detector.py`와 동일) |
-| `NMS radius` 슬라이더 | 5 ~ 50 px   | 20 px  | 이웃 피크 억제 반경                                    |
+| `NMS radius` 슬라이더 | 5 ~ 50 px   | 20 px  | 이웃 피크 억제 반경. **히트맵 모델 전용**이며, 베이스라인 탐지기에서는 비활성화된다 |
 
 어떤 스무딩 **구현**을 쓸지는 행 1의 `Method` 드롭다운으로 고를 수 있지만, 각 구현 내부의 블렌딩 속도(같은 방향일 때의 `W1`, 정지 신호일 때의 `W2`, 또는 칼만 필터의 process noise)는 GUI 슬라이더가 아니라 `ttd/camera_motion_vector.py`에 고정 상수로 정의되어 있다 (자세한 내용은 아래 [화살표(카메라 이동 방향) 스무딩 로직](#화살표카메라-이동-방향-스무딩-로직) 참고).
 

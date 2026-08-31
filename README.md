@@ -70,7 +70,8 @@ tooltip-detector/
 │   ├── checkpoints.py             # data/models·data/results 경로 규칙 (dataset-name/target-mode/model-type)
 │   ├── transforms.py              # 평가/추론용 albumentations 전처리 파이프라인
 │   ├── peaks.py                   # 히트맵 피크 탐지 (find_peaks)
-│   └── camera_motion_vector.py    # tooltip-tracker의 화살표(카메라 이동 방향) 스무딩 구현
+│   ├── camera_motion_vector.py    # tooltip-tracker의 화살표(카메라 이동 방향) 스무딩 구현
+│   └── tip_source.py              # 체크포인트 경로 → 팁 좌표 (히트맵 모델 / 베이스라인 탐지기)
 ├── scripts/
 │   ├── dashboard.py               # 학습·평가 진행 상태 표 + 실행 명령 안내 GUI
 │   ├── train-model.py             # 학습 스크립트
@@ -277,19 +278,28 @@ GUI 상단의 `Dataset` 드롭다운으로 `erop`/`cholec80`을, `Target` 드롭
 ### 6. 동영상 실시간 추적
 
 ```bash
-run tooltip-tracker --dataset cholec80          # Linux / macOS
-run.bat tooltip-tracker --dataset cholec80      # Windows
+run tooltip-tracker                                                   # 가용한 모델 목록 출력
+run tooltip-tracker data/models/cholec80/gaussian-tip/monai/best.pt   # Linux / macOS
+run.bat tooltip-tracker data\models\cholec80\gaussian-tip\monai\best.pt   # Windows
 ```
 
 사용자가 선택한 동영상 파일을 프레임 단위로 순차 처리하며, 화면 중앙에서 탐지된 수술도구 팁 방향으로 화살표를 그려 내시경 카메라가 이동해야 할 방향을 안내한다. 화살표의 방향·길이는 프레임 간 급격히 바뀌지 않도록 스무딩되며, 오탐지(팁 미탐지·개수 이상·방향 모순)는 별도의 색상·경고 도형으로 표시된다.
 
-- **`Dataset` 드롭다운**: `erop` / `cholec80` 전환 — 이 GUI는 동영상 파일만 처리하므로, 데이터셋 프레임이 아니라 로드할 모델 체크포인트의 경로만 바뀐다
-- **`Target` 드롭다운**: `gradient-seg` / `gaussian-tip` 전환, 선택한 조합의 `best.pt`를 다시 로드
-- **`Model` 드롭다운**: `monai` / `monai_mini` 전환
+**인자는 체크포인트 경로 하나뿐이다.** 경로가 놓인 디렉터리 규칙이 데이터셋·타겟 방식·모델 종류를 이미 말해 주므로 따로 지정할 것이 없다. 인자 없이 실행하면 디스크에 있는 모델 목록을 출력하고 종료한다.
+
+| 경로 규칙                                                | 모델 종류                                                          |
+| -------------------------------------------------------- | ------------------------------------------------------------------ |
+| `data/models/<dataset>/<target-mode>/<model-type>/best.pt` | 이 프로젝트의 히트맵 모델. 히트맵의 피크가 팁이다                  |
+| `baseline/<name>/data/model/<dataset>/model.pt`            | 재구현 베이스라인 탐지기. 예측한 `tip` 박스의 중심이 팁이다        |
+
+지원하는 베이스라인은 `yolov8sclone`·`cladnet`·`yolo26clone` 셋이다. `yolov8s`와 `yolo26`은 `ultralytics`가 필요하고 그것이 요구하는 `opencv-python`이 루트 환경의 `opencv-python-headless`를 깨뜨리므로 이 GUI에서는 열 수 없다. 두 모델의 아키텍처는 위 재구현 3종이 의존성 없이 그대로 커버한다.
+
+모델은 프로세스가 사는 동안 고정된다. 다른 모델을 보려면 tracker를 다시 실행한다. 세 베이스라인이 모두 패키지 이름으로 `common`을 쓰기 때문에, 한 프로세스에 하나만 올리는 이 방식이 이름 충돌도 함께 막는다.
+
 - **`Method` 드롭다운**: 화살표 스무딩 구현 전환 (`CameraMotionVectorMagnitudeBlend` 기본값 / `CameraMotionVectorBlend` / `CameraMotionVectorKalman`)
 - **Play / Pause, 탐색 바**: 벽시계 기준 재생(필요 시 프레임 드롭) 및 임의 프레임 이동
-- **Threshold / NMS radius 슬라이더**: `tooltip-detector`와 동일한 피크 탐지 파라미터
-- `--dataset`은 필수 인자이며, 실행 시 `--dataset`/`--target-mode`는 초기 선택값만 지정하며 GUI의 `Dataset`/`Target` 드롭다운으로 실행 중에도 전환할 수 있다.
+- **Threshold 슬라이더**: 히트맵 모델에서는 피크 임계값, 탐지기에서는 신뢰도 임계값
+- **NMS radius 슬라이더**: 히트맵 모델 전용. 탐지기는 이미 객체당 박스 하나로 줄여 놓았고, 반경으로 다시 병합하면 가위·집게 한 자루가 정당하게 보이는 팁 2개를 뭉갤 수 있어 비활성화된다
 
 상세 설계와 스무딩 로직, 오탐지 판정 규칙: [docs/tooltip-tracker.md](docs/tooltip-tracker.md)
 
@@ -303,7 +313,7 @@ run.bat tooltip-tracker --dataset cholec80      # Windows
 | `run compare-speed`    | 모델 추론 속도 비교      | `--dataset`(필수), `--model-types`, `--target-mode`, `--num-samples`, `--batch-size`, `--workers`                                     |
 | `run generate-summary` | 실험 수치 요약 문서 생성 | `--models-root`, `--results-root`, `--output`                                                                                         |
 | `run tooltip-detector` | 탐지 결과 시각화 GUI     | `--dataset`(필수), `--model-type`, `--target-mode`, `--model`, `--data-root`                                                          |
-| `run tooltip-tracker`  | 동영상 실시간 추적 GUI   | `--dataset`(필수), `--model-type`, `--target-mode`, `--model`                                                                         |
+| `run tooltip-tracker`  | 동영상 실시간 추적 GUI   | `<model-path>`(생략 시 목록 출력)                                                                                                     |
 | `run dataset-browser`  | 데이터셋 시각화 GUI      | `--dataset`(필수), `--split`, `--data-root`                                                                                           |
 
 Windows에서는 `run` 대신 `run.bat`을 사용한다. 인자 없이 `run`(`run.bat`)만 실행하면 사용법과 사용 가능한 스크립트 목록이 출력된다.
