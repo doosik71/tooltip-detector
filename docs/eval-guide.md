@@ -37,19 +37,19 @@ run eval-model --dataset cholec80 --target-mode gaussian-tip
 
 ## 인수
 
-| 인수             | 기본값                                              | 설명                                   |
-| --------------- | -------------------------------------------------- | -------------------------------------- |
-| `--dataset`     | (필수)                                              | `data/dataset/` 아래 데이터셋 이름 (`erop` / `cholec80`) |
-| `--model-type`  | `monai`                                             | 모델 아키텍처 (`monai` / `monai_mini`) |
-| `--target-mode` | `gradient-seg`                                      | 평가 대상 모델이 학습된 타겟 생성 방식 |
-| `--model`       | `data/models/<dataset>/<target-mode>/<model-type>/best.pt` | 모델 가중치 파일 경로           |
-| `--data-root`   | `data/dataset`                                      | `<dataset-name>/` 서브디렉터리를 담는 루트 디렉터리 |
-| `--results-dir` | `data/results/<dataset>/<target-mode>/<model-type>` | 결과 저장 루트 디렉터리                |
-| `--threshold`   | `0.5`                                               | 피크 탐지 임계값 (히트맵 값 기준)      |
-| `--nms-radius`  | `20`                                                | 두 피크 사이의 최소 픽셀 거리 (NMS)    |
-| `--batch-size`  | `16`                                                | 추론 배치 크기                         |
-| `--workers`     | `4`                                                 | DataLoader 워커 수                     |
-| `--device`      | 자동 (CUDA 있으면 `cuda`, 없으면 `cpu`)             | 평가에 사용할 torch device (예: `cuda:1`, `cpu`) |
+| 인수            | 기본값                                                     | 설명                                                     |
+| --------------- | ---------------------------------------------------------- | -------------------------------------------------------- |
+| `--dataset`     | (필수)                                                     | `data/dataset/` 아래 데이터셋 이름 (`erop` / `cholec80`) |
+| `--model-type`  | `monai`                                                    | 모델 아키텍처 (`monai` / `monai_mini`)                   |
+| `--target-mode` | `gradient-seg`                                             | 평가 대상 모델이 학습된 타겟 생성 방식                   |
+| `--model`       | `data/models/<dataset>/<target-mode>/<model-type>/best.pt` | 모델 가중치 파일 경로                                    |
+| `--data-root`   | `data/dataset`                                             | `<dataset-name>/` 서브디렉터리를 담는 루트 디렉터리      |
+| `--results-dir` | `data/results/<dataset>/<target-mode>/<model-type>`        | 결과 저장 루트 디렉터리                                  |
+| `--threshold`   | `0.5`                                                      | 피크 탐지 임계값 (히트맵 값 기준)                        |
+| `--nms-radius`  | `20`                                                       | 두 피크 사이의 최소 픽셀 거리 (NMS)                      |
+| `--batch-size`  | `16`                                                       | 추론 배치 크기                                           |
+| `--workers`     | `4`                                                        | DataLoader 워커 수                                       |
+| `--device`      | 자동 (CUDA 있으면 `cuda`, 없으면 `cpu`)                    | 평가에 사용할 torch device (예: `cuda:1`, `cpu`)         |
 
 GPU가 여러 개인 장비에서는 `--device cuda:<N>`으로 사용할 장치를 직접 지정한다.
 한 번의 평가는 지정한 GPU 한 대만 사용하므로, 학습이 돌고 있는 GPU를 피해

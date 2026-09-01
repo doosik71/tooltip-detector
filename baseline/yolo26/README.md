@@ -285,4 +285,4 @@ end-to-end 헤드라 NMS를 돌리지 않으므로, 있어도 아무 일도 하�
 
 - YOLO26: <https://docs.ultralytics.com/models/yolo26>
 - Ultralytics: <https://github.com/ultralytics/ultralytics>
-- 형제 베이스라인 비교 보고서: [docs/reports-yolo-variants.md](../../docs/reports-yolo-variants.md)
+- 형제 베이스라인 비교 보고서: [docs/baseline-report.md](../../docs/baseline-report.md)

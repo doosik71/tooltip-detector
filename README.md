@@ -129,10 +129,10 @@ run dashboard          # Linux / macOS
 run.bat dashboard      # Windows
 ```
 
-데이터셋 × 타겟 생성 방식 × 모델 타입의 모든 조합에 대해 학습·평가가 어디까지 진행됐는지를 한 표로 보여준다.
-표에서 `Train`/`Eval` 칸을 선택하면 그 작업을 수행하는 명령(예: `run train-model --dataset erop --target-mode gaussian-tip --model-type monai`)과, 현재 상태에서 그 명령을 실행하면 어떻게 되는지에 대한 안내가 표시되고 `Copy` 버튼으로 복사할 수 있다.
-상태는 `data/models/`·`data/results/` 아래 파일만 보고 판정하므로 모델이나 데이터셋을 로드하지 않으며, 5초마다 자동으로 갱신된다.
-다른 스크립트와 달리 `--dataset`은 선택 인자이고, 지정하면 해당 데이터셋의 첫 행이 선택된 채로 열린다.
+학습·평가가 어디까지 진행됐는지를 탭 두 개의 표로 보여준다. `This project` 탭은 데이터셋 × 타겟 생성 방식 × 모델 타입의 모든 조합(8행)을, `Baselines` 탭은 `baseline/` 아래 재구현·원본 베이스라인 5종(`yolov8s`·`yolov8sclone`·`yolo26`·`yolo26clone`·`cladnet`) × 데이터셋(10행)을 각각 한 행으로 놓는다. 베이스라인은 타겟 생성 방식이라는 축이 없고 서브 프로젝트마다 자기 러너를 쓰므로 표를 나눴다.
+표에서 `Train`/`Eval` 칸을 선택하면 그 작업을 수행하는 명령(예: `run train-model --dataset erop --target-mode gaussian-tip --model-type monai`, 베이스라인이면 `./baseline/cladnet/run eval-model --dataset erop --split test`)과, 현재 상태에서 그 명령을 실행하면 어떻게 되는지에 대한 안내가 표시되고 `Copy` 버튼으로 복사할 수 있다.
+상태는 `data/models/`·`data/results/`·`baseline/<name>/data/` 아래 파일만 보고 판정하므로 모델이나 데이터셋을 로드하지 않으며, 5초마다 자동으로 갱신된다.
+다른 스크립트와 달리 `--dataset`은 선택 인자이고, 지정하면 두 탭 모두 해당 데이터셋의 첫 행이 선택된 채로 열린다.
 
 사용법 상세: [docs/dashboard-guide.md](docs/dashboard-guide.md)
 
@@ -307,7 +307,7 @@ run.bat tooltip-tracker data\models\cholec80\gaussian-tip\monai\best.pt   # Wind
 
 | 스크립트               | 설명                     | 주요 인수                                                                                                                             |
 | ---------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `run dashboard`        | 학습·평가 현황 표 GUI    | `--dataset`(선택), `--models-root`, `--results-root`                                                                                  |
+| `run dashboard`        | 학습·평가 현황 표 GUI    | `--dataset`(선택), `--models-root`, `--results-root`, `--baseline-root`                                                               |
 | `run train-model`      | 모델 학습                | `--dataset`(필수), `--model-type`, `--target-mode`, `--gaussian-sigma`, `--epochs`, `--batch-size`, `--lr`, `--device`, `--no-resume` |
 | `run eval-model`       | 팁 탐지 정확도 평가      | `--dataset`(필수), `--model-type`, `--target-mode`, `--threshold`, `--nms-radius`, `--model`, `--device`                              |
 | `run compare-speed`    | 모델 추론 속도 비교      | `--dataset`(필수), `--model-types`, `--target-mode`, `--num-samples`, `--batch-size`, `--workers`                                     |
@@ -391,6 +391,7 @@ run eval-model  --dataset cholec80 --device cuda:1
 | 문서                                                             | 내용                                                                      |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | [docs/final-report.md](docs/final-report.md)                     | 실험결과보고서 — 8개 조합 전수 실험의 설계·결과·분석·한계                 |
+| [docs/baseline-report.md](docs/baseline-report.md)               | 베이스라인 실험결과보고서 — CLAD-Net·YOLOv8s·YOLO26 비교와 참조 구현 대조 |
 | [docs/results-summary.md](docs/results-summary.md)               | 실험 수치 요약 — 보고서 작성용 기초 자료 (자동 생성)                      |
 | [docs/parameter-optimization.md](docs/parameter-optimization.md) | 후처리 파라미터 최적화(2단계) — threshold × NMS 격자 탐색, watershed 비교 |
 | [docs/model-monai.md](docs/model-monai.md)                       | EfficientNet-B2 + U-Net 풀 모델 아키텍처 상세 설명                        |

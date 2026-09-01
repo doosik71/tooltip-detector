@@ -378,4 +378,4 @@ Ultralytics가 이미지 경로의 `/images/`를 `/labels/`로 바꿔 라벨을 
 
 - YOLOv8: <https://docs.ultralytics.com/models/yolov8>
 - Ultralytics: <https://github.com/ultralytics/ultralytics>
-- 형제 베이스라인 비교 보고서: [docs/reports-yolo-variants.md](../../docs/reports-yolo-variants.md)
+- 형제 베이스라인 비교 보고서: [docs/baseline-report.md](../../docs/baseline-report.md)

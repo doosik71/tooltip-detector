@@ -448,4 +448,4 @@ YOLO26에도 objectness 항이 없어 클래스 점수가 곧 신뢰도인데, e
 
 구조 설명과 YOLO26이 YOLOv8과 무엇이 다른지는 [README](../README.md),
 형제 베이스라인의 결과는 [yolov8sclone](../../yolov8sclone/docs/experimental-results.md)·[cladnet](../../cladnet/docs/experimental-results.md),
-YOLO 계열 전체를 묶은 보고서는 [docs/reports-yolo-variants.md](../../../docs/reports-yolo-variants.md)를 참고한다.
+YOLO 계열 전체를 묶은 보고서는 [docs/baseline-report.md](../../../docs/baseline-report.md)를 참고한다.
