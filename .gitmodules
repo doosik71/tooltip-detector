@@ -1,0 +1,3 @@
+[submodule "tooltip-annotator"]
+	path = tooltip-annotator
+	url = git@github.com:doosik71/tooltip-annotator.git
