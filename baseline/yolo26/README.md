@@ -196,7 +196,7 @@ data/yolo/<dataset>/
 때 Ultralytics는 에포크 수도 체크포인트에서 읽으므로, 더 오래 학습하려면 `--no-resume`으로
 새로 시작해야 한다.
 
-체크포인트는 매 에포크 `data/model/<dataset>/`으로 복사된다. 중간에 끊겨도 그 시점까지의
+체크포인트는 매 에포크 `data/model/<dataset>/tooltip/`으로 복사된다. 중간에 끊겨도 그 시점까지의
 `model.pt`와 완전한 `metric.csv`가 남는다.
 
 ### 3. 평가
@@ -226,10 +226,10 @@ data/yolo/<dataset>/
 | `--max-det`      | 300    | 프레임당 박스 수 상한. NMS가 없는 대신 이 값이 있다               |
 | `--frame-stride` | 1      | N프레임마다 1장만 평가                                            |
 | `--limit`        |        | 평가할 프레임 수 상한                                             |
-| `--model`        |        | 체크포인트 경로 (기본 `data/model/<dataset>/model.pt`)            |
+| `--model`        |        | 체크포인트 경로 (기본 `data/model/<dataset>/tooltip/model.pt`)            |
 
 거리는 letterbox된 640 × 640이 아니라 **원본 프레임 좌표계(736 × 480)** 에서 잰다.
-결과는 `data/results/<dataset>/<split>/`에 `summary.json`과 `per_tip.csv`로 저장된다.
+결과는 `data/results/<dataset>/tooltip/<split>/`에 `summary.json`과 `per_tip.csv`로 저장된다.
 
 ### 4. 데모 GUI
 
@@ -241,7 +241,7 @@ data/yolo/<dataset>/
 조작은 [yolov8s 데모](../yolov8s/README.md)와 같지만 **IoU 슬라이더가 없다.** YOLO26은
 end-to-end 헤드라 NMS를 돌리지 않으므로, 있어도 아무 일도 하지 않는 조작이 되기 때문이다.
 
-`--dataset`을 주면 `data/model/<dataset>/model.pt`를 찾아 열고(생략하면 사전순 첫 번째),
+`--dataset`을 주면 `data/model/<dataset>/tooltip/model.pt`를 찾아 열고(생략하면 사전순 첫 번째),
 `--weights`로 임의의 체크포인트를 직접 지정할 수도 있다.
 
 ### 5. 수치 요약 문서 생성

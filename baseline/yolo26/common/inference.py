@@ -26,7 +26,8 @@ import time
 
 import numpy as np
 
-from .dataset import CLASS_NAMES, DEFAULT_TIP_BOX_SIZE, data_dir, model_dir
+from .dataset import (CLASS_NAMES, DEFAULT_TIP_BOX_SIZE, LABEL_SET, data_dir,
+                      model_dir)
 
 DEFAULT_CONF = 0.25
 DEFAULT_MAX_DET = 300
@@ -37,9 +38,9 @@ INFO_FILENAME = "model-info.json"
 
 
 def trained_datasets() -> list[str]:
-    """Dataset names that already have a checkpoint under data/model/<dataset>/."""
-    paths = glob.glob(os.path.join(data_dir(), "model", "*", MODEL_FILENAME))
-    return sorted(os.path.basename(os.path.dirname(path)) for path in paths)
+    """Dataset names already trained: data/model/<dataset>/<label-set>/."""
+    paths = glob.glob(os.path.join(data_dir(), "model", "*", LABEL_SET, MODEL_FILENAME))
+    return sorted(path.split(os.sep)[-3] for path in paths)
 
 
 def default_model_path(dataset: str | None = None) -> str:

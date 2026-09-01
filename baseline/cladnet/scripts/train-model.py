@@ -41,8 +41,9 @@ if True:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
     from common.boxes import non_max_suppression, xywh_to_xyxy
-    from common.dataset import (CLASS_NAMES, DEFAULT_TIP_BOX_SIZE, SurgicalDetectionDataset,
-                                available_datasets, collate, default_data_root)
+    from common.dataset import (DEFAULT_LABEL_SET, DEFAULT_TIP_BOX_SIZE, LABEL_SETS,
+                                SurgicalDetectionDataset, available_datasets,
+                                class_names, collate, default_data_root)
     from common.inference import model_dir, save_checkpoint
     from common.loss import DetectionLoss
     from common.metrics import DetectionEvaluator
@@ -103,9 +104,10 @@ def lr_lambda(epoch: float, epochs: int) -> float:
 
 
 @torch.no_grad()
-def validate(model, loader, criterion, device, conf: float, iou: float) -> dict:
+def validate(model, loader, criterion, device, conf: float, iou: float,
+             names: tuple[str, ...]) -> dict:
     model.eval()
-    evaluator = DetectionEvaluator(len(CLASS_NAMES), CLASS_NAMES)
+    evaluator = DetectionEvaluator(len(names), names)
     totals = {"box": 0.0, "obj": 0.0, "cls": 0.0}
     batches = 0
 
@@ -165,12 +167,18 @@ def main():
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--device", default=None)
     parser.add_argument("--output-dir", default=None,
-                        help="where the checkpoints go (default: data/model/<dataset>)")
+                        help="override the checkpoint directory; normally left alone, "
+                             "since --label-set already picks "
+                             "data/model/<dataset>/<label-set>")
     parser.add_argument("--neck-channels", type=int, default=112)
     parser.add_argument("--head-hidden", type=int, default=96)
     parser.add_argument("--tip-box-size", type=float, default=DEFAULT_TIP_BOX_SIZE,
                         help="side of the square box drawn around each annotated tip, in "
                              f"original-frame px (default: {DEFAULT_TIP_BOX_SIZE:g})")
+    parser.add_argument("--label-set", default=DEFAULT_LABEL_SET, choices=tuple(LABEL_SETS),
+                        help="which classes to learn: `tooltip` for the tool box and the "
+                             "tip box, `tiponly` for the tip box alone. Also names the "
+                             f"output directory (default: {DEFAULT_LABEL_SET})")
     parser.add_argument("--rm-combine", default="sum", choices=("sum", "mean"),
                         help="RM weight combination; see common.modules.RM")
     parser.add_argument("--conf", type=float, default=0.001,
@@ -187,7 +195,7 @@ def main():
 
     device = torch.device(args.device or ("cuda:0" if torch.cuda.is_available() else "cpu"))
     # resolved back into args so train-status.json records the real path
-    args.output_dir = args.output_dir or model_dir(args.dataset)
+    args.output_dir = args.output_dir or model_dir(args.dataset, args.label_set)
     os.makedirs(args.output_dir, exist_ok=True)
     best_path = os.path.join(args.output_dir, "model.pt")
     last_path = os.path.join(args.output_dir, "model-last.pt")
@@ -196,17 +204,20 @@ def main():
 
     arch = {"neck_channels": args.neck_channels, "head_hidden": args.head_hidden,
             "rm_combine": args.rm_combine}
-    model = build(num_classes=len(CLASS_NAMES), **arch).to(device)
+    names = class_names(args.label_set)
+    model = build(num_classes=len(names), **arch).to(device)
     print(f"CLAD-Net  {parameter_count(model) / 1e6:.3f} M parameters  (paper: 7.5 M)  "
           f"[{device}]  tip box {args.tip_box_size:g} px")
 
     train_set = SurgicalDetectionDataset(args.dataset, "train", args.image_size, augment=True,
                                          data_root=args.data_root, frame_stride=args.frame_stride,
-                                         tip_box_size=args.tip_box_size)
+                                         tip_box_size=args.tip_box_size,
+                                         label_set=args.label_set)
     val_set = SurgicalDetectionDataset(args.dataset, "val", args.image_size, augment=False,
                                        data_root=args.data_root,
                                        limit=args.val_frames or None,
-                                       tip_box_size=args.tip_box_size)
+                                       tip_box_size=args.tip_box_size,
+                                       label_set=args.label_set)
     print(f"train frames: {len(train_set):,}   val frames: {len(val_set):,}")
 
     train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True,
@@ -261,14 +272,16 @@ def main():
 
         scheduler.step()
         evaluated = ema.ema if ema is not None else model
-        metrics = validate(evaluated, val_loader, criterion, device, args.conf, args.iou)
+        metrics = validate(evaluated, val_loader, criterion, device, args.conf,
+                           args.iou, names)
         fitness = metrics["map50_95"] if metrics["map50_95"] is not None else -1.0
         elapsed = time.perf_counter() - epoch_start
 
         per_class = metrics["per_class"]
         print(f"  epoch {epoch + 1}: val_loss {metrics['val_loss']:.4f}  "
               f"mAP@0.5 {_fmt(metrics['map50'])}  mAP@0.5:0.95 {_fmt(metrics['map50_95'])}  "
-              f"tool AP50 {_fmt(per_class['tool']['ap50'])}  tip AP50 {_fmt(per_class['tip']['ap50'])}  "
+              f"tool AP50 {_fmt(_ap50(per_class, 'tool'))}  "
+              f"tip AP50 {_fmt(_ap50(per_class, 'tip'))}  "
               f"({elapsed / 60:.1f} min)")
 
         append_metric_row(metric_path, {
@@ -281,7 +294,7 @@ def main():
             "val_obj_loss": metrics["val_obj_loss"],
             "val_cls_loss": metrics["val_cls_loss"],
             "map50": metrics["map50"], "map50_95": metrics["map50_95"],
-            "tool_ap50": per_class["tool"]["ap50"], "tip_ap50": per_class["tip"]["ap50"],
+            "tool_ap50": _ap50(per_class, "tool"), "tip_ap50": _ap50(per_class, "tip"),
             "lr": round(optimizer.param_groups[0]["lr"], 6),
             "seconds": round(elapsed, 1),
         })
@@ -294,14 +307,16 @@ def main():
                     "epoch": epoch, "best_fitness": best_fitness,
                     "arch": arch, "image_size": args.image_size,
                     "tip_box_size": args.tip_box_size,
-                    "class_names": list(CLASS_NAMES), "dataset": args.dataset}, last_path)
+                    "class_names": list(names), "label_set": args.label_set,
+                    "dataset": args.dataset}, last_path)
 
         if fitness > best_fitness:
             best_fitness = fitness
-            saved = build(num_classes=len(CLASS_NAMES), **arch)
+            saved = build(num_classes=len(names), **arch)
             saved.load_state_dict(state)
             save_checkpoint(best_path, saved, arch, args.image_size, args.tip_box_size,
-                            args.dataset, epoch + 1, metrics)
+                            args.dataset, epoch + 1, metrics,
+                            class_names=names, label_set=args.label_set)
             print(f"  saved {best_path} (mAP@0.5:0.95 {fitness:.4f})")
 
         with open(status_path, "w", encoding="utf-8") as handle:
@@ -310,6 +325,14 @@ def main():
                        "last_metrics": metrics, "args": vars(args)}, handle, indent=2)
 
     print(f"done. best mAP@0.5:0.95 {best_fitness:.4f} -> {best_path}")
+
+
+def _ap50(per_class: dict, name: str):
+    """AP@0.5 of one class, or None when this run does not have that class.
+
+    `tiponly` has no `tool` class at all, and a class the validation split
+    happened to contain no instances of is absent too."""
+    return per_class.get(name, {}).get("ap50")
 
 
 def _fmt(value) -> str:

@@ -37,9 +37,9 @@ if True:
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-    from common.dataset import (CLASS_NAMES, SPLITS, TIP_CLASS, TOOL_CLASS,
+    from common.dataset import (DEFAULT_LABEL_SET, LABEL_SETS, SPLITS,
                                 SurgicalDetectionDataset, available_datasets,
-                                default_data_root)
+                                class_names, default_data_root)
     from common.inference import (DEFAULT_CONF, DEFAULT_IOU, Detector, results_dir,
                                   default_model_path)
     from common.metrics import DetectionEvaluator
@@ -75,29 +75,49 @@ def main():
     parser.add_argument("--frame-stride", type=int, default=1,
                         help="evaluate every Nth frame of the split")
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--label-set", default=DEFAULT_LABEL_SET, choices=tuple(LABEL_SETS),
+                        help="which trained model to evaluate: `tooltip` learned the tool "
+                             "box and the tip box, `tiponly` the tip box alone. Picks the "
+                             "default checkpoint and the output directory "
+                             f"(default: {DEFAULT_LABEL_SET})")
     parser.add_argument("--output-dir", default=None,
                         help="where summary.json goes (default: data/<dataset>/results/<split>)")
     args = parser.parse_args()
 
-    args.model = args.model or default_model_path(args.dataset)
+    args.model = args.model or default_model_path(args.dataset, args.label_set)
     if not os.path.exists(args.model):
         raise SystemExit(f"checkpoint not found: {args.model}\n"
                          "train one first with scripts/train-model.py")
 
     detector = Detector(args.model, args.device)
+    # The checkpoint records the classes it was trained on. Scoring a
+    # `tiponly` model as though it were `tooltip` would read its single
+    # class as `tool` and report zero tips, which looks like a broken model
+    # rather than the wrong flag, so say which is which instead.
+    expected = class_names(args.label_set)
+    if tuple(detector.class_names) != expected:
+        raise SystemExit(
+            f"--label-set {args.label_set} expects classes {expected}, but\n"
+            f"  {args.model}\n"
+            f"was trained on {tuple(detector.class_names)}. Pass the matching "
+            "--label-set, or point --model at the other checkpoint.")
+    tip_class = detector.class_names.index("tip")
+
     print(f"model   : {args.model}  [{detector.device}]")
     print(f"trained : dataset={detector.dataset} epoch={detector.epoch} "
-          f"image_size={detector.image_size} tip_box={detector.tip_box_size:g} px")
+          f"image_size={detector.image_size} tip_box={detector.tip_box_size:g} px "
+          f"classes={','.join(detector.class_names)}")
 
     # The tip box side is whatever the checkpoint was trained with; using a
     # different one here would score the model against labels it never saw.
     dataset = SurgicalDetectionDataset(args.dataset, args.split, detector.image_size,
                                        augment=False, data_root=args.data_root,
                                        frame_stride=args.frame_stride, limit=args.limit,
-                                       tip_box_size=detector.tip_box_size)
+                                       tip_box_size=detector.tip_box_size,
+                                       label_set=args.label_set)
     print(f"frames  : {len(dataset):,}  ({args.dataset}/{args.split})")
 
-    detection_eval = DetectionEvaluator(len(CLASS_NAMES), CLASS_NAMES)
+    detection_eval = DetectionEvaluator(len(detector.class_names), detector.class_names)
     tip_eval = TipEvaluator()
     per_tip_rows: list[dict] = []
     total_ms, n_frames = 0.0, 0
@@ -117,9 +137,9 @@ def main():
         detection_eval.add(detections, ground_truth_boxes(labels, width, height))
 
         gt_tips = [((row[1] * width), (row[2] * height))
-                   for row in labels if int(row[0]) == TIP_CLASS]
+                   for row in labels if int(row[0]) == tip_class]
         confident = detections[detections[:, 4] >= args.conf] if len(detections) else detections
-        tip_boxes = confident[confident[:, 5] == TIP_CLASS] if len(confident) else confident
+        tip_boxes = confident[confident[:, 5] == tip_class] if len(confident) else confident
         predicted_tips = [((box[0] + box[2]) / 2, (box[1] + box[3]) / 2) for box in tip_boxes]
         scores = [float(box[4]) for box in tip_boxes]
 
@@ -143,7 +163,8 @@ def main():
     detection_metrics = detection_eval.compute()
     tip_metrics = tip_eval.compute()
 
-    output_dir = args.output_dir or os.path.join(results_dir(args.dataset), args.split)
+    output_dir = args.output_dir or os.path.join(
+        results_dir(args.dataset, args.label_set), args.split)
     os.makedirs(output_dir, exist_ok=True)
 
     summary = {
@@ -159,6 +180,8 @@ def main():
         "frame_stride": args.frame_stride,
         "image_size": detector.image_size,
         "tip_box_size": detector.tip_box_size,
+        "label_set": args.label_set,
+        "class_names": list(detector.class_names),
         "device": str(detector.device),
         "ms_per_frame": round(total_ms / max(1, n_frames), 2),
         "fps": round(1000.0 * n_frames / max(1e-9, total_ms), 1),
@@ -179,7 +202,7 @@ def main():
     print()
     print(f"detection  mAP@0.5 {_fmt(detection_metrics['map50'])}   "
           f"mAP@0.5:0.95 {_fmt(detection_metrics['map50_95'])}")
-    for name in CLASS_NAMES:
+    for name in detector.class_names:
         row = per_class[name]
         print(f"  {name:5s} AP@0.5 {_fmt(row['ap50'])}  AP@0.5:0.95 {_fmt(row['ap50_95'])}  "
               f"P {_fmt(row['precision'])}  R {_fmt(row['recall'])}  (n_gt {row['n_gt']:,})")

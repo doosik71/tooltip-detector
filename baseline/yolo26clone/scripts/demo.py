@@ -62,7 +62,7 @@ if True:
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-    from common.dataset import available_datasets
+    from common.dataset import DEFAULT_LABEL_SET, LABEL_SETS, available_datasets
     from common.draw import CLASS_COLORS, draw_detections, draw_ground_truth
     from common.inference import (DEFAULT_CONF, DEFAULT_MAX_DET, Detector,
                                   default_model_path, trained_datasets)
@@ -432,11 +432,15 @@ def main():
         description="GUI demo for the YOLO26-clone surgical tool + tip detection baseline")
     parser.add_argument("--dataset", default=None,
                         choices=available_datasets() or None,
-                        help="load data/model/<dataset>/model.pt (trained: "
+                        help="load data/model/<dataset>/<label-set>/model.pt (trained: "
                              f"{', '.join(trained_datasets()) or 'none yet'}; "
                              "default: the first one alphabetically)")
+    parser.add_argument("--label-set", default=DEFAULT_LABEL_SET, choices=tuple(LABEL_SETS),
+                        help="which trained model to open: `tooltip` learned the tool box "
+                             "and the tip box, `tiponly` the tip box alone "
+                             f"(default: {DEFAULT_LABEL_SET})")
     parser.add_argument("--weights", default=None,
-                        help="checkpoint path, overriding --dataset "
+                        help="checkpoint path, overriding --dataset and --label-set "
                              f"(default: {default_model_path()})")
     parser.add_argument("--device", default=None,
                         help="torch device, e.g. cuda:0 or cpu (default: cuda if available)")
@@ -448,7 +452,7 @@ def main():
                              f"(default: {default_frames_root()})")
     args = parser.parse_args()
 
-    weights = args.weights or default_model_path(args.dataset)
+    weights = args.weights or default_model_path(args.dataset, args.label_set)
 
     app = Yolo26CloneDemoApp(weights=weights, device=args.device,
                              videos_root=args.videos_root, frames_root=args.frames_root)

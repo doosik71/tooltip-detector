@@ -53,6 +53,10 @@ DEFAULT_OUTPUT = os.path.join(
 
 SPLIT = "test"
 
+# The label-set stage under data/model/<dataset>. This baseline only
+# trains the two-class form; see common/dataset.py.
+LABEL_SET = "tooltip"
+
 # Loss columns differ between the baselines. YOLOv8 has no objectness term, but
 # it does keep DFL: the box branch predicts a distribution over 16 bins per
 # side, so its third term is `dfl_loss` where YOLO26's is `l1_loss`.
@@ -187,12 +191,12 @@ def collect(model_root: str, results_root: str) -> tuple[list[dict], list[str]]:
 
     records, gaps = [], []
     for dataset in sorted(os.listdir(model_root)):
-        model_dir = os.path.join(model_root, dataset)
+        model_dir = os.path.join(model_root, dataset, LABEL_SET)
         if not os.path.isdir(model_dir):
             continue
         status = read_json(os.path.join(model_dir, "train-status.json"))
         curve = read_metric_csv(os.path.join(model_dir, "metric.csv"))
-        result_dir = os.path.join(results_root, dataset, SPLIT)
+        result_dir = os.path.join(results_root, dataset, LABEL_SET, SPLIT)
         summary = read_json(os.path.join(result_dir, "summary.json"))
         per_tip = analyse_per_tip(os.path.join(result_dir, "per_tip.csv"))
 

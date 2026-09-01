@@ -20,7 +20,7 @@ import numpy as np
 import torch
 
 from .boxes import letterbox, non_max_suppression, undo_letterbox
-from .dataset import DEFAULT_TIP_BOX_SIZE
+from .dataset import DEFAULT_LABEL_SET, DEFAULT_TIP_BOX_SIZE
 from .model import CLASS_NAMES, build, decode, fuse
 
 DEFAULT_CONF = 0.25
@@ -32,38 +32,53 @@ def data_dir() -> str:
     return os.path.join(os.path.dirname(here), "data")
 
 
-def model_dir(dataset: str) -> str:
-    """Where one dataset's checkpoints live: data/model/<dataset>/."""
-    return os.path.join(data_dir(), "model", dataset)
+# Checkpoints and results are split by dataset and then by label set, so a
+# `tiponly` run never writes where a `tooltip` run has already written.
+# The caller passes the mode, not the path: the directory name *is* the
+# mode name, so there is nothing else to keep in step.
+def model_dir(dataset: str, label_set: str = DEFAULT_LABEL_SET) -> str:
+    """Where one run's checkpoints live: data/model/<dataset>/<label-set>/."""
+    return os.path.join(data_dir(), "model", dataset, label_set)
 
 
-def results_dir(dataset: str) -> str:
-    """Where one dataset's evaluation output lives: data/results/<dataset>/."""
-    return os.path.join(data_dir(), "results", dataset)
+def results_dir(dataset: str, label_set: str = DEFAULT_LABEL_SET) -> str:
+    """One run's evaluation output: data/results/<dataset>/<label-set>/."""
+    return os.path.join(data_dir(), "results", dataset, label_set)
 
 
-def trained_datasets() -> list[str]:
-    """Dataset names that already have a checkpoint under data/model/<dataset>/."""
-    paths = glob.glob(os.path.join(data_dir(), "model", "*", "model.pt"))
-    return sorted(os.path.basename(os.path.dirname(path)) for path in paths)
+def trained_datasets(label_set: str = DEFAULT_LABEL_SET) -> list[str]:
+    """Dataset names already trained in one label set."""
+    paths = glob.glob(os.path.join(data_dir(), "model", "*", label_set, "model.pt"))
+    return sorted(path.split(os.sep)[-3] for path in paths)
 
 
-def default_model_path(dataset: str | None = None) -> str:
+def default_model_path(dataset: str | None = None,
+                       label_set: str = DEFAULT_LABEL_SET) -> str:
     """Checkpoint of one dataset, or -- when no dataset is given -- the first
-    trained one under data/model/, in alphabetical order."""
+    trained one in that label set, in alphabetical order."""
     if not dataset:
-        trained = trained_datasets()
+        trained = trained_datasets(label_set)
         dataset = trained[0] if trained else "<dataset>"
-    return os.path.join(model_dir(dataset), "model.pt")
+    return os.path.join(model_dir(dataset, label_set), "model.pt")
 
 
 def save_checkpoint(path: str, model, arch: dict, image_size: int, tip_box_size: float,
-                    dataset: str, epoch: int, metrics: dict | None = None) -> None:
+                    dataset: str, epoch: int, metrics: dict | None = None,
+                    class_names: tuple[str, ...] | None = None,
+                    label_set: str = DEFAULT_LABEL_SET) -> None:
+    """Write a checkpoint that describes itself.
+
+    `class_names` must be the names this model was *built* with, not the
+    module default: a `tiponly` model has one class, and recording two would
+    make `Detector` rebuild it at the wrong width and fail to load its own
+    weights.
+    """
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     torch.save({
         "model": model.state_dict(),
         "arch": arch,
-        "class_names": list(CLASS_NAMES),
+        "class_names": list(class_names if class_names is not None else CLASS_NAMES),
+        "label_set": label_set,
         "image_size": image_size,
         "tip_box_size": tip_box_size,
         "dataset": dataset,

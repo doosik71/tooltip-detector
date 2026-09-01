@@ -88,14 +88,22 @@ def yolo_dir(dataset: str) -> str:
     return os.path.join(data_dir(), "yolo", dataset)
 
 
+# The stage below <dataset> names which classes a run learned. The clone
+# baselines can also train `tiponly` (the tip box with no tool class); this
+# baseline only ever trains the two-class form, so the stage is a constant
+# here. The layout is shared so one summary script and one dashboard rule
+# cover every baseline.
+LABEL_SET = "tooltip"
+
+
 def model_dir(dataset: str) -> str:
-    """Where one dataset's checkpoints live: data/model/<dataset>/."""
-    return os.path.join(data_dir(), "model", dataset)
+    """One run's checkpoints: data/model/<dataset>/tooltip/."""
+    return os.path.join(data_dir(), "model", dataset, LABEL_SET)
 
 
 def results_dir(dataset: str) -> str:
-    """Where one dataset's evaluation output lives: data/results/<dataset>/."""
-    return os.path.join(data_dir(), "results", dataset)
+    """One run's evaluation output: data/results/<dataset>/tooltip/."""
+    return os.path.join(data_dir(), "results", dataset, LABEL_SET)
 
 
 def available_datasets(data_root: str | None = None) -> list[str]:

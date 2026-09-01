@@ -13,7 +13,10 @@ Two families implement it:
              emits a distance heatmap; peaks above a threshold are the tips.
   detector   the reimplementation baselines under `baseline/` (`yolov8sclone`,
              `cladnet`, `yolo26clone`). The network emits `tool` and `tip`
-             boxes; the centre of a `tip` box is a tip.
+             boxes; the centre of a `tip` box is a tip. A baseline can be
+             trained on both classes (`tooltip`) or on the tip alone
+             (`tiponly`); the directory says which, and the checkpoint
+             names its own classes, so either drives the tracker.
 
 The Ultralytics-based baselines (`baseline/yolov8s`, `baseline/yolo26`) are
 deliberately *not* supported: they need `ultralytics`, which requires
@@ -26,7 +29,7 @@ are already fixed conventions (see `ttd.checkpoints` and each baseline's
 README):
 
     data/models/<dataset>/<target-mode>/<model-type>/best.pt        -> heatmap
-    baseline/<name>/data/model/<dataset>/model.pt                   -> detector
+    baseline/<name>/data/model/<dataset>/<label-set>/model.pt       -> detector
 
 That is why the tracker takes a path and nothing else. It also means only one
 baseline is ever imported per process, which matters: all three baselines name
@@ -87,12 +90,12 @@ def describe_checkpoint(path: str) -> CheckpointSpec:
 
     parts = absolute.split(os.sep)
 
-    # baseline/<name>/data/model/<dataset>/<file>.pt
+    # baseline/<name>/data/model/<dataset>/<label-set>/<file>.pt
     if "baseline" in parts:
         index = len(parts) - 1 - parts[::-1].index("baseline")
         tail = parts[index + 1:]
-        if len(tail) >= 5 and tail[1] == "data" and tail[2] == "model":
-            name, dataset = tail[0], tail[3]
+        if len(tail) >= 6 and tail[1] == "data" and tail[2] == "model":
+            name, dataset, label_set = tail[0], tail[3], tail[4]
             if name not in SUPPORTED_BASELINES:
                 raise SystemExit(
                     f"baseline '{name}' is not supported by tooltip-tracker.\n"
@@ -102,7 +105,7 @@ def describe_checkpoint(path: str) -> CheckpointSpec:
                     "loaded in this process. Their architectures are covered by the "
                     "reimplementation baselines listed above.")
             return CheckpointSpec(absolute, "detector",
-                                  label=f"{name}/{dataset}",
+                                  label=f"{name}/{dataset}/{label_set}",
                                   dataset=dataset, baseline=name)
 
     # data/models/<dataset>/<target-mode>/<model-type>/<file>.pt
@@ -121,7 +124,7 @@ def describe_checkpoint(path: str) -> CheckpointSpec:
         "tooltip-tracker reads the model's identity from the directory layout, "
         "so the path has to be one of:\n"
         "  data/models/<dataset>/<target-mode>/<model-type>/best.pt\n"
-        "  baseline/<name>/data/model/<dataset>/model.pt   "
+        "  baseline/<name>/data/model/<dataset>/<label-set>/model.pt   "
         f"(<name>: {', '.join(SUPPORTED_BASELINES)})")
 
 
@@ -253,12 +256,13 @@ def available_checkpoints(root: str | None = None) -> list[CheckpointSpec]:
                                     dataset=dataset, model_type=model_type,
                                     target_mode=target_mode))
 
-    # Baselines: baseline/<name>/data/model/<dataset>/model.pt
+    # Baselines: baseline/<name>/data/model/<dataset>/<label-set>/model.pt
     for name in SUPPORTED_BASELINES:
         for path in sorted(glob.glob(os.path.join(
-                root, "baseline", name, "data", "model", "*", "model.pt"))):
-            dataset = path.split(os.sep)[-2]
-            found.append(CheckpointSpec(path, "detector", label=f"{name}/{dataset}",
+                root, "baseline", name, "data", "model", "*", "*", "model.pt"))):
+            dataset, label_set = path.split(os.sep)[-3:-1]
+            found.append(CheckpointSpec(path, "detector",
+                                        label=f"{name}/{dataset}/{label_set}",
                                         dataset=dataset, baseline=name))
     return found
 

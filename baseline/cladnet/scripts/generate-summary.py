@@ -49,6 +49,12 @@ DEFAULT_OUTPUT = os.path.join(
 
 SPLIT = "test"
 
+# Which run to summarise. `--suffix` selects a *round* (a sibling data/
+# directory kept from an earlier experiment); this selects a *mode* within
+# it, and the two are independent axes of the same path.
+DEFAULT_LABEL_SET = "tooltip"
+LABEL_SETS = ("tooltip", "tiponly")
+
 # Loss columns differ between the two baselines; CLAD-Net carries an objectness term.
 LOSS_PARTS = ("box", "obj", "cls")
 
@@ -174,19 +180,20 @@ def percentiles(values: list[float]) -> dict | None:
             "above_0.25_pct": 100.0 * sum(1 for v in ordered if v >= 0.25) / len(ordered)}
 
 
-def collect(model_root: str, results_root: str) -> tuple[list[dict], list[str]]:
+def collect(model_root: str, results_root: str,
+            label_set: str = DEFAULT_LABEL_SET) -> tuple[list[dict], list[str]]:
     """One record per dataset directory found, plus a list of what is missing."""
     if not os.path.isdir(model_root):
         return [], [f"학습 결과 디렉터리가 없다: {model_root}"]
 
     records, gaps = [], []
     for dataset in sorted(os.listdir(model_root)):
-        model_dir = os.path.join(model_root, dataset)
+        model_dir = os.path.join(model_root, dataset, label_set)
         if not os.path.isdir(model_dir):
             continue
         status = read_json(os.path.join(model_dir, "train-status.json"))
         curve = read_metric_csv(os.path.join(model_dir, "metric.csv"))
-        result_dir = os.path.join(results_root, dataset, SPLIT)
+        result_dir = os.path.join(results_root, dataset, label_set, SPLIT)
         summary = read_json(os.path.join(result_dir, "summary.json"))
         per_tip = analyse_per_tip(os.path.join(result_dir, "per_tip.csv"))
 
@@ -205,11 +212,15 @@ def collect(model_root: str, results_root: str) -> tuple[list[dict], list[str]]:
     return records, gaps
 
 
-def parameter_count() -> int | None:
-    """Built rather than read: no artefact on disk records it."""
+def parameter_count(label_set: str = DEFAULT_LABEL_SET) -> int | None:
+    """Built rather than read: no artefact on disk records it.
+
+    The class count is part of the model, so `tiponly` is a few hundred
+    parameters smaller than `tooltip`."""
     try:
-        from common.model import CLASS_NAMES, build, parameter_count as count
-        return count(build(num_classes=len(CLASS_NAMES)))
+        from common.dataset import class_names
+        from common.model import build, parameter_count as count
+        return count(build(num_classes=len(class_names(label_set))))
     except Exception:
         return None
 
@@ -250,10 +261,13 @@ def bin_label(lo, hi) -> str:
 # ── sections ───────────────────────────────────────────────────────────────
 
 def section_overview(out: list[str], records: list[dict], gaps: list[str],
-                     model_root: str, results_root: str, suffix: str) -> None:
+                     model_root: str, results_root: str, suffix: str,
+                     label_set: str = DEFAULT_LABEL_SET) -> None:
     out += ["## 1. 무엇을 읽었나", ""]
-    out += [f"- 학습 산출물: `{os.path.relpath(model_root, os.path.dirname(data_dir()))}`",
-            f"- 평가 산출물: `{os.path.relpath(results_root, os.path.dirname(data_dir()))}` (split `{SPLIT}`)",
+    out += [f"- 학습 모드: `{label_set}` "
+            f"({'tool 상자와 tip 상자를 함께 학습' if label_set == 'tooltip' else 'tip 상자만 학습'})",
+            f"- 학습 산출물: `{os.path.relpath(model_root, os.path.dirname(data_dir()))}/<dataset>/{label_set}`",
+            f"- 평가 산출물: `{os.path.relpath(results_root, os.path.dirname(data_dir()))}/<dataset>/{label_set}` (split `{SPLIT}`)",
             ""]
     if suffix:
         out += [f"> 디렉터리 접미사 `{suffix}` 가 붙어 있다. 새 학습이 접미사 없는 경로에 쓰는 동안",
@@ -273,7 +287,7 @@ def section_overview(out: list[str], records: list[dict], gaps: list[str],
     out += table(["데이터셋", "학습 에포크", "best val mAP@0.5:0.95", "평가 결과", "per_tip.csv"],
                  rows, "lrrll")
 
-    params = parameter_count()
+    params = parameter_count(label_set)
     if params is not None:
         out += [f"모델 파라미터: **{params:,}**", ""]
     if gaps:
@@ -580,12 +594,13 @@ def section_gaps(out: list[str]) -> None:
 # ── entry point ────────────────────────────────────────────────────────────
 
 def build_document(records: list[dict], gaps: list[str], model_root: str,
-                   results_root: str, suffix: str) -> str:
+                   results_root: str, suffix: str,
+                   label_set: str = DEFAULT_LABEL_SET) -> str:
     out = ["# CLAD-Net 실험 수치 요약", "",
            "이 문서는 `scripts/generate-summary.py`가 생성한다. 직접 고치지 말고 스크립트를 고친다.",
            "[experimental-results.md](experimental-results.md)를 쓸 때 참고할 수치를 모아 둔 것이며,",
            "모든 값은 `data/` 아래 파일에서 다시 계산된다.", ""]
-    section_overview(out, records, gaps, model_root, results_root, suffix)
+    section_overview(out, records, gaps, model_root, results_root, suffix, label_set)
     section_settings(out, records)
     section_convergence(out, records)
     section_detection(out, records)
@@ -605,19 +620,24 @@ def main():
     parser.add_argument("--suffix", default=DATA_SUFFIX,
                         help=f'directory suffix under data/ (default: "{DATA_SUFFIX}"; '
                              'pass "" once the current training round is the one to report)')
+    parser.add_argument("--label-set", default=DEFAULT_LABEL_SET, choices=LABEL_SETS,
+                        help="which training mode to summarise; also the directory "
+                             f"stage under data/model/<dataset> (default: {DEFAULT_LABEL_SET})")
     parser.add_argument("--output", default=DEFAULT_OUTPUT,
                         help=f"where the document goes (default: {DEFAULT_OUTPUT})")
     args = parser.parse_args()
 
     model_root = os.path.join(data_dir(), f"model{args.suffix}")
     results_root = os.path.join(data_dir(), f"results{args.suffix}")
-    records, gaps = collect(model_root, results_root)
+    records, gaps = collect(model_root, results_root, args.label_set)
 
     if not records:
-        raise SystemExit(f"no runs under {model_root}\n"
-                         f"train one first, or pass --suffix for another directory")
+        raise SystemExit(f"no {args.label_set} runs under {model_root}\n"
+                         "train one first, or pass --label-set / --suffix for "
+                         "another directory")
 
-    document = build_document(records, gaps, model_root, results_root, args.suffix)
+    document = build_document(records, gaps, model_root, results_root, args.suffix,
+                              args.label_set)
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
     with open(args.output, "w", encoding="utf-8") as handle:
         handle.write(document)

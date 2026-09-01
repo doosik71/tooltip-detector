@@ -4,8 +4,9 @@
 Two tabs, one per project, because the two have different experiment axes:
 
   This project   one row per dataset x target-mode x model-type
-  Baselines      one row per baseline x dataset (a detector has no target
-                 mode: it regresses `tool` and `tip` boxes directly)
+  Baselines      one row per baseline x dataset x label set (a detector has
+                 no target mode: it regresses boxes directly, but it can be
+                 trained on `tool` + `tip` or on `tip` alone)
 
 Either way the Train and Eval columns say how far that row has progressed,
 and selecting a cell shows the exact command needed to carry out that task,
@@ -23,11 +24,11 @@ load a model or a dataset:
            summary.json               — metrics + run parameters
            per_tip.csv                — one row per GT tip
 
-  Train  baseline/<name>/data/model/<dataset>/
+  Train  baseline/<name>/data/model/<dataset>/<label-set>/
            model.pt / model-last.pt   — best / last checkpoint
            train-status.json          — epochs_completed / epochs_total, best mAP
            metric.csv                 — one row per completed epoch
-  Eval   baseline/<name>/data/results/<dataset>/test/
+  Eval   baseline/<name>/data/results/<dataset>/<label-set>/test/
            summary.json               — detection + tip metrics, run parameters
            per_tip.csv                — one row per GT tip
 
@@ -72,15 +73,26 @@ RUNNER = r".\run.bat" if os.name == "nt" else "./run"
 # checkpoint already on disk. yolov8s and yolo26 take their frame stride when
 # their dataset is converted for Ultralytics instead, so nothing about the
 # training set is left to their train-model call.
+# `label_sets` are the modes that baseline can be trained in. The three
+# reimplementation clones take `--label-set`; the two Ultralytics-based
+# references only ever train the two-class form, so they contribute one row
+# each and their commands carry no such flag.
+CLONE_LABEL_SETS = ("tooltip", "tiponly")
+
 BASELINES = (
-    {"name": "yolov8s", "train_flags": "--workers 12"},
+    {"name": "yolov8s", "train_flags": "--workers 12",
+     "label_sets": ("tooltip",)},
     {"name": "yolov8sclone",
-     "train_flags": "--frame-stride 5 --val-frames 1500 --workers 12"},
-    {"name": "yolo26", "train_flags": "--workers 12"},
+     "train_flags": "--frame-stride 5 --val-frames 1500 --workers 12",
+     "label_sets": CLONE_LABEL_SETS},
+    {"name": "yolo26", "train_flags": "--workers 12",
+     "label_sets": ("tooltip",)},
     {"name": "yolo26clone",
-     "train_flags": "--frame-stride 5 --val-frames 1500 --workers 12"},
+     "train_flags": "--frame-stride 5 --val-frames 1500 --workers 12",
+     "label_sets": CLONE_LABEL_SETS},
     {"name": "cladnet",
-     "train_flags": "--frame-stride 5 --val-frames 1500 --workers 12"},
+     "train_flags": "--frame-stride 5 --val-frames 1500 --workers 12",
+     "label_sets": CLONE_LABEL_SETS},
 )
 
 
@@ -100,8 +112,8 @@ def task_at_column(tree, column_id: str) -> str | None:
     """Which task a clicked column belongs to, or None for the other columns.
 
     Train and Eval are always the last two columns of a status table, which is
-    what lets one click handler serve both tabs even though the project table
-    has five columns and the baseline table four.
+    what lets one click handler serve both tabs even though the two tables
+    have different leading columns.
     """
     try:
         index = int(column_id.lstrip("#"))
@@ -272,14 +284,14 @@ def scan_eval(combo: dict, results_root: str) -> dict:
 
 def baseline_model_dir(combo: dict, baseline_root: str) -> str:
     return os.path.join(baseline_root, combo["baseline"], "data", "model",
-                        combo["dataset"])
+                        combo["dataset"], combo["label_set"])
 
 
 def baseline_results_dir(combo: dict, baseline_root: str) -> str:
     # Baselines evaluate one split at a time and keep the split in the path;
     # only the test split is what the reports quote, so that is what is shown.
     return os.path.join(baseline_root, combo["baseline"], "data", "results",
-                        combo["dataset"], "test")
+                        combo["dataset"], combo["label_set"], "test")
 
 
 def scan_baseline_train(combo: dict, baseline_root: str) -> dict:
@@ -455,18 +467,28 @@ def task_note(task: str, combo: dict, train: dict, evaluation: dict) -> str:
     return "Evaluates best.pt on the test set and writes the results directory."
 
 
+def baseline_label_set_flag(combo: dict) -> str:
+    """`--label-set <mode>`, or nothing for a baseline without the option.
+
+    The two Ultralytics references have a single mode, so printing the flag
+    would show a command their scripts reject."""
+    sets = next(b["label_sets"] for b in BASELINES if b["name"] == combo["baseline"])
+    return f" --label-set {combo['label_set']}" if len(sets) > 1 else ""
+
+
 def baseline_train_command(combo: dict) -> str:
     """The command that trains (or resumes) this baseline on this dataset."""
     flags = next(b["train_flags"] for b in BASELINES
                  if b["name"] == combo["baseline"])
     return (f"{baseline_runner(combo['baseline'])} train-model"
-            f" --dataset {combo['dataset']} {flags}")
+            f" --dataset {combo['dataset']}{baseline_label_set_flag(combo)} {flags}")
 
 
 def baseline_eval_command(combo: dict) -> str:
     """The command that evaluates this baseline's model.pt on the test split."""
     return (f"{baseline_runner(combo['baseline'])} eval-model"
-            f" --dataset {combo['dataset']} --split test")
+            f" --dataset {combo['dataset']}{baseline_label_set_flag(combo)}"
+            " --split test")
 
 
 def baseline_task_note(task: str, train: dict, evaluation: dict) -> str:
@@ -498,7 +520,7 @@ def baseline_task_note(task: str, train: dict, evaluation: dict) -> str:
 def row_label(row: dict) -> str:
     """How a table row is named in the detail panel's title."""
     if "baseline" in row:
-        return f"{row['baseline']} / {row['dataset']}"
+        return f"{row['baseline']} / {row['dataset']} / {row['label_set']}"
     return f"{row['dataset']} / {row['target_mode']} / {row['model_type']}"
 
 
@@ -532,12 +554,12 @@ class Dashboard(tk.Tk):
             {"dataset": ds, "target_mode": tm, "model_type": mt}
             for ds in DATASETS for tm in TARGET_MODES for mt in MODEL_REGISTRY
         ]
-        # Baselines have no target-mode axis, so a baseline row is just the
-        # pair (baseline, dataset). Baseline-major, to keep each baseline's
-        # two datasets side by side.
+        # Baselines have no target-mode axis; their axes are the dataset and
+        # the label set the detector was trained on. Baseline-major, then
+        # dataset, so one baseline's modes sit next to each other.
         self._baseline_combos = [
-            {"baseline": b["name"], "dataset": ds}
-            for b in BASELINES for ds in DATASETS
+            {"baseline": b["name"], "dataset": ds, "label_set": ls}
+            for b in BASELINES for ds in DATASETS for ls in b["label_sets"]
         ]
         self._scans: list[dict] = []
         self._baseline_scans: list[dict] = []
@@ -597,8 +619,9 @@ class Dashboard(tk.Tk):
         self._baseline_tree = self._add_table("Baselines", (
             ("baseline", "Baseline", 130),
             ("dataset", "Dataset", 100),
-            ("train", "Train", 195),
-            ("eval", "Eval", 195),
+            ("labels", "Labels", 90),
+            ("train", "Train", 175),
+            ("eval", "Eval", 175),
         ), len(self._baseline_combos))
 
         # Tk moves the selection into the newly shown table, but not before
@@ -751,7 +774,7 @@ class Dashboard(tk.Tk):
         for row, combo, scan in zip(self._rows(self._baseline_tree),
                                     self._baseline_combos, self._baseline_scans):
             self._baseline_tree.item(row, tags=(row_tag(scan),), values=(
-                combo["baseline"], combo["dataset"],
+                combo["baseline"], combo["dataset"], combo["label_set"],
                 scan["train"]["label"], scan["eval"]["label"]))
 
         if time.time() >= self._copy_feedback_until:

@@ -50,6 +50,10 @@ DEFAULT_OUTPUT = os.path.join(
 
 SPLIT = "test"
 
+# The label-set stage under data/model/<dataset>. This baseline only
+# trains the two-class form; see common/dataset.py.
+LABEL_SET = "tooltip"
+
 # Loss columns differ between the baselines. YOLO26 has no objectness term and
 # no DFL either -- reg_max is 1, so the box branch regresses distances directly
 # and its third term is a plain L1.
@@ -184,12 +188,12 @@ def collect(model_root: str, results_root: str) -> tuple[list[dict], list[str]]:
 
     records, gaps = [], []
     for dataset in sorted(os.listdir(model_root)):
-        model_dir = os.path.join(model_root, dataset)
+        model_dir = os.path.join(model_root, dataset, LABEL_SET)
         if not os.path.isdir(model_dir):
             continue
         status = read_json(os.path.join(model_dir, "train-status.json"))
         curve = read_metric_csv(os.path.join(model_dir, "metric.csv"))
-        result_dir = os.path.join(results_root, dataset, SPLIT)
+        result_dir = os.path.join(results_root, dataset, LABEL_SET, SPLIT)
         summary = read_json(os.path.join(result_dir, "summary.json"))
         per_tip = analyse_per_tip(os.path.join(result_dir, "per_tip.csv"))
 

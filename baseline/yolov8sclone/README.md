@@ -175,7 +175,7 @@ uv sync        # 루트에서 한 번 (이미 했다면 불필요)
 | `--val-frames`             | 2000   | 에포크마다 평가할 val 프레임 수 상한 (0이면 전체)                                         |
 | `--no-ema` / `--no-resume` |        | EMA 끄기 / 처음부터 다시 학습                                                             |
 
-체크포인트는 `data/model/<dataset>/`에, 평가 결과는 `data/results/<dataset>/<split>/`에
+체크포인트는 `data/model/<dataset>/<label-set>/`에, 평가 결과는 `data/results/<dataset>/<label-set>/<split>/`에
 들어가므로 데이터셋마다 따로 쌓인다. `model-last.pt`가 있으면
 **기본 동작이 재개**이며 optimizer·스케줄러·EMA 상태까지 복원된다.
 
@@ -203,7 +203,7 @@ uv sync        # 루트에서 한 번 (이미 했다면 불필요)
   직접 비교할 수 있다.
 
 거리는 letterbox된 640 × 640이 아니라 **원본 프레임 좌표계(736 × 480)** 에서 잰다.
-결과는 `data/results/<dataset>/<split>/`에 `summary.json`과 `per_tip.csv`로 저장된다.
+결과는 `data/results/<dataset>/<label-set>/<split>/`에 `summary.json`과 `per_tip.csv`로 저장된다.
 
 ### 3. 데모 GUI
 
@@ -211,16 +211,16 @@ uv sync        # 루트에서 한 번 (이미 했다면 불필요)
 ./baseline/yolov8sclone/run demo
 ```
 
-`data/model/<dataset>/model.pt` 중 사전순 첫 번째를 읽어 영상을 프레임 단위로 처리하며 `tool` 박스와
+`data/model/<dataset>/<label-set>/model.pt` 중 사전순 첫 번째를 읽어 영상을 프레임 단위로 처리하며 `tool` 박스와
 `tip` 박스(중심에 십자 마커)를 그린다. 조작은 [yolov8s 데모](../yolov8s/README.md)와 같다.
 
-다른 데이터셋의 모델을 쓰려면 `--dataset`을 지정하면 `data/model/<dataset>/model.pt`를 알아서
+다른 데이터셋의 모델을 쓰려면 `--dataset`을 지정하면 `data/model/<dataset>/<label-set>/model.pt`를 알아서
 찾는다. `data/model/` 밖의 체크포인트나 `model-last.pt`를 열려면 `--weights`로 경로를 직접 준다
 (`--dataset`보다 우선한다).
 
 ```bash
 ./baseline/yolov8sclone/run demo --dataset erop
-./baseline/yolov8sclone/run demo --weights baseline/yolov8sclone/data/model/erop/model-last.pt
+./baseline/yolov8sclone/run demo --weights baseline/yolov8sclone/data/model/erop/tooltip/model-last.pt
 ```
 
 | 조작                      | 동작                                                                 |

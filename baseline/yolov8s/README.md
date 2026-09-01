@@ -207,7 +207,7 @@ Ultralytics가 이미지 경로의 `/images/`를 `/labels/`로 바꿔 라벨을 
 때 Ultralytics는 에포크 수도 체크포인트에서 읽으므로, 더 오래 학습하려면 `--no-resume`으로
 새로 시작해야 한다.
 
-체크포인트는 매 에포크 `data/model/<dataset>/`으로 복사된다. 중간에 끊겨도 그 시점까지의
+체크포인트는 매 에포크 `data/model/<dataset>/tooltip/`으로 복사된다. 중간에 끊겨도 그 시점까지의
 `model.pt`와 완전한 `metric.csv`가 남는다.
 
 ### 3. 평가
@@ -238,10 +238,10 @@ Ultralytics가 이미지 경로의 `/images/`를 `/labels/`로 바꿔 라벨을 
 | `--max-det`      | 300    | NMS 뒤 프레임당 박스 수 상한                                |
 | `--frame-stride` | 1      | N프레임마다 1장만 평가                                      |
 | `--limit`        |        | 평가할 프레임 수 상한                                       |
-| `--model`        |        | 체크포인트 경로 (기본 `data/model/<dataset>/model.pt`)      |
+| `--model`        |        | 체크포인트 경로 (기본 `data/model/<dataset>/tooltip/model.pt`)      |
 
 거리는 letterbox된 640 × 640이 아니라 **원본 프레임 좌표계(736 × 480)** 에서 잰다.
-결과는 `data/results/<dataset>/<split>/`에 `summary.json`과 `per_tip.csv`로 저장된다.
+결과는 `data/results/<dataset>/tooltip/<split>/`에 `summary.json`과 `per_tip.csv`로 저장된다.
 
 `tip` 클래스가 없는 체크포인트(부록의 7클래스 모델 등)를 넘기면 팁 지표가 정의되지 않으므로
 계산하지 않고 중단한다.
@@ -249,7 +249,7 @@ Ultralytics가 이미지 경로의 `/images/`를 `/labels/`로 바꿔 라벨을 
 ### 4. 데모 GUI
 
 ```bash
-./baseline/yolov8s/run demo --weights data/model/cholec80/model.pt
+./baseline/yolov8s/run demo --weights data/model/cholec80/tooltip/model.pt
 ```
 
 영상을 프레임 단위로 처리하며 `tool` 박스(초록)와 `tip` 박스(빨강)를 그린다. `Show GT`로

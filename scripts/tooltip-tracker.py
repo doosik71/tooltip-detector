@@ -68,7 +68,7 @@ sits in already says everything else about it (see ttd/tip_source.py):
         this project's own heatmap models -- peaks of the predicted distance
         heatmap are the tips.
 
-    baseline/<name>/data/model/<dataset>/model.pt
+    baseline/<name>/data/model/<dataset>/<label-set>/model.pt
         a reimplementation baseline (yolov8sclone, cladnet, yolo26clone) --
         the centre of a predicted `tip` box is a tip.
 
@@ -86,7 +86,7 @@ Usage
 -----
     uv run python scripts/tooltip-tracker.py            # list what is on disk
     uv run python scripts/tooltip-tracker.py data/models/cholec80/gaussian-tip/monai/best.pt
-    uv run python scripts/tooltip-tracker.py baseline/yolo26clone/data/model/erop/model.pt
+    uv run python scripts/tooltip-tracker.py baseline/yolo26clone/data/model/erop/tiponly/model.pt
 
 This GUI processes video files, not dataset frames; the dataset in a
 checkpoint's path only says what the model was trained on.

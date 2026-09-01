@@ -171,7 +171,7 @@ uv sync --project baseline/cladnet
 `model-last.pt`가 있으면 **기본 동작이 재개**다. optimizer·스케줄러·EMA 상태까지 저장하므로
 중단 지점에서 그대로 이어진다. `model.pt`는 val mAP@0.5:0.95가 갱신될 때마다 저장된다.
 
-체크포인트는 `data/model/<dataset>/`에, 평가 결과는 `data/results/<dataset>/<split>/`에
+체크포인트는 `data/model/<dataset>/<label-set>/`에, 평가 결과는 `data/results/<dataset>/<label-set>/<split>/`에
 데이터셋별로 나뉘어 저장되므로 cholec80과 erop 학습을
 동시에 돌려도 서로 덮어쓰지 않는다. 같은 데이터셋으로 설정만 바꿔 여러 번 돌릴 때만
 `--output-dir`를 따로 준다.
@@ -193,8 +193,8 @@ uv sync --project baseline/cladnet
   수치와 직접 비교할 수 있다.
 
 거리는 모두 letterbox된 640 × 640이 아니라 **원본 프레임 좌표계(736 × 480)** 에서 잰다.
-결과는 `data/results/<dataset>/<split>/`에 `summary.json`과 `per_tip.csv`로 저장된다.
-평가할 체크포인트도 `--dataset`에서 정해진다 (`data/model/<dataset>/model.pt`, `--model`로 변경).
+결과는 `data/results/<dataset>/<label-set>/<split>/`에 `summary.json`과 `per_tip.csv`로 저장된다.
+평가할 체크포인트도 `--dataset`에서 정해진다 (`data/model/<dataset>/<label-set>/model.pt`, `--model`로 변경).
 
 ### 3. 데모 GUI
 
@@ -202,9 +202,9 @@ uv sync --project baseline/cladnet
 ./baseline/cladnet/run demo
 ```
 
-`data/model/<dataset>/model.pt` 중 사전순 첫 번째를 읽어 영상을 프레임 단위로 처리하며 `tool` 박스와
+`data/model/<dataset>/<label-set>/model.pt` 중 사전순 첫 번째를 읽어 영상을 프레임 단위로 처리하며 `tool` 박스와
 `tip` 박스(중심에 십자 마커)를 그린다. 다른 데이터셋의 모델을 쓰려면 `--dataset`을 지정하면
-`data/model/<dataset>/model.pt`를 알아서 찾는다.
+`data/model/<dataset>/<label-set>/model.pt`를 알아서 찾는다.
 
 ```bash
 ./baseline/cladnet/run demo --dataset erop
@@ -214,7 +214,7 @@ uv sync --project baseline/cladnet
 (`--dataset`보다 우선한다).
 
 ```bash
-./baseline/cladnet/run demo --weights baseline/cladnet/data/model/erop/model-last.pt
+./baseline/cladnet/run demo --weights baseline/cladnet/data/model/erop/tooltip/model-last.pt
 ```
 
 | 조작                      | 동작                                                                 |

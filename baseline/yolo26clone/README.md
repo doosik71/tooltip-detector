@@ -239,7 +239,7 @@ uv sync        # 루트에서 한 번 (이미 했다면 불필요)
 | `--max-det`                | 300     | 검증에서 프레임당 박스 수 상한. NMS가 없는 대신 이 값이 있다                              |
 | `--no-ema` / `--no-resume` |         | EMA 끄기 / 처음부터 다시 학습                                                             |
 
-체크포인트는 `data/model/<dataset>/`에, 평가 결과는 `data/results/<dataset>/<split>/`에
+체크포인트는 `data/model/<dataset>/<label-set>/`에, 평가 결과는 `data/results/<dataset>/<label-set>/<split>/`에
 들어간다. `model-last.pt`가 있으면 **기본 동작이 재개**이며 optimizer·스케줄러·EMA 상태와
 두 분기의 혼합 가중치까지 복원된다.
 

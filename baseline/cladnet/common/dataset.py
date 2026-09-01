@@ -1,4 +1,4 @@
-"""This repository's annotations, turned into a two-class detection dataset.
+"""This repository's annotations, turned into a detection dataset.
 
 `data/dataset/<name>/` carries, per frame, an RGB PNG and a JSON file listing
 one entry per visible instrument:
@@ -6,11 +6,18 @@ one entry per visible instrument:
     {"annotations": [{"bbox": {"x", "y", "width", "height"},
                       "tip":  {"x", "y"}}, ...], "width": 736, "height": 480}
 
-There are no instrument-class labels, so the detector is trained on two
-classes derived from that same annotation:
+There are no instrument-class labels, so the classes are derived from that
+same annotation. Which ones, and in what order, is the `label_set` argument:
 
-    0  tool   the annotated bounding box
-    1  tip    a square box of side `tip_box_size` centred on the tip
+    tooltip (default)  0  tool   the annotated bounding box
+                       1  tip    a square box of side `tip_box_size`
+                                 centred on the tip
+    tiponly            0  tip    the same tip box, with no tool class at all
+
+`tiponly` exists to measure what the instrument box contributes to tip
+detection, since a tip-only annotation is much cheaper to produce. Note that
+the tip is class 1 in one set and class 0 in the other: use `tip_class()` or
+look the name up in `class_names()`, never a constant.
 
 The tip box side is a real hyper-parameter, not a formality. The loss makes a
 prediction's objectness target its CIoU with the ground-truth box, so the
@@ -37,8 +44,18 @@ from torch.utils.data import Dataset
 
 from .boxes import letterbox
 
-CLASS_NAMES = ("tool", "tip")
-TOOL_CLASS, TIP_CLASS = 0, 1
+# What the detector is asked to learn. `tooltip` is the two-class
+# formulation every baseline here has used so far; `tiponly` drops the
+# instrument box and keeps the tip alone, so the contribution of the tool
+# annotation can be measured. The mode name is also the directory its
+# checkpoints and results live in (see common/inference.py).
+#
+# The tip is not always class 1: in `tiponly` it is class 0. Nothing may
+# assume a fixed index -- look the name up in the set being used.
+LABEL_SETS = {"tooltip": ("tool", "tip"), "tiponly": ("tip",)}
+DEFAULT_LABEL_SET = "tooltip"
+
+CLASS_NAMES = LABEL_SETS[DEFAULT_LABEL_SET]
 
 # The tip is a point annotation; it becomes a square box of this side length,
 # centred on the point, so it can be learned by a box detector. Recorded in the
@@ -52,7 +69,7 @@ SPLITS = ("train", "val", "test")
 # Minimum share of a box that must survive a mosaic crop for it to be kept.
 # A clipped tool box is still a usable tool box, but a clipped *tip* box no
 # longer has the tip at its centre, so tips are held to a much stricter bar.
-_MIN_AREA_KEPT = {TOOL_CLASS: 0.2, TIP_CLASS: 0.8}
+_MIN_AREA_KEPT = {"tool": 0.2, "tip": 0.8}
 
 _MOSAIC_SCALE_RANGE = (0.5, 1.5)
 _HSV_GAINS = (0.015, 0.7, 0.4)      # h, s, v -- YOLOv5's defaults
@@ -75,8 +92,23 @@ def available_datasets(data_root: str | None = None) -> list[str]:
                   if os.path.isdir(os.path.join(data_root, name, "images")))
 
 
+def class_names(label_set: str = DEFAULT_LABEL_SET) -> tuple[str, ...]:
+    """The classes one label set learns, in class-index order."""
+    try:
+        return LABEL_SETS[label_set]
+    except KeyError:
+        raise ValueError(f"label_set must be one of {tuple(LABEL_SETS)}, "
+                         f"not {label_set!r}") from None
+
+
+def tip_class(label_set: str = DEFAULT_LABEL_SET) -> int:
+    """Index of the `tip` class in one label set. Never assume it is 1."""
+    return class_names(label_set).index("tip")
+
+
 def load_annotation(path: str, width: float, height: float,
-                    tip_box_size: float = DEFAULT_TIP_BOX_SIZE) -> np.ndarray:
+                    tip_box_size: float = DEFAULT_TIP_BOX_SIZE,
+                    label_set: str = DEFAULT_LABEL_SET) -> np.ndarray:
     """Read one annotation JSON as (n, 5) normalised [class, cx, cy, w, h].
 
     A frame with no visible instrument yields an empty array -- those frames
@@ -88,18 +120,23 @@ def load_annotation(path: str, width: float, height: float,
     except (OSError, json.JSONDecodeError):
         return np.zeros((0, 5), dtype=np.float32)
 
+    names = class_names(label_set)
+    tool_index = names.index("tool") if "tool" in names else None
+    tip_index = names.index("tip")
+
     rows = []
     for item in payload.get("annotations", []):
         box = item.get("bbox")
-        if box and box.get("width", 0) > 0 and box.get("height", 0) > 0:
-            rows.append((TOOL_CLASS,
+        if tool_index is not None and box and box.get("width", 0) > 0 \
+                and box.get("height", 0) > 0:
+            rows.append((tool_index,
                          (box["x"] + box["width"] / 2) / width,
                          (box["y"] + box["height"] / 2) / height,
                          box["width"] / width,
                          box["height"] / height))
         tip = item.get("tip")
         if tip is not None:
-            rows.append((TIP_CLASS, tip["x"] / width, tip["y"] / height,
+            rows.append((tip_index, tip["x"] / width, tip["y"] / height,
                          tip_box_size / width, tip_box_size / height))
     if not rows:
         return np.zeros((0, 5), dtype=np.float32)
@@ -112,7 +149,8 @@ class SurgicalDetectionDataset(Dataset):
     def __init__(self, dataset: str, split: str, image_size: int = 640,
                  augment: bool = False, data_root: str | None = None,
                  frame_stride: int = 1, limit: int | None = None,
-                 tip_box_size: float = DEFAULT_TIP_BOX_SIZE):
+                 tip_box_size: float = DEFAULT_TIP_BOX_SIZE,
+                 label_set: str = DEFAULT_LABEL_SET):
         if split not in SPLITS:
             raise ValueError(f"split must be one of {SPLITS}")
         self.dataset = dataset
@@ -120,6 +158,8 @@ class SurgicalDetectionDataset(Dataset):
         self.image_size = image_size
         self.augment = augment
         self.tip_box_size = tip_box_size
+        self.label_set = label_set
+        self.class_names = class_names(label_set)
 
         data_root = data_root or default_data_root()
         images_dir = os.path.join(data_root, dataset, "images", split)
@@ -154,7 +194,7 @@ class SurgicalDetectionDataset(Dataset):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         h, w = image.shape[:2]
         return image, load_annotation(self._annotation_path(index), w, h,
-                                      self.tip_box_size)
+                                      self.tip_box_size, self.label_set)
 
     # ── Augmentation ──────────────────────────────────────────────────────
 
@@ -212,7 +252,7 @@ class SurgicalDetectionDataset(Dataset):
         labels = np.concatenate(collected, 0) if collected else np.zeros((0, 5), np.float32)
         crop = s // 2
         image = canvas[crop:crop + s, crop:crop + s]
-        labels = _shift_and_clip(labels, -crop, -crop, s, s)
+        labels = _shift_and_clip(labels, -crop, -crop, s, s, self.class_names)
         return image, labels
 
     @staticmethod
@@ -253,7 +293,8 @@ class SurgicalDetectionDataset(Dataset):
         return tensor, targets, index
 
 
-def _shift_and_clip(labels: np.ndarray, dx: int, dy: int, width: int, height: int) -> np.ndarray:
+def _shift_and_clip(labels: np.ndarray, dx: int, dy: int, width: int, height: int,
+                    names: tuple[str, ...]) -> np.ndarray:
     """Translate pixel-space labels, clip them to the canvas, drop what is gone."""
     if not len(labels):
         return labels
@@ -267,7 +308,8 @@ def _shift_and_clip(labels: np.ndarray, dx: int, dy: int, width: int, height: in
     y1, y2 = y1.clip(0, height), y2.clip(0, height)
     w, h = x2 - x1, y2 - y1
 
-    min_area = np.array([_MIN_AREA_KEPT[int(c)] for c in labels[:, 0]], dtype=np.float32)
+    min_area = np.array([_MIN_AREA_KEPT[names[int(c)]] for c in labels[:, 0]],
+                        dtype=np.float32)
     keep = (w > 1) & (h > 1) & ((w * h / original_area) > min_area)
 
     out = labels[keep].copy()
