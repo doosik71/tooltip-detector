@@ -5,7 +5,7 @@
 > 사전학습 가중치를 그대로 쓰는 [baseline/yolov8s](../../yolov8s/README.md)와는 다른 모델이다.
 >
 > 이 문서의 모든 수치는 [summary-results.md](summary-results.md)에 있고, 그 문서는
-> `scripts/generate-summary.py`가 `data/model/`·`data/results/`에서 다시 계산한다.
+> `scripts/generate-summary.py`가 `data/model/<dataset>/<label-set>/`·`data/results/<dataset>/<label-set>/`에서 다시 계산한다.
 
 ## 요약
 
@@ -23,6 +23,9 @@
   이후 완만히 하락한다. 150 에포크는 이 설정에서 필요 이상이다.
 - **학습 프레임 수를 5배 늘려도 큰 차이가 없었다.** 총 학습 샘플 수를 맞춘 비교에서 정밀도는
   다양성이 높은 쪽이, 재현율은 에포크가 많은 쪽이 근소하게 앞섰다 (§7).
+- **`tool` 상자를 빼고 팁만 학습하면 조금 못하다.** Hit@10 px가 −0.16 pp(cholec80),
+  −2.33 pp(erop)이며 폭이 작고 지표마다 방향이 엇갈린다. TaskAlignedAssigner는 `topk = 10`으로
+  정원이 고정되어 **`tool`을 없애 해소될 클래스 불균형이 처음부터 없었다** (§9).
 
 ## 1. 실험 설정
 
@@ -337,7 +340,69 @@ post-NMS 박스 수는 60프레임 전부에서 같았다(272 대 272). TF32를 
 > 이전 보고서가 인용한 tooltip-detector 19.6 ms는 다른 학습이 GPU를 함께 쓰던 중에 측정된
 > 오염된 값이었다. 유휴 GPU에서 4회 반복 측정한 결과는 11.78〜12.04 ms로 안정적이다.
 
-## 9. 결론과 다음 단계
+## 9. `tiponly` — 팁만 레이블링했을 때
+
+`tool` 상자 어노테이션 없이 `tip` 상자만으로 학습하면 팁 탐지가 어떻게 되는지를 잰 회차다.
+`tool` 상자는 라벨 생성 단계에서 만들지 않고 탐지 헤드의 클래스 채널도 1개로 줄였으므로,
+GT 상자 수가 절반이 된다. `--label-set`을 제외한 나머지 인수는 위 §1과 **전부 같다**
+(150 에포크, `--frame-stride 5`, 640 × 640, 팁 32 px). 파라미터는 11,135,987개로
+`tooltip`보다 387개 적다(0.003 %).
+
+수치 표는 [summary-results-tiponly.md](summary-results-tiponly.md)에 있고, 설계와 사전
+확정한 판정 기준은
+[tip-only 학습 실험 계획](../../../docs/tip-only-experiment-plan.md)에 있다.
+세 재구현을 가로질러 본 결론은
+[베이스라인 보고서 §4.5](../../../docs/baseline-report.md)에 있다.
+
+| 지표 | `cholec80` `tooltip` | `cholec80` `tiponly` | `erop` `tooltip` | `erop` `tiponly` |
+| --- | ---: | ---: | ---: | ---: |
+| 탐지 실패율 [%] | 8.82 | 8.03 | 4.79 | 5.95 |
+| **Hit@10 px [%]** | **59.87** | **59.71** | **75.91** | **73.58** |
+| Hit@20 px [%] | 65.48 | 65.87 | 79.28 | 77.00 |
+| Hit@50 px [%] | 71.78 | 72.68 | 83.15 | 80.82 |
+| 오차 중앙값 [px] | 3.60 | 3.89 | 2.04 | 2.08 |
+| 오차 평균 [px] | 44.65 | 43.94 | 27.85 | 30.38 |
+| `tip` AP@0.5 | 0.6661 | 0.6432 | 0.8213 | 0.7992 |
+| `tip` AP@0.5:0.95 | 0.4078 | 0.3880 | 0.5673 | 0.5531 |
+| 헝가리안@10 px 정밀도 | 0.7595 | 0.7251 | 0.8294 | 0.8142 |
+| 헝가리안@10 px 재현율 | 0.5983 | 0.5968 | 0.7588 | 0.7356 |
+| `tip` 예측 수 | 1,904,849 | 1,862,803 | 424,463 | 503,765 |
+
+`tool` AP와 전체 mAP는 `tiponly`에 그 클래스가 없으므로 비교하지 않는다. 팁 지표는 두
+모드에서 정의가 같아 그대로 견줄 수 있다.
+
+### 읽는 법
+
+**`tiponly`가 조금 못하다. 폭은 작고, 지표마다 방향이 완전히 일치하지도 않는다.**
+Hit@10 px는 `cholec80`에서 −0.16 pp로 사실상 같고 `erop`에서 −2.33 pp 내려간다. 그런데 같은
+`cholec80`에서 탐지 실패율은 8.82 %에서 8.03 %로 **좋아지고** Hit@20·Hit@50도 오른다.
+가까이 맞히는 능력은 조금 잃고 놓치는 일은 조금 줄었다는 뜻이다.
+
+**CLAD-Net과 방향이 반대다.** 그쪽은 `tiponly`가 두 데이터셋 모두 5 pp 넘게 낫다. 원인은
+라벨 할당에 있는 것으로 보인다. 학습 없이 `cholec80` val 400 프레임에서 GT당 양성 앵커 수를
+다시 재면 이렇다.
+
+| 모드      | `tool` 양성/GT | `tip` 양성/GT | tool : tip |
+| --------- | -------------: | ------------: | ---------: |
+| `tooltip` |           9.64 |          9.82 |       0.98 |
+| `tiponly` |              — |      **9.92** |          — |
+
+TaskAlignedAssigner는 GT마다 정렬도 상위 `topk = 10`개를 고르므로 **정원이 상자 크기에도,
+함께 학습하는 클래스 수에도 흔들리지 않는다.** `tooltip`에서 이미 0.98로 균형이었고
+`tiponly`에서 팁의 양성 수는 9.82에서 9.92로 사실상 그대로다. **즉 `tool`을 없애 해소될
+불균형이 처음부터 없었고, 남는 것은 도구 상자가 주던 보조 감독을 잃는 쪽뿐이다.** 소폭
+하락이 그와 방향이 같다. CLAD-Net은 정적 할당이라 1.81 : 1의 불균형을 안고 있었고, 그것이
+없어지는 이득이 손실을 넘어선 것으로 읽힌다.
+
+부수적으로, 10 px 이내로 맞힌 예측의 신뢰도 중앙값이 0.660에서 0.727로 오른다. 클래스가
+하나뿐이면 분류가 쉬워지므로 예상되는 방향이다. §5의 과소 탐지는 거의 그대로다: 큰
+오차(≥ 200 px) 중 예측 공유가 차지하는 비율이 88.5 %에서 86.2 %로 조금 내려갈 뿐이다.
+
+**읽을 때 주의할 것.** 차이가 0.16〜2.33 pp로 작은데 조합당 한 번씩만 학습했으므로, 이
+폭은 실행 간 변동과 구분되지 않는다. "`tool` 상자가 소폭의 값을 한다"는 서술은 시드를 바꿔
+두세 번 더 돌려야 확정된다.
+
+## 10. 결론과 다음 단계
 
 ### 결론
 
@@ -366,19 +431,26 @@ post-NMS 박스 수는 60프레임 전부에서 같았다(272 대 272). TF32를 
 ## 재현 명령
 
 ```bash
-# 학습 (완료됨 — data/model/<dataset>/에 산출물이 있다)
+# 학습 (완료됨 — data/model/<dataset>/<label-set>/에 산출물이 있다)
 ./baseline/yolov8sclone/run train-model --dataset cholec80 --frame-stride 5 --val-frames 1500 --device cuda:1
 ./baseline/yolov8sclone/run train-model --dataset erop     --frame-stride 5 --val-frames 1500 --device cuda:3
 
-# 평가 (완료됨 — data/results/<dataset>/test/에 산출물이 있다)
+# 평가 (완료됨 — data/results/<dataset>/<label-set>/test/에 산출물이 있다)
 ./baseline/yolov8sclone/run eval-model --dataset cholec80 --split test
 ./baseline/yolov8sclone/run eval-model --dataset erop     --split test
 
-# 이 보고서가 인용하는 수치 표 재생성
+# 팁만 레이블링한 회차 (§9). --label-set 말고는 위와 인수가 같다.
+./baseline/yolov8sclone/run train-model --dataset cholec80 --label-set tiponly --frame-stride 5 --val-frames 1500 --device cuda:3
+./baseline/yolov8sclone/run train-model --dataset erop     --label-set tiponly --frame-stride 5 --val-frames 1500 --device cuda:3
+./baseline/yolov8sclone/run eval-model  --dataset cholec80 --label-set tiponly --split test
+./baseline/yolov8sclone/run eval-model  --dataset erop     --label-set tiponly --split test
+
+# 이 보고서가 인용하는 수치 표 재생성 (모드마다 문서가 하나씩이다)
 ./baseline/yolov8sclone/run generate-summary
+./baseline/yolov8sclone/run generate-summary --label-set tiponly --output docs/summary-results-tiponly.md
 ```
 
-이전 실험(30 에포크 × `--frame-stride 1`)의 산출물은 `data/model-16x16`·`data/results-16x16`에
+이전 실험(30 에포크 × `--frame-stride 1`)의 산출물은 `data/model-16x16/<dataset>/tooltip/`·`data/results-16x16/<dataset>/tooltip/`에
 남아 있다. §7의 비교표는 거기서 나온 것이며,
 `./baseline/yolov8sclone/run generate-summary --suffix "-16x16"`로 그 회차의 수치 표를 다시 만들 수 있다.
 

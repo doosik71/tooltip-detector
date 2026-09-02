@@ -36,6 +36,7 @@ if True:
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+    from common.dataset import class_names
     from common.inference import data_dir
 
 # TEMPORARY. The completed runs live in data/model-16x16 and data/results-16x16
@@ -218,7 +219,6 @@ def parameter_count(label_set: str = DEFAULT_LABEL_SET) -> int | None:
     The class count is part of the model, so `tiponly` is a few hundred
     parameters smaller than `tooltip`."""
     try:
-        from common.dataset import class_names
         from common.model import build, parameter_count as count
         return count(build(num_classes=len(class_names(label_set))))
     except Exception:
@@ -316,8 +316,10 @@ def section_settings(out: list[str], records: list[dict]) -> None:
                 "> 당시 상수는 10 px이었다.", ""]
 
 
-def section_convergence(out: list[str], records: list[dict]) -> None:
+def section_convergence(out: list[str], records: list[dict],
+                        label_set: str = DEFAULT_LABEL_SET) -> None:
     out += ["## 3. 학습 경과", ""]
+    names = class_names(label_set)
     for record in records:
         curve = record["curve"]
         out += [f"### `{record['dataset']}`", ""]
@@ -326,7 +328,8 @@ def section_convergence(out: list[str], records: list[dict]) -> None:
             continue
 
         headers = ["에포크", "train loss"] + [f"val {p}" for p in LOSS_PARTS] + \
-                  ["val loss", "mAP@0.5", "mAP@0.5:0.95", "tool AP50", "tip AP50", "lr"]
+                  ["val loss", "mAP@0.5", "mAP@0.5:0.95"] + \
+                  [f"{n} AP50" for n in names] + ["lr"]
         rows = []
         for epoch in CURVE_EPOCHS:
             if epoch > len(curve):
@@ -335,15 +338,15 @@ def section_convergence(out: list[str], records: list[dict]) -> None:
             train = sum(float(row[f"train_{p}_loss"]) for p in LOSS_PARTS)
             rows.append([row["epoch"], num(train, 4)] +
                         [num(row[f"val_{p}_loss"], 4) for p in LOSS_PARTS] +
-                        [num(row["val_loss"], 4), num(row["map50"]), num(row["map50_95"]),
-                         num(row["tool_ap50"]), num(row["tip_ap50"]), num(row["lr"], 6)])
+                        [num(row["val_loss"], 4), num(row["map50"]), num(row["map50_95"])] +
+                        [num(row[f"{n}_ap50"]) for n in names] + [num(row["lr"], 6)])
         if len(curve) not in CURVE_EPOCHS:
             row = curve[-1]
             train = sum(float(row[f"train_{p}_loss"]) for p in LOSS_PARTS)
             rows.append([f"**{row['epoch']}**", num(train, 4)] +
                         [num(row[f"val_{p}_loss"], 4) for p in LOSS_PARTS] +
-                        [num(row["val_loss"], 4), num(row["map50"]), num(row["map50_95"]),
-                         num(row["tool_ap50"]), num(row["tip_ap50"]), num(row["lr"], 6)])
+                        [num(row["val_loss"], 4), num(row["map50"]), num(row["map50_95"])] +
+                        [num(row[f"{n}_ap50"]) for n in names] + [num(row["lr"], 6)])
         out += table(headers, rows, "r" * len(headers))
 
         fitness = [float(r["map50_95"]) for r in curve]
@@ -357,7 +360,8 @@ def section_convergence(out: list[str], records: list[dict]) -> None:
                 ""]
 
 
-def section_detection(out: list[str], records: list[dict]) -> None:
+def section_detection(out: list[str], records: list[dict],
+                      label_set: str = DEFAULT_LABEL_SET) -> None:
     out += ["## 4. 탐지 성능", ""]
     first = next((r["summary"] for r in records if r["summary"]), None)
     if first:
@@ -365,21 +369,23 @@ def section_detection(out: list[str], records: list[dict]) -> None:
                 f"AP 곡선은 `conf={first['map_conf_threshold']}`까지, "
                 f"입력 {first['image_size']} px, split `{first['split']}`.", ""]
 
+    names = class_names(label_set)
+    headers = ["데이터셋", "프레임", "mAP@0.5", "mAP@0.5:0.95"] + \
+              [h for n in names for h in (f"{n} AP@0.5", f"{n} AP@0.5:0.95")]
     rows = []
     for record in records:
         summary = record["summary"]
         if summary is None:
-            rows.append([f"`{record['dataset']}`"] + ["—"] * 8)
+            rows.append([f"`{record['dataset']}`"] + ["—"] * (len(headers) - 1))
             continue
         det = summary["detection"]
-        tool, tip = det["per_class"]["tool"], det["per_class"]["tip"]
-        rows.append([f"`{record['dataset']}`", integer(summary["n_frames"]),
-                     num(det["map50"]), num(det["map50_95"]),
-                     num(tool["ap50"]), num(tool["ap50_95"]),
-                     num(tip["ap50"]), num(tip["ap50_95"])])
-    out += table(["데이터셋", "프레임", "mAP@0.5", "mAP@0.5:0.95",
-                  "tool AP@0.5", "tool AP@0.5:0.95", "tip AP@0.5", "tip AP@0.5:0.95"],
-                 rows, "l" + "r" * 7)
+        row = [f"`{record['dataset']}`", integer(summary["n_frames"]),
+               num(det["map50"]), num(det["map50_95"])]
+        for name in names:
+            values = det["per_class"].get(name, {})
+            row += [num(values.get("ap50")), num(values.get("ap50_95"))]
+        rows.append(row)
+    out += table(headers, rows, "l" + "r" * (len(headers) - 1))
 
     rows = []
     for record in records:
@@ -602,8 +608,8 @@ def build_document(records: list[dict], gaps: list[str], model_root: str,
            "모든 값은 `data/` 아래 파일에서 다시 계산된다.", ""]
     section_overview(out, records, gaps, model_root, results_root, suffix, label_set)
     section_settings(out, records)
-    section_convergence(out, records)
-    section_detection(out, records)
+    section_convergence(out, records, label_set)
+    section_detection(out, records, label_set)
     section_tip(out, records)
     section_distribution(out, records)
     section_frames(out, records)

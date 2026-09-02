@@ -67,6 +67,7 @@ uv run jupyter nbconvert --to notebook --execute --inplace notebook/final-report
 | `baseline-report-speed-accuracy`     | 데이터    | 그림 9, §3.5 속도 대 정확도             |
 | `baseline-report-demo`               | 화면 캡처 | 그림 10, §3.6 GUI 데모 실행 화면        |
 | `baseline-report-assignment`         | 데이터    | 그림 11, §4.1 라벨 할당 밀도            |
+| `baseline-report-label-set`          | 데이터    | 그림 12, §4.5 학습 모드 대비            |
 
 그림 1〜3(각 모델 구조)은 이 폴더가 아니라 각 서브 프로젝트에 있고, 보고서가 그리로 링크한다:
 `baseline/cladnet/docs/images/model-architecture.png`,
@@ -76,6 +77,10 @@ uv run jupyter nbconvert --to notebook --execute --inplace notebook/final-report
 그림 11은 파일이 아니라 재구현 세 모델의 라벨 할당기를 실제로 한 번 돌려 만든다(학습은
 하지 않는다). 서브 프로젝트마다 가상환경이 다르므로 노트북이 각 프로젝트의 인터프리터를
 따로 호출한다. 참조 구현 두 회차는 아키텍처와 할당기가 재구현과 같아 따로 재지 않는다.
+
+그림 12만 `tiponly`(팁 1클래스) 회차를 함께 읽는다. 나머지 그림은 모두 `tooltip`(tool·tip
+2클래스) 회차이며, 산출물 경로는 `baseline/<name>/data/{model,results}/<dataset>/<label-set>/`
+이다.
 
 그림 10은 노트북이 만들지 않는다. `DISPLAY`가 있는 환경에서 `./baseline/yolov8sclone/run demo`를
 띄우고 창을 캡처한 것이며, PNG만 있고 SVG는 없다.

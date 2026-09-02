@@ -624,7 +624,9 @@ def build_document(records: list[dict], gaps: list[str], model_root: str,
                    results_root: str, suffix: str) -> str:
     out = ["# YOLOv8s 실험 수치 요약", "",
            "이 문서는 `scripts/generate-summary.py`가 생성한다. 직접 고치지 말고 스크립트를 고친다.",
-           "[experimental-results.md](experimental-results.md)를 쓸 때 참고할 수치를 모아 둔 것이며,",
+           # 이 서브 프로젝트에는 자체 보고서가 없다. 이 회차는 대조군이므로
+           # 루트의 베이스라인 보고서가 수치를 인용한다.
+           "[베이스라인 보고서](../../../docs/baseline-report.md)를 쓸 때 참고할 수치를 모아 둔 것이며,",
            "모든 값은 `data/` 아래 파일에서 다시 계산된다.", ""]
     section_overview(out, records, gaps, model_root, results_root, suffix)
     section_settings(out, records)

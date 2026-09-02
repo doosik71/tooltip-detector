@@ -28,6 +28,21 @@
 중심이 팁 좌표이므로, 논문의 지표(AP)와 이 프로젝트의 지표(Hit-rate @ N px)를 **같은 모델에서
 함께 측정**할 수 있다. `scripts/eval-model.py`가 둘 다 보고한다.
 
+### 학습 모드 (`--label-set`)
+
+무엇을 레이블로 쓰는지에 따라 두 모드가 있다. 값은 그대로 산출물 디렉터리 이름이 된다.
+
+| 모드               | 학습 클래스   | 산출물 디렉터리                 |
+| ------------------ | ------------- | ------------------------------- |
+| `tooltip` (기본값) | `tool`, `tip` | `data/model/<dataset>/tooltip/` |
+| `tiponly`          | `tip`         | `data/model/<dataset>/tiponly/` |
+
+`tiponly`는 `tool` 상자를 라벨 생성 단계에서 아예 만들지 않고 탐지 헤드의 클래스 채널도
+1개로 줄인다(위 표에서 `tool` 행이 빠진다). **수술도구 상자 어노테이션 없이 팁 상자만으로
+학습했을 때 팁 탐지가 어떻게 되는지**를 재는 조건이며, 설계와 판정 기준은
+[tip-only 학습 실험 계획](../../docs/tip-only-experiment-plan.md)에, 결과는
+[실험결과 보고서](docs/experimental-results.md)에 있다.
+
 ## CLAD-Net 구조
 
 논문 Fig. 1–3과 본문에서 재구성한 것이다.

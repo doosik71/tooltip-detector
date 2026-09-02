@@ -88,6 +88,21 @@ uv run --project baseline/yolo26 python baseline/yolo26clone/scripts/export-refe
 것을 막는 장치이며, 팁처럼 작은 박스에는 직접 영향이 있다. 32 px 팁 박스는 letterbox 후
 27.8 px이라 이 하한에 걸리지 않지만, 10 px로 줄이면 걸린다.
 
+### 학습 모드 (`--label-set`)
+
+무엇을 레이블로 쓰는지에 따라 두 모드가 있다. 값은 그대로 산출물 디렉터리 이름이 된다.
+
+| 모드               | 학습 클래스   | 산출물 디렉터리                 |
+| ------------------ | ------------- | ------------------------------- |
+| `tooltip` (기본값) | `tool`, `tip` | `data/model/<dataset>/tooltip/` |
+| `tiponly`          | `tip`         | `data/model/<dataset>/tiponly/` |
+
+`tiponly`는 `tool` 상자를 라벨 생성 단계에서 아예 만들지 않고 탐지 헤드의 클래스 채널도
+1개로 줄인다(위 표에서 `tool` 행이 빠진다). **수술도구 상자 어노테이션 없이 팁 상자만으로
+학습했을 때 팁 탐지가 어떻게 되는지**를 재는 조건이며, 설계와 판정 기준은
+[tip-only 학습 실험 계획](../../docs/tip-only-experiment-plan.md)에, 결과는
+[실험결과 보고서](docs/experimental-results.md)에 있다.
+
 ## YOLOv8s 클론과 무엇이 다른가
 
 두 클론을 같은 데이터로 학습하면 이 차이들의 효과를 직접 볼 수 있다. 아래는 코드에 있는

@@ -4,7 +4,7 @@
 > 순수 PyTorch로 재구현한 것. 저자 공개 코드·가중치는 없다.
 >
 > 이 문서의 모든 수치는 [summary-results.md](summary-results.md)에 있고, 그 문서는
-> `scripts/generate-summary.py`가 `data/model/`·`data/results/`에서 다시 계산한다.
+> `scripts/generate-summary.py`가 `data/model/<dataset>/<label-set>/`·`data/results/<dataset>/<label-set>/`에서 다시 계산한다.
 
 ## 요약
 
@@ -16,6 +16,10 @@
   erop 68.5 %(69.5 %)로 근소하게 뒤지지만, 오차 중앙값은 4.93 px·3.23 px로 더 작다.
 - **동일 조건에서 YOLOv8s 클론에는 전 지표 뒤진다** (§6). 파라미터가 2/3인데도 더 느리다.
 - **150 에포크에서도 수렴하지 않았다.** 최고점이 cholec80 145, erop 147 에포크로 사실상 마지막이다.
+- **`tool` 상자를 빼고 팁만 학습하면 오히려 낫다.** Hit@10 px가 56.65 → 61.99 %(cholec80),
+  68.47 → 74.07 %(erop)로 오르고 다른 팁 지표도 함께 좋아진다. **재구현 세 회차 중 이 방향인
+  것은 CLAD-Net뿐이며**, 정적 앵커 비율 매칭이 만들던 1.81 : 1의 클래스 불균형이 처치로
+  없어지는 것으로 읽힌다 (§10).
 
 ## 1. 실험 설정
 
@@ -320,7 +324,74 @@ cholec80의 편차가 크다. **평균값 하나로 성능을 말하기 어렵�
 섞으므로 test에 train과 거의 같은 그림이 들어간다. 98 %대 AP는 상당 부분 이 때문으로 보인다.
 **구조 재현이 맞는지에 대한 유일한 독립 검증은 파라미터 수 일치(7.488 M 대 7.5 M)뿐이다.**
 
-## 10. 결론과 다음 단계
+## 10. `tiponly` — 팁만 레이블링했을 때
+
+`tool` 상자 어노테이션 없이 `tip` 상자만으로 학습하면 팁 탐지가 어떻게 되는지를 잰 회차다.
+`tool` 상자는 라벨 생성 단계에서 만들지 않고 탐지 헤드의 클래스 채널도 1개로 줄였으므로,
+GT 상자 수가 절반이 된다. `--label-set`을 제외한 나머지 인수는 위 §1과 **전부 같다**
+(150 에포크, `--frame-stride 5`, 640 × 640, 팁 32 px). 파라미터는 7,487,610개로
+`tooltip`보다 873개 적다(0.012 %).
+
+수치 표는 [summary-results-tiponly.md](summary-results-tiponly.md)에 있고, 설계와 사전
+확정한 판정 기준은
+[tip-only 학습 실험 계획](../../../docs/tip-only-experiment-plan.md)에 있다.
+세 재구현을 가로질러 본 결론은
+[베이스라인 보고서 §4.5](../../../docs/baseline-report.md)에 있다.
+
+| 지표 | `cholec80` `tooltip` | `cholec80` `tiponly` | `erop` `tooltip` | `erop` `tiponly` |
+| --- | ---: | ---: | ---: | ---: |
+| 탐지 실패율 [%] | 9.56 | 6.59 | 6.84 | 5.36 |
+| **Hit@10 px [%]** | **56.65** | **61.99** | **68.47** | **74.07** |
+| Hit@20 px [%] | 63.12 | 68.07 | 72.77 | 77.71 |
+| Hit@50 px [%] | 69.96 | 74.65 | 77.03 | 81.62 |
+| 오차 중앙값 [px] | 4.93 | 3.73 | 3.23 | 2.22 |
+| 오차 평균 [px] | 46.73 | 41.80 | 38.02 | 29.54 |
+| `tip` AP@0.5 | 0.5773 | 0.6425 | 0.6983 | 0.7609 |
+| `tip` AP@0.5:0.95 | 0.3025 | 0.3872 | 0.4102 | 0.5122 |
+| 헝가리안@10 px 정밀도 | 0.6628 | 0.6868 | 0.7138 | 0.7391 |
+| 헝가리안@10 px 재현율 | 0.5661 | 0.6194 | 0.6845 | 0.7405 |
+| `tip` 예측 수 | 3,684,172 | 2,915,312 | 1,011,226 | 863,176 |
+
+`tool` AP와 전체 mAP는 `tiponly`에 그 클래스가 없으므로 비교하지 않는다. 팁 지표는 두
+모드에서 정의가 같아 그대로 견줄 수 있다.
+
+### 읽는 법
+
+**전 지표에서 `tiponly`가 낫다.** 두 데이터셋 모두 Hit@10 px가 5 pp 넘게 오르고
+(56.65 → 61.99, 68.47 → 74.07), 탐지 실패율·오차 중앙값·`tip` AP·헝가리안 정밀도와 재현율이
+**함께** 좋아진다. 어느 하나를 다른 하나와 맞바꾼 것이 아니다. `tip` 예측 수는 오히려 줄어
+(3,684,172 → 2,915,312) 오탐을 늘려 회수율을 산 것도 아니다.
+
+**세 재구현 중 방향이 반대인 것은 CLAD-Net뿐이다.** YOLOv8s 클론과 YOLO26 클론은 `tiponly`가
+조금 못하다. 원인은 §8의 실패 모드가 아니라 **라벨 할당**에 있는 것으로 보인다. 학습 없이
+`cholec80` val 400 프레임에서 GT당 양성 앵커 수를 다시 재면 이렇다.
+
+| 모드      | `tool` 양성/GT | `tip` 양성/GT | tool : tip |
+| --------- | -------------: | ------------: | ---------: |
+| `tooltip` |           16.2 |      **8.98** |   **1.81** |
+| `tiponly` |              — |      **8.98** |          — |
+
+**팁이 받는 학습 신호는 두 모드에서 소수점 둘째 자리까지 같다.** 앵커 매칭이 GT 상자의
+기하만 보고 클래스와 무관하게 정해지기 때문이며, 레벨 분포가 100 % P3인 것까지 같다.
+`common/model.py`의 `ANCHORS`는 `tool` 상자까지 함께 k-means한 값이라 도구 크기에 맞춰진 큰
+앵커가 `tiponly`에서 양성을 받지 못하지만, 그것이 팁의 신호를 줄이지는 않는다.
+
+바뀌는 것은 **`tool` 쪽이 통째로 사라진다는 것**이다. `tooltip`에서 도구 GT 하나는 팁의
+1.81배를 가져가고, 그 양성의 22 %가 팁이 100 % 사는 바로 그 P3 레벨에 놓인다. 팁 좌표는
+언제나 도구 상자 안에 있으므로 두 클래스의 양성은 같은 격자에서 겹친다. `tiponly`는 그
+경쟁을 없앤다. **정적 앵커 비율 매칭이 만들던 클래스 불균형이 처치로 해소되는 셈**이고,
+팁 지표가 오르는 방향과 일치한다.
+
+부수적으로, 10 px 이내로 맞힌 예측의 신뢰도 중앙값이 0.580에서 0.676으로 오른다. 클래스가
+하나뿐이면 분류가 쉬워지므로 예상되는 방향이며, 부록 A가 다룬 objectness 목표값의 구조는
+그대로다. 반면 §8의 과소 탐지는 꿈쩍하지 않는다: 큰 오차(≥ 200 px) 중 예측 공유가 차지하는
+비율이 82.1 %에서 82.2 %로 사실상 같다.
+
+**다음 단계.** 팁 전용 앵커를 다시 뽑아 볼 값어치가 있다. 32 px 팁 상자만으로 k-means를
+돌리면 노는 큰 앵커가 없어지므로, 여기서 더 오를 여지가 남아 있다. 앵커가 바뀌면 변인이
+둘이 되므로 별도 회차로 돌려야 한다.
+
+## 11. 결론과 다음 단계
 
 ### 결론
 
@@ -331,6 +402,8 @@ cholec80의 편차가 크다. **평균값 하나로 성능을 말하기 어렵�
 3. **동일 조건에서 YOLOv8s 클론에는 전 지표 뒤진다.** 파라미터가 2/3인데도 1.7배 느리다.
    논문의 효율성 주장은 이 데이터·이 과제에서 재현되지 않았다.
 4. **150 에포크에서도 수렴하지 않았다.** 더 긴 학습에 여지가 남아 있다.
+5. **`tool` 상자를 빼면 오히려 좋아진다.** 재구현 세 회차 중 이 방향인 것은 CLAD-Net뿐이며,
+   정적 앵커 비율 매칭이 만들던 1.81 : 1의 클래스 불균형이 해소되는 것으로 읽힌다 (§10).
 
 ### 다음 단계 (효과가 클 것으로 보이는 순서)
 
@@ -341,7 +414,9 @@ cholec80의 편차가 크다. **평균값 하나로 성능을 말하기 어렵�
    임계값을 두는 방법.
 4. **`--rm-combine mean`** — RM의 ω 범위 문제(논문 쟁점 #4)가 학습에 영향을 주는지 확인.
 5. **입력 캔버스 모양** — 부록 B. 640 × 640 letterbox는 34.8 %가 패딩이다.
-6. **erop 50 에포크 불안정 규명** — 두 회차 모두 비슷한 시점에 발생했다.
+6. **팁 전용 앵커** — §10에서 `tiponly`가 더 나았고, 큰 앵커는 놀고 있다. 32 px 팁 상자만으로
+   `ANCHORS`를 다시 뽑으면 더 오를 여지가 있다. 앵커가 바뀌면 변인이 둘이 되므로 별도 회차다.
+7. **erop 50 에포크 불안정 규명** — 두 회차 모두 비슷한 시점에 발생했다.
 
 ## 부록 A — 팁 박스 크기를 32 px로 정한 근거
 
@@ -481,10 +556,10 @@ IoU 0.45를 넘어 서로를 지운다. 실제 프레임에서 두 팁이 얼마
 **적용됐고, 이 보고서의 본문이 그 결과다.** `common/dataset.py`의 기본값을 `DEFAULT_TIP_BOX_SIZE = 32.0`으로 바꾸고
 `--tip-box-size` 인수로 노출했다. 값은 체크포인트에 기록되고, 평가 시 그 값으로 라벨을 다시
 만들기 때문에 32 px 모델을 10 px 라벨로 채점하는 사고가 나지 않는다.
-이전 회차의 산출물은 `data/model-16x16`·`data/results-16x16`에 남아 있고,
+이전 회차의 산출물은 `data/model-16x16/<dataset>/tooltip/`·`data/results-16x16/<dataset>/tooltip/`에 남아 있고,
 `./baseline/cladnet/run generate-summary --suffix "-16x16"`로 그 회차의 수치 표를 다시 만들 수 있다.
 
-> 크기 변경 없이 지금 당장 얻을 수 있는 개선은 본문 §10의 `conf` 조정이다. 두 방법은 상충하지 않는다 —
+> 크기 변경 없이 지금 당장 얻을 수 있는 개선은 본문 §11의 `conf` 조정이다. 두 방법은 상충하지 않는다 —
 > 박스를 키우면 신뢰도 분포 자체가 올라가므로, 기본 임계값 0.25를 유지하면서도 이전 회차에서
 > `conf=0.05`로 얻은 것과 비슷한 재현율에 도달하되 오탐은 훨씬 적을 것으로 예상된다.
 
@@ -596,19 +671,26 @@ if frame_rgb.shape[1] != FRAME_W or frame_rgb.shape[0] != FRAME_H:
 ## 재현 명령
 
 ```bash
-# 학습 (완료됨 — data/model/<dataset>/에 산출물이 있다)
+# 학습 (완료됨 — data/model/<dataset>/<label-set>/에 산출물이 있다)
 ./baseline/cladnet/run train-model --dataset cholec80 --frame-stride 5 --val-frames 1500 --device cuda:0
 ./baseline/cladnet/run train-model --dataset erop     --frame-stride 5 --val-frames 1500 --device cuda:1
 
-# 평가 (완료됨 — data/results/<dataset>/test/에 산출물이 있다)
+# 평가 (완료됨 — data/results/<dataset>/<label-set>/test/에 산출물이 있다)
 ./baseline/cladnet/run eval-model --dataset cholec80 --split test
 ./baseline/cladnet/run eval-model --dataset erop     --split test
 
-# 이 보고서가 인용하는 수치 표 재생성
+# 팁만 레이블링한 회차 (§10). --label-set 말고는 위와 인수가 같다.
+./baseline/cladnet/run train-model --dataset cholec80 --label-set tiponly --frame-stride 5 --val-frames 1500 --device cuda:2
+./baseline/cladnet/run train-model --dataset erop     --label-set tiponly --frame-stride 5 --val-frames 1500 --device cuda:1
+./baseline/cladnet/run eval-model  --dataset cholec80 --label-set tiponly --split test
+./baseline/cladnet/run eval-model  --dataset erop     --label-set tiponly --split test
+
+# 이 보고서가 인용하는 수치 표 재생성 (모드마다 문서가 하나씩이다)
 ./baseline/cladnet/run generate-summary
+./baseline/cladnet/run generate-summary --label-set tiponly --output docs/summary-results-tiponly.md
 ```
 
-이전 실험(팁 10 px, 30 에포크)의 산출물은 `data/model-16x16`·`data/results-16x16`에 남아 있고,
+이전 실험(팁 10 px, 30 에포크)의 산출물은 `data/model-16x16/<dataset>/tooltip/`·`data/results-16x16/<dataset>/tooltip/`에 남아 있고,
 `./baseline/cladnet/run generate-summary --suffix "-16x16"`로 그 회차의 수치 표를 다시 만들 수 있다.
 
 자세한 실행 인수는 [docs/commands.md](commands.md), 구조 설명은 [README](../README.md)와

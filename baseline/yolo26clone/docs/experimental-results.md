@@ -7,7 +7,7 @@
 > [experimental-results.md](../../yolo26/docs/experimental-results.md))과는 다른 모델이다.
 >
 > 이 문서의 수치는 별도 표시가 없는 한 [summary-results.md](summary-results.md)에 있고,
-> 그 문서는 `scripts/generate-summary.py`가 `data/model/`·`data/results/`에서 다시 계산한다.
+> 그 문서는 `scripts/generate-summary.py`가 `data/model/<dataset>/<label-set>/`·`data/results/<dataset>/<label-set>/`에서 다시 계산한다.
 > 비교 대상의 수치도 각 서브 프로젝트의 같은 이름 문서에서 가져왔다. 예외는 §8의
 > 보조 측정뿐이며, 그 절에 측정 조건을 밝혔다.
 
@@ -38,9 +38,14 @@
   6.03 ms 대 참조 6.78 ms로 앞선다. 다만 조건을 맞춘 비교(두 분기 계산 + fuse)에서는
   7.10 대 5.93으로 참조가 빠르며, 그 차이의 원인은 밝히지 못했다. 이전 판의 9.81 대 7.37
   비교는 fuse 여부와 측정 장치가 함께 섞인 교란된 비교였다 (§8).
+- **`tool` 상자를 빼고 팁만 학습하면 조금 못하다.** Hit@10 px가 −1.40 pp(cholec80),
+  −0.78 pp(erop)로 네 지표가 모두 같은 방향으로 조금씩 내려간다. TaskAlignedAssigner는
+  `topk = 10`으로 정원이 고정되어 **`tool`을 없애 해소될 클래스 불균형이 처음부터 없었다**
+  (§9).
 - **최대 약점은 여전히 다중 도구 프레임의 과소 탐지다.** 200 px 이상 오차의 87〜88 %가
   "위치를 틀린 것"이 아니라 "도구 하나를 통째로 놓친 것"이다. 네 베이스라인과 루트
-  프로젝트가 모두 같은 문제를 안고 있다.
+  프로젝트가 모두 같은 문제를 안고 있다. `tool` 감독 신호를 빼도 이 비율은 87.7 %로
+  그대로다 (§9).
 
 ## 1. 실험 설정
 
@@ -323,7 +328,7 @@ one2one 분기가 의도대로 학습됐다는 신호다. (분포는 평가 임�
 | 헝가리안@10 px 재현율 |       0.742 |     0.746 |   −0.004 |
 
 **erop에서는 사실상 동률이다.** mAP@0.5 차이 0.003, Hit@10 px 차이 0.34 pp, 헝가리안 정밀도
-차이 0.008로 전부 측정 잡음 수준이다. **cholec80에서는 1 %p 안쪽으로 뒤진다.** 두
+차이 0.008로 전부 측정 잡음 수준이다. **cholec80에서는 1 pp 안쪽으로 뒤진다.** 두
 데이터셋의 차이는 스플릿에서 온다: erop은 영상 내부를 섞어 나눈 스플릿이라 test 분포가
 train과 가깝고, 사전학습이 채워 주는 "본 적 없는 장면에 대한 일반화"의 몫이 작다.
 cholec80은 test 영상이 통째로 분리돼 있어 그 몫이 그대로 드러난다.
@@ -492,7 +497,74 @@ one2many 분기를 건너뛰기 때문이다(참조는 건너뛰지 않는다).
 - **실제로 배포되는 구성끼리는 대등하다**: 클론은 one2many를 건너뛰므로 5.96 ms이고
   참조는 5.93 ms다. test 전수 평가로는 클론 6.03 ms 대 참조 6.78 ms로 오히려 클론이 앞선다.
 
-## 9. 결론과 다음 단계
+## 9. `tiponly` — 팁만 레이블링했을 때
+
+`tool` 상자 어노테이션 없이 `tip` 상자만으로 학습하면 팁 탐지가 어떻게 되는지를 잰 회차다.
+`tool` 상자는 라벨 생성 단계에서 만들지 않고 탐지 헤드의 클래스 채널도 1개로 줄였으므로,
+GT 상자 수가 절반이 된다. `--label-set`을 제외한 나머지 인수는 위 §1과 **전부 같다**
+(150 에포크, `--frame-stride 5`, 640 × 640, 팁 32 px). 파라미터는 9,948,638개로
+`tooltip`보다 774개 적다(0.008 %).
+
+수치 표는 [summary-results-tiponly.md](summary-results-tiponly.md)에 있고, 설계와 사전
+확정한 판정 기준은
+[tip-only 학습 실험 계획](../../../docs/tip-only-experiment-plan.md)에 있다.
+세 재구현을 가로질러 본 결론은
+[베이스라인 보고서 §4.5](../../../docs/baseline-report.md)에 있다.
+
+| 지표 | `cholec80` `tooltip` | `cholec80` `tiponly` | `erop` `tooltip` | `erop` `tiponly` |
+| --- | ---: | ---: | ---: | ---: |
+| 탐지 실패율 [%] | 9.71 | 10.36 | 5.96 | 6.49 |
+| **Hit@10 px [%]** | **59.27** | **57.87** | **74.24** | **73.46** |
+| Hit@20 px [%] | 64.51 | 63.25 | 77.37 | 76.53 |
+| Hit@50 px [%] | 70.44 | 69.30 | 80.93 | 80.18 |
+| 오차 중앙값 [px] | 3.45 | 3.67 | 1.96 | 1.97 |
+| 오차 평균 [px] | 46.12 | 47.44 | 30.29 | 30.95 |
+| `tip` AP@0.5 | 0.6321 | 0.6184 | 0.7995 | 0.7928 |
+| `tip` AP@0.5:0.95 | 0.4148 | 0.4000 | 0.5787 | 0.5737 |
+| 헝가리안@10 px 정밀도 | 0.7278 | 0.7293 | 0.8183 | 0.8198 |
+| 헝가리안@10 px 재현율 | 0.5924 | 0.5784 | 0.7422 | 0.7344 |
+| `tip` 예측 수 | 2,625,878 | 2,345,586 | 542,504 | 569,081 |
+
+`tool` AP와 전체 mAP는 `tiponly`에 그 클래스가 없으므로 비교하지 않는다. 팁 지표는 두
+모드에서 정의가 같아 그대로 견줄 수 있다.
+
+### 읽는 법
+
+**`tiponly`가 조금 못하다.** 네 지표가 모두 같은 방향으로 조금씩 내려간다. Hit@10 px가
+`cholec80`에서 −1.40 pp, `erop`에서 −0.78 pp이고 탐지 실패율은 각각 0.65·0.53 pp 오른다.
+헝가리안 정밀도만 0.7278 → 0.7293, 0.8183 → 0.8198로 미세하게 오르는데, 재현율이 그보다
+크게 내려가므로 이득이라 부를 수 없다.
+
+**CLAD-Net과 방향이 반대다.** 그쪽은 `tiponly`가 두 데이터셋 모두 5 pp 넘게 낫다. 원인은
+라벨 할당에 있는 것으로 보인다. 학습 없이 `cholec80` val 400 프레임에서 one2many 분기의
+GT당 양성 앵커 수를 다시 재면 이렇다.
+
+| 모드      | `tool` 양성/GT | `tip` 양성/GT | tool : tip |
+| --------- | -------------: | ------------: | ---------: |
+| `tooltip` |           9.57 |          9.86 |       0.97 |
+| `tiponly` |              — |      **9.94** |          — |
+
+TaskAlignedAssigner는 GT마다 정렬도 상위 `topk = 10`개를 고르므로 **정원이 상자 크기에도,
+함께 학습하는 클래스 수에도 흔들리지 않는다.** `tooltip`에서 이미 0.97로 균형이었고
+`tiponly`에서 팁의 양성 수는 9.86에서 9.94로 사실상 그대로다. **즉 `tool`을 없애 해소될
+불균형이 처음부터 없었고, 남는 것은 도구 상자가 주던 보조 감독을 잃는 쪽뿐이다.** 소폭
+하락이 그와 방향이 같다. CLAD-Net은 정적 할당이라 1.81 : 1의 불균형을 안고 있었고, 그것이
+없어지는 이득이 손실을 넘어선 것으로 읽힌다.
+
+다만 양성이 놓이는 **레벨 분포는 이 모델에서만 움직인다.** 팁 양성의 P3 비율이 96 %에서
+82 %로 내려가고 P4가 3 %에서 16 %로 오른다. 정렬도 기반 할당이라 이 측정은 쓰인 체크포인트에
+의존하며, 두 모드의 체크포인트가 다르므로 규칙의 차이인지 학습 결과의 차이인지 이 측정만으로는
+갈리지 않는다.
+
+부수적으로, 10 px 이내로 맞힌 예측의 신뢰도 중앙값이 0.741에서 0.769로 오른다. 클래스가
+하나뿐이면 분류가 쉬워지므로 예상되는 방향이다. §5의 과소 탐지는 그대로다: 큰
+오차(≥ 200 px) 중 예측 공유가 차지하는 비율이 87.2 %에서 87.7 %다.
+
+**읽을 때 주의할 것.** 차이가 0.53〜1.40 pp로 작은데 조합당 한 번씩만 학습했으므로, 이
+폭은 실행 간 변동과 구분되지 않는다. "`tool` 상자가 소폭의 값을 한다"는 서술은 시드를 바꿔
+두세 번 더 돌려야 확정된다.
+
+## 10. 결론과 다음 단계
 
 ### 결론
 
@@ -536,16 +608,23 @@ one2many 분기를 건너뛰기 때문이다(참조는 건너뛰지 않는다).
 ## 재현 명령
 
 ```bash
-# 학습 (완료됨: data/model/<dataset>/에 산출물이 있다)
+# 학습 (완료됨: data/model/<dataset>/<label-set>/에 산출물이 있다)
 ./baseline/yolo26clone/run train-model --dataset cholec80 --frame-stride 5 --val-frames 1500 --workers 12 --device cuda:2
 ./baseline/yolo26clone/run train-model --dataset erop     --frame-stride 5 --val-frames 1500 --workers 12 --device cuda:3
 
-# 평가 (완료됨: data/results/<dataset>/test/에 산출물이 있다)
+# 평가 (완료됨: data/results/<dataset>/<label-set>/test/에 산출물이 있다)
 ./baseline/yolo26clone/run eval-model --dataset cholec80 --split test
 ./baseline/yolo26clone/run eval-model --dataset erop     --split test
 
-# 이 보고서가 인용하는 수치 표 재생성
+# 팁만 레이블링한 회차 (§9). --label-set 말고는 위와 인수가 같다.
+./baseline/yolo26clone/run train-model --dataset cholec80 --label-set tiponly --frame-stride 5 --val-frames 1500 --workers 12 --device cuda:2
+./baseline/yolo26clone/run train-model --dataset erop     --label-set tiponly --frame-stride 5 --val-frames 1500 --workers 12 --device cuda:3
+./baseline/yolo26clone/run eval-model  --dataset cholec80 --label-set tiponly --split test
+./baseline/yolo26clone/run eval-model  --dataset erop     --label-set tiponly --split test
+
+# 이 보고서가 인용하는 수치 표 재생성 (모드마다 문서가 하나씩이다)
 ./baseline/yolo26clone/run generate-summary
+./baseline/yolo26clone/run generate-summary --label-set tiponly --output docs/summary-results-tiponly.md
 
 # 구현이 참조와 일치하는지 다시 확인 (§6)
 uv run --project baseline/yolo26 python baseline/yolo26clone/scripts/export-reference.py

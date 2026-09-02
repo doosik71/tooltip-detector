@@ -8,11 +8,17 @@
 | 탭             | 한 행의 의미                              | 산출물 경로                                                   |
 | -------------- | ----------------------------------------- | ------------------------------------------------------------- |
 | `This project` | 데이터셋 × 타겟 생성 방식 × 모델 타입 (8) | `data/models/`·`data/results/`                                |
-| `Baselines`    | 베이스라인 × 데이터셋 (10)                | `baseline/<name>/data/model/`·`baseline/<name>/data/results/` |
+| `Baselines`    | 베이스라인 × 데이터셋 × 학습 모드 (16)    | `baseline/<name>/data/model/`·`baseline/<name>/data/results/` |
 
 베이스라인은 `tool`·`tip` 박스를 직접 회귀하는 탐지기라 타겟 생성 방식이라는 축이 없고,
 서브 프로젝트마다 자기 러너(`./baseline/<name>/run`)를 쓴다. 그래서 하나의 표로 합치지 않고
-탭을 나눴다. 아래쪽 상세 패널과 `Command` 상자는 두 탭이 공유하며, 항상 **앞에 나와 있는
+탭을 나눴다.
+
+`Baselines` 탭의 세 번째 축인 **학습 모드**(`Labels` 열)는 무엇을 레이블로 쓰는지를 가른다.
+`tooltip`은 `tool`·`tip` 2클래스, `tiponly`는 `tip` 1클래스로 학습한 회차다. 재구현 세
+회차(`cladnet`·`yolov8sclone`·`yolo26clone`)만 두 모드를 모두 갖고, 참조 구현
+`yolov8s`·`yolo26`은 `tooltip`뿐이다. 그래서 행이 3 × 2 × 2 + 2 × 2 = **16개**다. 배경은
+[tip-only 학습 실험 계획](tip-only-experiment-plan.md)에 있다. 아래쪽 상세 패널과 `Command` 상자는 두 탭이 공유하며, 항상 **앞에 나와 있는
 탭**의 선택 칸을 설명한다.
 
 모델이나 데이터셋을 전혀 로드하지 않고 위 경로의 파일만 확인하므로, 학습이 돌고 있는
@@ -59,8 +65,8 @@ run.bat dashboard      # Windows
 
 - **상태 표** — 조합 하나가 한 행이고, `Train`·`Eval` 두 열이 그 조합의 진행 상태를 보여준다.
   행 색상은 초록(학습·평가 모두 완료), 주황(진행 중이거나 한쪽만 완료), 회색(아무것도 안 함)이다.
-  `Baselines` 탭은 `Baseline`·`Dataset` 두 열로 행을 가리키며, `Train`·`Eval`은 두 탭 모두
-  마지막 두 열이다.
+  `Baselines` 탭은 `Baseline`·`Dataset`·`Labels` 세 열로 행을 가리키며, `Train`·`Eval`은
+  두 탭 모두 마지막 두 열이다.
 - **상세 패널** — 선택한 칸의 근거가 된 파일들(경로, 크기, 수정 시각)과 기록된 지표를 보여준다.
 - **Command** — 그 칸의 작업을 수행하는 명령. `Copy` 버튼으로 클립보드에 복사한다.
   아래 회색 줄은 현재 상태에서 그 명령을 실행하면 무슨 일이 벌어지는지에 대한 안내다.
@@ -70,7 +76,8 @@ run.bat dashboard      # Windows
   베이스라인 행은 그 서브 프로젝트의 러너(`./baseline/<name>/run`)로 표시되고, 학습 명령에는
   그 베이스라인의 `docs/commands.md`가 보고 수치를 재현할 때 쓰는 인수가 함께 붙는다
   (`--frame-stride 5 --val-frames 1500` 등). 스크립트 기본값이 아니라서 빼면 디스크에 있는
-  체크포인트와 다른 프레임으로 학습하게 되기 때문이다.
+  체크포인트와 다른 프레임으로 학습하게 되기 때문이다. 두 학습 모드를 모두 갖는 재구현 세
+  회차의 행에는 `--label-set <mode>`도 붙는다. 참조 구현 두 행은 모드가 하나뿐이라 붙지 않는다.
 
 ## 조작 방법
 
@@ -109,7 +116,7 @@ run.bat dashboard      # Windows
 | `! unreadable summary.json` | 파일은 있으나 JSON 파싱 실패 (중간에 끊긴 파일) |
 | `not run`                   | `summary.json` 없음                             |
 
-### 베이스라인 — `baseline/<name>/data/model|results/<dataset>/`
+### 베이스라인 — `baseline/<name>/data/model|results/<dataset>/<label-set>/`
 
 판정 규칙은 같고 파일 이름과 키 이름만 다르다.
 
@@ -118,7 +125,7 @@ run.bat dashboard      # Windows
 | 체크포인트 | `best.pt` / `last.pt`           | `model.pt` / `model-last.pt`                        |
 | 에포크     | `completed_epochs` / `epochs`   | `epochs_completed` / `epochs_total`                 |
 | 선정 기준  | best val loss                   | best mAP@0.5:0.95 (클론) 또는 fitness (Ultralytics) |
-| 평가 결과  | `data/results/.../summary.json` | `data/results/<dataset>/test/summary.json`          |
+| 평가 결과  | `data/results/.../summary.json` | `data/results/<dataset>/<label-set>/test/summary.json` |
 | 팁 지표    | `summary.json` 최상위           | `summary.json`의 `tip` 하위                         |
 
 베이스라인 상세 패널에는 팁 지표 외에 탐지 지표(mAP@0.5, mAP@0.5:0.95)와 측정된 속도
@@ -136,4 +143,6 @@ run.bat dashboard      # Windows
 - 베이스라인의 이전 회차(`data/model-16x16`·`data/results-16x16`)는 표에 나오지 않는다.
   현재 회차로 대체된 실험이라, 어느 쪽이 현행인지 흐려지지 않도록 제외했다.
 - `Baselines` 탭의 `Eval`은 test 스플릿 결과만 본다. 다른 스플릿으로 평가해
-  `data/results/<dataset>/val/`에 쌓은 결과가 있어도 표에는 반영되지 않는다.
+  `data/results/<dataset>/<label-set>/val/`에 쌓은 결과가 있어도 표에는 반영되지 않는다.
+- `tiponly` 행에는 `tool` AP와 전체 mAP가 없다. 그 회차에 `tool` 클래스가 없기 때문이며,
+  상세 패널의 탐지 지표는 `tip` 하나로만 계산된 값이다.

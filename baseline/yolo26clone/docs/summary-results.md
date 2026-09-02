@@ -6,8 +6,9 @@
 
 ## 1. 무엇을 읽었나
 
-- 학습 산출물: `data/model`
-- 평가 산출물: `data/results` (split `test`)
+- 학습 모드: `tooltip` (tool 상자와 tip 상자를 함께 학습)
+- 학습 산출물: `data/model/<dataset>/tooltip`
+- 평가 산출물: `data/results/<dataset>/tooltip` (split `test`)
 
 | 데이터셋   | 학습 에포크 | best val mAP@0.5:0.95 | 평가 결과 | per_tip.csv |
 | ---------- | ----------: | --------------------: | --------- | ----------- |

@@ -129,7 +129,7 @@ run dashboard          # Linux / macOS
 run.bat dashboard      # Windows
 ```
 
-학습·평가가 어디까지 진행됐는지를 탭 두 개의 표로 보여준다. `This project` 탭은 데이터셋 × 타겟 생성 방식 × 모델 타입의 모든 조합(8행)을, `Baselines` 탭은 `baseline/` 아래 재구현·원본 베이스라인 5종(`yolov8s`·`yolov8sclone`·`yolo26`·`yolo26clone`·`cladnet`) × 데이터셋(10행)을 각각 한 행으로 놓는다. 베이스라인은 타겟 생성 방식이라는 축이 없고 서브 프로젝트마다 자기 러너를 쓰므로 표를 나눴다.
+학습·평가가 어디까지 진행됐는지를 탭 두 개의 표로 보여준다. `This project` 탭은 데이터셋 × 타겟 생성 방식 × 모델 타입의 모든 조합(8행)을, `Baselines` 탭은 `baseline/` 아래 재구현·원본 베이스라인 5종(`yolov8s`·`yolov8sclone`·`yolo26`·`yolo26clone`·`cladnet`) × 데이터셋 × 학습 모드(16행)를 각각 한 행으로 놓는다. 학습 모드(`Labels` 열)는 `tool`·`tip` 2클래스로 학습한 `tooltip`과 `tip` 1클래스로 학습한 `tiponly`를 가르며, 재구현 세 종만 두 모드를 갖고 참조 구현 둘은 `tooltip`뿐이다. 베이스라인은 타겟 생성 방식이라는 축이 없고 서브 프로젝트마다 자기 러너를 쓰므로 표를 나눴다.
 표에서 `Train`/`Eval` 칸을 선택하면 그 작업을 수행하는 명령(예: `run train-model --dataset erop --target-mode gaussian-tip --model-type monai`, 베이스라인이면 `./baseline/cladnet/run eval-model --dataset erop --split test`)과, 현재 상태에서 그 명령을 실행하면 어떻게 되는지에 대한 안내가 표시되고 `Copy` 버튼으로 복사할 수 있다.
 상태는 `data/models/`·`data/results/`·`baseline/<name>/data/` 아래 파일만 보고 판정하므로 모델이나 데이터셋을 로드하지 않으며, 5초마다 자동으로 갱신된다.
 다른 스크립트와 달리 `--dataset`은 선택 인자이고, 지정하면 두 탭 모두 해당 데이터셋의 첫 행이 선택된 채로 열린다.
@@ -290,7 +290,9 @@ run.bat tooltip-tracker data\models\cholec80\gaussian-tip\monai\best.pt   # Wind
 | 경로 규칙                                                | 모델 종류                                                          |
 | -------------------------------------------------------- | ------------------------------------------------------------------ |
 | `data/models/<dataset>/<target-mode>/<model-type>/best.pt` | 이 프로젝트의 히트맵 모델. 히트맵의 피크가 팁이다                  |
-| `baseline/<name>/data/model/<dataset>/model.pt`            | 재구현 베이스라인 탐지기. 예측한 `tip` 박스의 중심이 팁이다        |
+| `baseline/<name>/data/model/<dataset>/<label-set>/model.pt` | 재구현 베이스라인 탐지기. 예측한 `tip` 박스의 중심이 팁이다        |
+
+`<label-set>`은 학습 모드다(`tooltip` = `tool`·`tip` 2클래스, `tiponly` = `tip` 1클래스). 트래커는 팁 클래스를 인덱스가 아니라 이름으로 찾으므로 두 모드의 체크포인트를 모두 그대로 연다.
 
 지원하는 베이스라인은 `yolov8sclone`·`cladnet`·`yolo26clone` 셋이다. `yolov8s`와 `yolo26`은 `ultralytics`가 필요하고 그것이 요구하는 `opencv-python`이 루트 환경의 `opencv-python-headless`를 깨뜨리므로 이 GUI에서는 열 수 없다. 두 모델의 아키텍처는 위 재구현 3종이 의존성 없이 그대로 커버한다.
 
