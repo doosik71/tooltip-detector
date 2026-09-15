@@ -1,4 +1,4 @@
 [submodule "tooltip-annotator"]
 	path = tooltip-annotator
-	url = git@github.com:doosik71/tooltip-annotator.git
+	url = https://github.com/doosik71/tooltip-annotator.git
 	branch = main

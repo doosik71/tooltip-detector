@@ -54,6 +54,37 @@ Segmentation Head         ← Conv2d → 2채널 출력
 
 ## 설치
 
+### 저장소 클론
+
+`tooltip-annotator`가 git 서브모듈로 포함되어 있으므로 `--recurse-submodules`와 함께 클론한다.
+
+```bash
+git clone --recurse-submodules https://github.com/doosik71/tooltip-detector.git
+cd tooltip-detector
+```
+
+옵션 없이 이미 클론했다면 서브모듈만 따로 받는다.
+
+```bash
+git submodule update --init --recursive
+```
+
+서브모듈 URL이 바뀌기 전에 클론해 둔 작업 트리라면, `git pull` 후 한 번만 아래를 실행해 URL을 갱신한다.
+
+```bash
+git submodule sync --recursive
+git submodule update --init --recursive
+```
+
+> 서브모듈 URL은 HTTPS(`https://github.com/...`)로 등록되어 있어 GitHub 계정이나 SSH 키 없이도 클론할 수 있다.
+> 쓰기 권한이 있는 개발자가 SSH로 push하고 싶다면 아래 설정을 한 번 해 두면 fetch는 HTTPS, push는 SSH로 동작한다.
+>
+> ```bash
+> git config --global url."git@github.com:".pushInsteadOf "https://github.com/"
+> ```
+
+### 의존성 설치
+
 ```bash
 uv sync
 ```
