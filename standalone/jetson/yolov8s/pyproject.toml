@@ -1,0 +1,55 @@
+# Standalone uv project for running the yolov8sclone baseline's model.pt
+# on a Jetson Orin Nano (JetPack 6.2 / R36.4.7, CUDA 12.6, aarch64).
+#
+# Kept separate from the repository root on purpose: the root project pins
+# torch/torchvision to the `pytorch-cu128` index, which only publishes
+# x86_64 wheels, so `uv sync` cannot install it on this device at all.
+# NVIDIA's Jetson AI Lab index instead ships aarch64 wheels built against
+# this board's CUDA/cuDNN/TensorRT stack, but only for CPython 3.10 (the
+# system Python here), so this project pins to that interpreter too.
+#
+# torch==2.11.0 (the newest wheel on the index) fails to import here with
+# `ImportError: libcudss.so.0: cannot open shared object file` — that
+# library ships neither via apt (L4T's CUDA repo doesn't carry it) nor via
+# pip on this index, so newer wheels are unusable until NVIDIA publishes it
+# for this board. torch==2.8.0 is the newest version that imports cleanly
+# and reports `cuda.is_available() == True`. It also needs numpy pinned
+# below 2.0: it was compiled against the NumPy 1.x ABI and warns/risks a
+# crash under NumPy 2.x.
+#
+# `tensorrt` is not a dependency here on purpose: it has no wheel on PyPI or
+# this index for this board, only an apt package tied to system Python 3.10.
+# `common/inference.py` imports it anyway, which only works because this
+# project's `.venv` must be created with `uv venv --system-site-packages`
+# (see README.md's "TensorRT" section) instead of the usual `uv sync` alone.
+[project]
+name = "yolov8s-jetson"
+version = "0.1.0"
+description = "Jetson Orin Nano conversion/inference environment for the yolov8sclone baseline's model.pt"
+requires-python = "==3.10.*"
+
+dependencies = [
+    "numpy>=1.26,<2",
+    "onnx>=1.17",
+    "opencv-python-headless>=4.10",
+    "pillow>=12.2.0",
+    "scipy>=1.14",
+    "torch==2.8.0",
+    "torchvision==0.23.0",
+    "tqdm>=4.67",
+]
+
+[tool.uv]
+# `common/` is imported via sys.path from `scripts/*.py` (same convention as
+# every `baseline/*` sub-project), so there is nothing here to build or
+# install.
+package = false
+
+[tool.uv.sources]
+torch = { index = "jetson-jp6-cu126" }
+torchvision = { index = "jetson-jp6-cu126" }
+
+[[tool.uv.index]]
+name = "jetson-jp6-cu126"
+url = "https://pypi.jetson-ai-lab.io/jp6/cu126"
+explicit = true

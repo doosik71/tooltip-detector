@@ -1,0 +1,3 @@
+# yolov8s_nano baseline: private virtualenv and downloaded weights stay out of git.
+.venv/
+data/
