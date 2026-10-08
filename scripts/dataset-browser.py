@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
 """Interactive dataset browser for SurgicalToolDataset.
 
-Shows the original image alongside the distance-based heatmap overlay.
-Navigate with ← → arrow keys or buttons. The "Dataset" dropdown switches
-between data/dataset/<dataset-name>/ directories at runtime.
+Shows one image panel whose content is chosen by the tabs above it:
+the original image, the original with annotations, or the original with the
+distance-based heatmap overlay.
+Navigate with ← → arrow keys, buttons, or by clicking a file in the list on
+the left (which also shows the labelled tool count per frame). The "Dataset"
+dropdown switches between data/dataset/<dataset-name>/ directories at runtime.
 
 Usage:
-    uv run python scripts/dataset-browser.py --dataset cholec80 [--split SPLIT]
+    uv run python scripts/dataset-browser.py [--dataset cholec80] [--split SPLIT]
 """
 import argparse
+import bisect
 import json
 import os
 import sys
 
 import numpy as np
 import tkinter as tk
+from tkinter import font as tkfont
 from tkinter import ttk
 from PIL import Image, ImageDraw, ImageTk
 
@@ -25,6 +30,13 @@ from ttd.dataset import DATASETS, SurgicalToolDataset
 SPLITS = ["train", "val", "test"]
 PANEL_W = 552   # 736 × 0.75
 PANEL_H = 360   # 480 × 0.75
+# View tabs, in display order
+VIEWS = ["Original", "Original + Annotations", "Original + Distance Heatmap"]
+# Tool-count filter choices for the file list
+TOOL_FILTERS = ["All", "0", "1", "2", "3", "4", "5+"]
+INFO_LINES = 3      # visible lines in the info box (more scroll)
+INFO_FONT = ("Monospace", 9)
+LIST_CHUNK = 2000   # file-list rows inserted per idle callback
 
 # Colors cycled per tool index
 _TOOL_COLORS = ["#00FF00", "#FF8800", "#00AAFF", "#FF00FF", "#FFFF00",
@@ -93,8 +105,18 @@ class DatasetBrowser(tk.Tk):
         self._dataset_name = dataset_name
         self._ds: SurgicalToolDataset | None = None
         self._idx = 0
+        # Bumped on every split load so a stale file-list fill stops early
+        self._list_gen = 0
+        # Per-frame tool counts, filled as the file list reads annotations
+        self._counts: list[int] = []
+        # Indices currently listed (those passing the Tools filter), ascending
+        self._visible: list[int] = []
+        # Show the first listed frame once one appears (current one filtered out)
+        self._jump_pending = False
         # Hold references so GC does not delete PhotoImages
-        self._photos: list[ImageTk.PhotoImage] = []
+        self._photo: ImageTk.PhotoImage | None = None
+        # Current frame's (image, target, annotations), re-rendered on tab change
+        self._frame: tuple[np.ndarray, np.ndarray, list] | None = None
 
         self._build_ui()
         self._load_split(split)
@@ -125,6 +147,13 @@ class DatasetBrowser(tk.Tk):
         split_cb.bind("<<ComboboxSelected>>",
                       lambda _: self._load_split(self._split_var.get()))
 
+        tk.Label(ctrl, text="Tools:").pack(side=tk.LEFT)
+        self._tools_var = tk.StringVar(value="All")
+        tools_cb = ttk.Combobox(ctrl, textvariable=self._tools_var,
+                                values=TOOL_FILTERS, width=4, state="readonly")
+        tools_cb.pack(side=tk.LEFT, padx=(2, 12))
+        tools_cb.bind("<<ComboboxSelected>>", lambda _: self._fill_file_list())
+
         tk.Button(ctrl, text="◄", width=3,
                   command=lambda: self._navigate(-1)).pack(side=tk.LEFT)
         tk.Button(ctrl, text="►", width=3,
@@ -143,32 +172,63 @@ class DatasetBrowser(tk.Tk):
         tk.Label(ctrl, text="  ← → : navigate   R : random",
                  fg="gray").pack(side=tk.RIGHT)
 
-        # ── Image panels ─────────────────────────────────────────────────
-        panels = tk.Frame(self)
-        panels.pack(padx=8, pady=4)
+        body = tk.Frame(self)
+        body.pack(fill=tk.BOTH, expand=True)
 
-        lf_orig = tk.LabelFrame(panels, text="Original  +  Annotations",
-                                padx=4, pady=4)
-        lf_orig.grid(row=0, column=0, padx=4)
-        self._lbl_orig = tk.Label(lf_orig, width=PANEL_W, height=PANEL_H,
-                                  bg="#1a1a1a")
-        self._lbl_orig.pack()
+        # ── File list (left) ─────────────────────────────────────────────
+        self._list_frame = list_frame = tk.LabelFrame(body, text="Files",
+                                                      padx=4, pady=4)
+        list_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(8, 0), pady=4)
 
-        lf_heat = tk.LabelFrame(panels, text="Distance Heatmap  (hot colormap)",
-                                padx=4, pady=4)
-        lf_heat.grid(row=0, column=1, padx=4)
-        self._lbl_heat = tk.Label(lf_heat, width=PANEL_W, height=PANEL_H,
-                                  bg="#1a1a1a")
-        self._lbl_heat.pack()
+        self._tree = ttk.Treeview(list_frame, columns=("file", "tools"),
+                                  show="headings", selectmode="browse")
+        self._tree.heading("file", text="File")
+        self._tree.heading("tools", text="Tools")
+        self._tree.column("file", width=230, anchor="w")
+        self._tree.column("tools", width=50, anchor="e", stretch=False)
+        tree_scroll = ttk.Scrollbar(list_frame, orient=tk.VERTICAL,
+                                    command=self._tree.yview)
+        self._tree.configure(yscrollcommand=tree_scroll.set)
+        self._tree.pack(side=tk.LEFT, fill=tk.Y)
+        tree_scroll.pack(side=tk.LEFT, fill=tk.Y)
+        self._tree.bind("<<TreeviewSelect>>", self._on_list_select)
+
+        main = tk.Frame(body)
+        main.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # ── View tabs + image panel ──────────────────────────────────────
+        # The notebook is only a tab strip; its pages are empty and the one
+        # shared image label below shows whichever view is selected.
+        self._view_tabs = ttk.Notebook(main)
+        for view in VIEWS:
+            self._view_tabs.add(tk.Frame(self._view_tabs, height=0), text=view)
+        self._view_tabs.pack(fill=tk.X, padx=8, pady=(4, 0))
+        self._view_tabs.bind("<<NotebookTabChanged>>", lambda _: self._render())
+
+        self._lbl_img = tk.Label(main, width=PANEL_W, height=PANEL_H,
+                                 bg="#1a1a1a")
+        self._lbl_img.pack(padx=8, pady=(0, 4))
 
         # ── Info bar ─────────────────────────────────────────────────────
-        self._info_var = tk.StringVar()
-        tk.Label(self, textvariable=self._info_var, anchor="w",
-                 justify=tk.LEFT, font=("Monospace", 9),
-                 padx=10, pady=4).pack(fill=tk.X)
+        # Fixed-size box (panel width × INFO_LINES lines) so long tip lists
+        # wrap and scroll instead of resizing the window.
+        line_h = tkfont.Font(font=INFO_FONT).metrics("linespace")
+        info_frame = tk.Frame(main, width=PANEL_W,
+                              height=line_h * INFO_LINES + 8)
+        info_frame.pack_propagate(False)
+        info_frame.pack(padx=8, pady=4)
+        info_scroll = ttk.Scrollbar(info_frame, orient=tk.VERTICAL)
+        self._info_text = tk.Text(info_frame, font=INFO_FONT, wrap=tk.WORD,
+                                  padx=4, pady=2, relief=tk.FLAT,
+                                  bg=self.cget("bg"),
+                                  yscrollcommand=info_scroll.set)
+        info_scroll.config(command=self._info_text.yview)
+        info_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self._info_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self._info_text.config(state=tk.DISABLED)
 
         # ── Seek bar ──────────────────────────────────────────────────────
-        seek_frame = tk.Frame(self, padx=8, pady=4)
+        seek_frame = tk.Frame(main, padx=8, pady=4)
         seek_frame.pack(fill=tk.X)
 
         self._seek_start_lbl = tk.Label(seek_frame, text="0", width=6, anchor="e")
@@ -203,15 +263,102 @@ class DatasetBrowser(tk.Tk):
         self._total_lbl.config(text=f"/ {n}")
         self._seekbar.config(to=max(1, n - 1))
         self._seek_end_lbl.config(text=str(n - 1))
+        self._idx = 0
+        self._counts = []
         self._show(0)
+        self._fill_file_list()
+
+    def _tool_count(self, idx: int) -> int:
+        """Labelled tool count of frame idx, cached in self._counts."""
+        if idx < len(self._counts):
+            return self._counts[idx]
+        with open(self._ds.samples[idx]) as f:
+            return len(json.load(f)["annotations"])
+
+    def _passes_filter(self, n_tools: int) -> bool:
+        f = self._tools_var.get()
+        if f == "All":
+            return True
+        if f == "5+":
+            return n_tools >= 5
+        return n_tools == int(f)
+
+    def _fill_file_list(self):
+        """Repopulate the file list, reading tool counts in idle-time chunks.
+
+        Only frames passing the Tools filter are listed. If the frame on
+        screen is filtered out, the first listed frame is shown instead.
+        """
+        if self._ds is None:
+            return
+        self._list_gen += 1
+        self._tree.delete(*self._tree.get_children())
+        self._visible = []
+        self._jump_pending = not self._passes_filter(self._tool_count(self._idx))
+        self._append_file_rows(self._list_gen, 0)
+
+    def _append_file_rows(self, gen: int, start: int):
+        if gen != self._list_gen or self._ds is None:
+            return
+        samples = self._ds.samples
+        end = min(start + LIST_CHUNK, len(samples))
+        for i in range(start, end):
+            n_tools = self._tool_count(i)
+            if i == len(self._counts):
+                self._counts.append(n_tools)
+            if not self._passes_filter(n_tools):
+                continue
+            stem = os.path.splitext(os.path.basename(samples[i]))[0]
+            self._tree.insert("", tk.END, iid=str(i), values=(stem, n_tools))
+            self._visible.append(i)
+        if self._jump_pending and self._visible:
+            self._jump_pending = False
+            self._show(self._visible[0])
+        # The current frame may have been shown before its row existed
+        elif start <= self._idx < end:
+            self._select_in_list(self._idx)
+        done = "" if end == len(samples) else "+"
+        self._list_frame.config(
+            text=f"Files  ({len(self._visible)}{done} / {len(samples)})")
+        if end < len(samples):
+            self.after(1, self._append_file_rows, gen, end)
+
+    def _select_in_list(self, idx: int):
+        iid = str(idx)
+        if self._tree.exists(iid) and self._tree.selection() != (iid,):
+            self._tree.selection_set(iid)
+            self._tree.see(iid)
+
+    def _on_list_select(self, _=None):
+        sel = self._tree.selection()
+        if sel and self._ds:
+            idx = int(sel[0])
+            if idx != self._idx:
+                self._show(idx)
 
     def _navigate(self, delta: int):
-        if self._ds:
+        """Step to the previous/next frame among those in the file list."""
+        if not self._ds:
+            return
+        if self._tools_var.get() == "All":
             self._show((self._idx + delta) % len(self._ds))
+            return
+        vis = self._visible
+        if not vis:
+            return
+        if delta > 0:
+            pos = bisect.bisect_right(vis, self._idx)
+        else:
+            pos = bisect.bisect_left(vis, self._idx) - 1
+        self._show(vis[pos % len(vis)])
 
     def _random(self):
-        if self._ds:
+        if not self._ds:
+            return
+        if self._tools_var.get() == "All":
             self._show(int(np.random.randint(0, len(self._ds))))
+        elif self._visible:
+            self._show(self._visible[np.random.randint(0, len(self._visible))])
 
     def _jump(self):
         if not self._ds:
@@ -245,6 +392,7 @@ class DatasetBrowser(tk.Tk):
         self._idx = idx
         self._idx_var.set(str(idx))
         self._seek_var.set(idx)
+        self._select_in_list(idx)
 
         image, target = self._ds[idx]       # ndarray uint8 (H,W,3), float32 (H,W)
         ann_path = self._ds.samples[idx]
@@ -253,16 +401,8 @@ class DatasetBrowser(tk.Tk):
             ann_data = json.load(f)
         annotations = ann_data["annotations"]
 
-        # Left: original with bbox + tip overlays
-        left_img = _draw_annotations(image, annotations)
-
-        # Right: heatmap blended onto image
-        right_img = _blend_heatmap(image, target)
-
-        # Keep references alive (required for tkinter PhotoImage)
-        self._photos = [_to_photo(left_img), _to_photo(right_img)]
-        self._lbl_orig.config(image=self._photos[0])
-        self._lbl_heat.config(image=self._photos[1])
+        self._frame = (image, target, annotations)
+        self._render()
 
         # Info bar
         stem = os.path.splitext(os.path.basename(ann_path))[0]
@@ -273,10 +413,32 @@ class DatasetBrowser(tk.Tk):
         )
         heat_range = (f"heatmap: [{target.min():.3f}, {target.max():.3f}]"
                       if target.max() > 0 else "heatmap: all zero (no tool)")
-        self._info_var.set(
+        self._set_info(
             f"File: {stem}   Tools: {n}   {heat_range}\n"
             + (tips if tips else "(no tools in this frame)")
         )
+
+    def _set_info(self, text: str):
+        """Replace the read-only info box contents and scroll to the top."""
+        self._info_text.config(state=tk.NORMAL)
+        self._info_text.delete("1.0", tk.END)
+        self._info_text.insert("1.0", text)
+        self._info_text.config(state=tk.DISABLED)
+        self._info_text.yview_moveto(0)
+
+    def _render(self):
+        """Draw the current frame in the view selected by the tabs."""
+        if self._frame is None:
+            return
+        image, target, annotations = self._frame
+        view = VIEWS[self._view_tabs.index("current")]
+        if view == "Original + Annotations":
+            image = _draw_annotations(image, annotations)
+        elif view == "Original + Distance Heatmap":
+            image = _blend_heatmap(image, target)
+        # Keep a reference alive (required for tkinter PhotoImage)
+        self._photo = _to_photo(image)
+        self._lbl_img.config(image=self._photo)
 
 
 # ---------------------------------------------------------------------------
@@ -287,9 +449,9 @@ def main():
     parser = argparse.ArgumentParser(
         description="Browse SurgicalToolDataset with distance-based heatmap overlay"
     )
-    parser.add_argument("--dataset", required=True,
+    parser.add_argument("--dataset", default="cholec80",
                         choices=list(DATASETS),
-                        help="Dataset name under --data-root (e.g. cholec80)")
+                        help="Dataset name under --data-root (default: cholec80)")
     parser.add_argument("--data-root", default="data/dataset",
                         help="Root directory containing <dataset>/ subdirectories "
                              "(default: data/dataset)")

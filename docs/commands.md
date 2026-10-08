@@ -39,7 +39,7 @@ ls data/dataset/erop      # annotation  images  segmentation
 ## 4. 데이터셋 확인 (선택)
 
 ```bash
-./run dataset-browser --dataset cholec80
+./run dataset-browser                      # 기본: cholec80
 ./run dataset-browser --dataset erop
 
 # 스플릿 지정 (기본: train)
@@ -94,6 +94,18 @@ GPU가 여러 개인 장비에서 사용할 장치를 지정하려면 `--device 
 
 # 평가에 사용할 GPU 지정
 ./run eval-model --dataset cholec80 --target-mode gradient-seg --model-type monai --device cuda:1
+```
+
+기본으로 도구 수와 상관없이 전체 프레임을 평가한다(`--max-tools 0`). 도구가 4개 이상 레이블링된
+프레임은 대부분 오검출 라벨이므로, 보고서 4.0판처럼 이를 제외하려면 `--max-tools 3`을 덧붙인다.
+
+**전체 재평가.** [최종 보고서](final-report.md)에 인용되는 평가 결과 전체(표준 8개 조합, `cholec80`
+구 프레임 분할 4개 조합, `erop`의 val 편차 보정, 2단계 후처리 탐색, 요약 문서와 그림)를 한 번에
+다시 산출하려면 다음 스크립트를 실행한다. GPU는 `cuda:1`〜`cuda:3`만 쓰며, 단계와 덮어쓰는
+파일은 스크립트 첫머리의 주석에 정리되어 있다. 로그는 `temp/evaluation-logs/`에 남는다.
+
+```bash
+bash scripts/evaluate-all.sh
 ```
 
 ## 7. 속도 비교

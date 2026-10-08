@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -27,6 +27,11 @@ from ttd.transforms import _eval_transform
 
 _HIT_THRESHOLDS = (10, 20, 50)
 _DEFAULT_MATCH_DISTANCES = (10.0, 20.0, 50.0)
+# Every frame is evaluated by default (0 keeps all). --max-tools 3 drops frames
+# labelled with four or more tools, which are almost always false detections
+# in the semi-automatic labelling (final-report.md §2.7). per_tip.csv keeps one
+# row per GT tip, so per-tool-count metrics can be derived from it either way.
+_DEFAULT_MAX_TOOLS = 0
 
 
 def _session_id(ann_path: str) -> str:
@@ -133,19 +138,62 @@ def _build_model(model_path: str, model_type: str, device: torch.device):
     return model
 
 
-def _dataset_loader(data_root: str, split: str, target_mode: str, batch_size: int, workers: int, device: torch.device):
-    dataset = SurgicalToolDataset(data_root, split, transform=_eval_transform(), target_mode=target_mode)
-    require_samples(dataset, split, data_root)
-    return dataset, DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=workers,
-                               pin_memory=device.type == "cuda")
+class _SampleSubset(Dataset):
+    """Selected samples drawn from one or more splits, exposing ``samples`` like SurgicalToolDataset."""
+
+    def __init__(self, items: list[tuple[SurgicalToolDataset, int]]):
+        self._items = items
+        self.samples = [dataset.samples[index] for dataset, index in items]
+
+    def __len__(self) -> int:
+        return len(self._items)
+
+    def __getitem__(self, index: int):
+        dataset, sample_index = self._items[index]
+        return dataset[sample_index]
+
+
+def _tool_count(ann_path: str) -> int:
+    with open(ann_path, encoding="utf-8") as handle:
+        return len(json.load(handle)["annotations"])
+
+
+def _dataset_loader(data_root: str, split: str, target_mode: str, batch_size: int, workers: int, device: torch.device,
+                    max_tools: int | None = None, frames: set[str] | None = None):
+    """Build the evaluation loader.
+
+    max_tools: drop frames labelled with more tools than this (None keeps all).
+    frames:    evaluate only these frame stems, looked up across every split
+               instead of ``split`` (used to re-score a former split's test set).
+    Returns (dataset, loader, n_excluded_frames).
+    """
+    splits = ("train", "val", "test") if frames is not None else (split,)
+    items, excluded = [], 0
+    for name in splits:
+        dataset = SurgicalToolDataset(data_root, name, transform=_eval_transform(), target_mode=target_mode)
+        if frames is None:
+            require_samples(dataset, name, data_root)
+        for index, ann_path in enumerate(dataset.samples):
+            if frames is not None and Path(ann_path).stem not in frames:
+                continue
+            if max_tools is not None and _tool_count(ann_path) > max_tools:
+                excluded += 1
+                continue
+            items.append((dataset, index))
+    if frames is not None and not items:
+        raise SystemExit(f"Error: none of the {len(frames):,} listed frames were found under {data_root}")
+    subset = _SampleSubset(items)
+    return subset, DataLoader(subset, batch_size=batch_size, shuffle=False, num_workers=workers,
+                              pin_memory=device.type == "cuda"), excluded
 
 
 def estimate_bias(model_path, model_type, dataset_name, target_mode, data_root, threshold, nms_radius,
-                  peak_method, batch_size, workers, device_str, near_distance_px):
+                  peak_method, batch_size, workers, device_str, near_distance_px, max_tools=None):
     if near_distance_px <= 0:
         raise ValueError("near_distance_px must be positive")
     device = torch.device(device_str or ("cuda" if torch.cuda.is_available() else "cpu"))
-    dataset, loader = _dataset_loader(data_root, "val", target_mode, batch_size, workers, device)
+    dataset, loader, n_excluded = _dataset_loader(data_root, "val", target_mode, batch_size, workers, device,
+                                                  max_tools)
     model = _build_model(model_path, model_type, device)
     deltas, by_session = [], defaultdict(list)
     with torch.no_grad():
@@ -168,7 +216,8 @@ def estimate_bias(model_path, model_type, dataset_name, target_mode, data_root, 
     dx, dy = np.median(np.asarray(deltas), axis=0)
     return {"dataset": dataset_name, "target_mode": target_mode, "model_type": model_type,
             "model_path": model_path, "split": "val", "threshold": threshold, "nms_radius": nms_radius, "peak_method": peak_method,
-            "near_distance_px": near_distance_px, "n_matches": len(deltas),
+            "near_distance_px": near_distance_px, "max_tools": max_tools,
+            "n_frames_excluded": n_excluded, "n_matches": len(deltas),
             "dx_px": round(float(dx), 4), "dy_px": round(float(dy), 4),
             "per_session": {session: {"n_matches": len(items),
                 "dx_px": round(float(np.median(np.asarray(items)[:, 0])), 4),
@@ -177,15 +226,18 @@ def estimate_bias(model_path, model_type, dataset_name, target_mode, data_root, 
 
 
 def evaluate(model_path, model_type, dataset_name, target_mode, data_root, threshold, nms_radius,
-             peak_method, batch_size, workers, device_str, results_root, match_distances, bias=None):
+             peak_method, batch_size, workers, device_str, results_root, match_distances, bias=None,
+             max_tools=None, frames=None):
     device = torch.device(device_str or ("cuda" if torch.cuda.is_available() else "cpu"))
-    dataset, loader = _dataset_loader(data_root, "test", target_mode, batch_size, workers, device)
+    dataset, loader, n_excluded = _dataset_loader(data_root, "test", target_mode, batch_size, workers, device,
+                                                  max_tools, frames)
     model = _build_model(model_path, model_type, device)
     legacy, hungarian = _new_legacy_accumulator(), _new_hungarian_accumulator(match_distances)
     corrected_legacy = _new_legacy_accumulator() if bias else None
     corrected_hungarian = _new_hungarian_accumulator(match_distances) if bias else None
     rows = []
-    print(f"Device: {device}; test frames: {len(dataset):,}; match caps: {match_distances}")
+    print(f"Device: {device}; test frames: {len(dataset):,} "
+          f"({n_excluded:,} excluded with > {max_tools} tools); match caps: {match_distances}")
     with torch.no_grad():
         for batch_index, (images, _) in enumerate(loader):
             heatmaps = torch.sigmoid(model(images.to(device, dtype=torch.float32))[:, 1]).cpu().numpy()
@@ -232,6 +284,8 @@ def evaluate(model_path, model_type, dataset_name, target_mode, data_root, thres
     metadata = {"timestamp": time.strftime("%Y%m%d_%H%M%S"), "dataset": dataset_name,
         "model_type": model_type, "target_mode": target_mode, "model_path": model_path,
         "threshold": threshold, "nms_radius": nms_radius, "peak_method": peak_method, "data_root": data_root,
+        "max_tools": max_tools, "n_frames_excluded": n_excluded,
+        "frame_list": len(frames) if frames is not None else None,
         "n_frames_with_tools": len({row["frame"] for row in rows})}
     stats = _legacy_stats(legacy, metadata)
     stats["hungarian"] = {"algorithm": "scipy.optimize.linear_sum_assignment",
@@ -279,6 +333,12 @@ def main():
                         default="connected-components")
     parser.add_argument("--match-distance", type=float, nargs="+", default=list(_DEFAULT_MATCH_DISTANCES),
                         help="Hungarian assignment caps in px (default: 10 20 50)")
+    parser.add_argument("--max-tools", type=int, default=_DEFAULT_MAX_TOOLS,
+                        help="Exclude frames labelled with more tools than this from evaluation and bias "
+                             f"estimation (default: {_DEFAULT_MAX_TOOLS}; 0 or less keeps every frame)")
+    parser.add_argument("--frame-list", default=None,
+                        help="Text file of frame stems (one per line) to evaluate instead of the test split; "
+                             "frames are looked up across all splits. Requires --results-dir")
     parser.add_argument("--estimate-bias", action="store_true", help="Estimate and save val-set bias.json")
     parser.add_argument("--bias-distance", type=float, default=20.0)
     parser.add_argument("--apply-bias", action="store_true", help="Apply bias.json and report raw plus corrected test metrics")
@@ -288,12 +348,19 @@ def main():
     args = parser.parse_args()
     if any(value <= 0 for value in args.match_distance):
         parser.error("--match-distance values must be positive")
+    if args.frame_list and not args.results_dir:
+        parser.error("--frame-list requires --results-dir so the standard test results are not overwritten")
+    max_tools = args.max_tools if args.max_tools > 0 else None
+    frames = None
+    if args.frame_list:
+        frames = {line.strip() for line in Path(args.frame_list).read_text(encoding="utf-8").splitlines()
+                  if line.strip()}
     model_path = args.model or default_model_path(args.model_type, args.dataset, args.target_mode)
     data_root = os.path.join(args.data_root, args.dataset)
     if args.estimate_bias:
         bias = estimate_bias(model_path, args.model_type, args.dataset, args.target_mode, data_root,
                              args.threshold, args.nms_radius, args.peak_method, args.batch_size, args.workers,
-                             args.device, args.bias_distance)
+                             args.device, args.bias_distance, max_tools)
         bias_path = Path(model_path).with_name("bias.json")
         bias_path.write_text(json.dumps(bias, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print(f"Saved validation bias to {bias_path}: dx={bias['dx_px']:+.2f}, dy={bias['dy_px']:+.2f} px")
@@ -307,7 +374,7 @@ def main():
     evaluate(model_path, args.model_type, args.dataset, args.target_mode, data_root, args.threshold,
              args.nms_radius, args.peak_method, args.batch_size, args.workers, args.device,
              args.results_dir or default_results_dir(args.model_type, args.dataset, args.target_mode),
-             tuple(sorted(set(args.match_distance))), bias)
+             tuple(sorted(set(args.match_distance))), bias, max_tools, frames)
 
 
 if __name__ == "__main__":

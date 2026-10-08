@@ -47,6 +47,8 @@ run eval-model --dataset cholec80 --target-mode gaussian-tip
 | `--results-dir` | `data/results/<dataset>/<target-mode>/<model-type>`        | 결과 저장 루트 디렉터리                                  |
 | `--threshold`   | `0.5`                                                      | 피크 탐지 임계값 (히트맵 값 기준)                        |
 | `--nms-radius`  | `20`                                                       | 두 피크 사이의 최소 픽셀 거리 (NMS)                      |
+| `--max-tools`   | `0`                                                        | 레이블링된 도구가 이 값보다 많은 프레임은 평가·편차 추정에서 제외. 0 이하면 전체 프레임 사용. 보고서 4.0판 기준(4개 이상은 대부분 오검출 라벨)은 `3` |
+| `--frame-list`  | 없음                                                       | 평가할 프레임 이름(한 줄에 하나) 파일. test 대신 모든 스플릿에서 찾아 평가하며 `--results-dir` 필수 |
 | `--batch-size`  | `16`                                                       | 추론 배치 크기                                           |
 | `--workers`     | `4`                                                        | DataLoader 워커 수                                       |
 | `--device`      | 자동 (CUDA 있으면 `cuda`, 없으면 `cpu`)                    | 평가에 사용할 torch device (예: `cuda:1`, `cpu`)         |

@@ -60,7 +60,9 @@ HIT_RADII = (10, 20, 50)
 VAL_LOSS_MILESTONES = (1, 5, 10, 20, 30)
 
 # Tips per frame are bucketed 1 / 2 / 3 / 4+; frames with more tools than this
-# are too rare to carry their own column.
+# are too rare to carry their own column. Results evaluated with
+# eval-model.py --max-tools 3 have no 4+ frames, and the tables
+# then stop at the largest count present.
 MAX_TIP_BUCKET = 4
 
 # Only near matches define the systematic offset: a tip matched to a different
@@ -763,6 +765,9 @@ def _section_tip_count(out: list[str], combos: list[dict]) -> None:
         "네 조합에서 동일하다. 도구가 없는 프레임은 `per_tip.csv`에 기록되지 않아 빠져 있다.)",
         "",
     ]
+    top = min(MAX_TIP_BUCKET, max((n for c in combos for n in c["per_tip"]["tip_count_frames"]),
+                                  default=MAX_TIP_BUCKET))
+    labels = [f"팁 {k}개" if k < MAX_TIP_BUCKET else f"팁 {k}개+" for k in range(1, top + 1)]
     rows = []
     for dataset in DATASETS:
         group = [c for c in combos if c["dataset"] == dataset]
@@ -779,30 +784,25 @@ def _section_tip_count(out: list[str], combos: list[dict]) -> None:
         for n_tips, n_frames in counts.items():
             buckets[min(n_tips, MAX_TIP_BUCKET)] += n_frames
         cells = [f"`{dataset}`", _int(p["n_frames"]), _int(p["n_tips"])]
-        for k in range(1, MAX_TIP_BUCKET + 1):
+        for k in range(1, top + 1):
             n = buckets.get(k, 0)
             cells.append(f"{n:,} ({100.0 * n / p['n_frames']:.1f} %)")
         cells.append(_num(p["multi_tip_pct"], 1, " %"))
         rows.append(cells)
-    out += _table(["데이터셋", "도구 보유 프레임", "GT 팁"]
-                  + [f"팁 {k}개" if k < MAX_TIP_BUCKET else f"팁 {k}개+"
-                     for k in range(1, MAX_TIP_BUCKET + 1)]
-                  + ["다중 도구 프레임의 팁 비중"],
-                  rows, "lrr" + "r" * MAX_TIP_BUCKET + "r")
+    out += _table(["데이터셋", "도구 보유 프레임", "GT 팁"] + labels + ["다중 도구 프레임의 팁 비중"],
+                  rows, "lrr" + "r" * top + "r")
 
     out += ["**팁 수별 지표** (Miss율 % / Hit@10 % / 평균 거리 px / 중앙값 거리 px)", ""]
     rows = []
     for c in combos:
         cells = [f"`{c['label']}`"]
-        for k in range(1, MAX_TIP_BUCKET + 1):
+        for k in range(1, top + 1):
             g = c["per_tip"]["by_tip_count"].get(k)
             cells.append("-" if not g else
                          f"{g['miss_pct']:.2f} / {g['hit_pct'][10]:.1f} / "
                          f"{g['mean']:.1f} / {g['median']:.1f}")
         rows.append(cells)
-    out += _table(["조합"] + [f"팁 {k}개" if k < MAX_TIP_BUCKET else f"팁 {k}개+"
-                             for k in range(1, MAX_TIP_BUCKET + 1)],
-                  rows, "l" + "r" * MAX_TIP_BUCKET)
+    out += _table(["조합"] + labels, rows, "l" + "r" * top)
     out += ["---", ""]
 
 
