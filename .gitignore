@@ -16,3 +16,4 @@ wheels/
 /.claude
 .ipynb_checkpoints
 temp.sh
+*.pdf
