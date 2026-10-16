@@ -14,8 +14,9 @@ train-model / eval-model / compare-speed write:
       speed-comparison.json  forward/wall time and parameter count per model
 
 The figures summary.json does not carry -- error-distance histograms, frame-level
-detection failures, per-tool-count performance, shared-peak (under-detection)
-analysis and the systematic coordinate offset -- are recomputed here from
+detection failures, per-tool-count performance and Hungarian success rate,
+shared-peak (under-detection) analysis and the systematic coordinate offset --
+are recomputed here from
 per_tip.csv, so the report never has to quote a number that cannot be
 regenerated from the files on disk.
 
@@ -132,6 +133,10 @@ def _analyse_per_tip(path: str) -> dict | None:
                 "gt":     (int(r["gt_x"]), int(r["gt_y"])),
                 "pred":   None if missed else (int(r["pred_x"]), int(r["pred_y"])),
                 "dist":   None if missed else float(r["dist_px"]),
+                # One-to-one assignment per cap; absent in per_tip.csv files
+                # written before eval-model.py recorded it.
+                "hungarian": {rad: r[f"hungarian_{rad}px"] == "assigned"
+                              for rad in HIT_RADII if f"hungarian_{rad}px" in r},
             }
             frames[r["frame"]].append(tip)
             sessions[r["session"]].append(tip)
@@ -228,6 +233,12 @@ def _tip_group_stats(tips: list[dict]) -> dict:
         "median":   float(np.median(d)) if len(d) else None,
         "p90":      float(np.percentile(d, 90)) if len(d) else None,
         "hit_pct":  {r: 100.0 * np.count_nonzero(d <= r) / n for r in HIT_RADII} if n else {},
+        # Hungarian recall = share of GT tips that received a one-to-one
+        # assignment within the cap (the "success rate" of final-report §6.7.5).
+        "hungarian_pct": ({r: 100.0 * sum(t["hungarian"][r] for t in tips) / n
+                           for r in HIT_RADII}
+                          if n and all(len(t["hungarian"]) == len(HIT_RADII) for t in tips)
+                          else {}),
     }
 
 
@@ -803,7 +814,34 @@ def _section_tip_count(out: list[str], combos: list[dict]) -> None:
                          f"{g['mean']:.1f} / {g['median']:.1f}")
         rows.append(cells)
     out += _table(["조합"] + labels, rows, "l" + "r" * top)
-    out += ["---", ""]
+
+    out += [
+        "**팁 수별 탐지 성공률** (헝가리안 recall, 상한 10 / 20 / 50 px, %)",
+        "",
+        "GT 팁이 거리 상한 안에서 헝가리안 일대일 배정을 받으면 탐지 성공으로 본다. "
+        "성공률은 recall 계열 지표라 헛피크(FP)는 반영하지 않는다. "
+        f"`팁 1〜3개 전체` 열은 팁 {MAX_TIP_BUCKET}개 이상 구간을 뺀 50 px 성공률이다.",
+        "",
+    ]
+    rows = []
+    for c in combos:
+        groups = c["per_tip"]["by_tip_count"]
+        cells = [f"`{c['label']}`"]
+        for k in range(1, top + 1):
+            g = groups.get(k)
+            cells.append("-" if not g or not g["hungarian_pct"] else
+                         " / ".join(f"{g['hungarian_pct'][r]:.1f}" for r in HIT_RADII))
+        core = [groups[k] for k in range(1, MAX_TIP_BUCKET) if k in groups]
+        if core and all(g["hungarian_pct"] for g in core):
+            n = sum(g["n_tips"] for g in core)
+            cells.append(_num(sum(g["hungarian_pct"][50] * g["n_tips"] for g in core) / n, 1))
+        else:
+            cells.append("-")
+        rows.append(cells)
+    out += _table(["조합"] + labels + [f"팁 1〜{MAX_TIP_BUCKET - 1}개 전체 (50 px)"],
+                  rows, "l" + "r" * (top + 1))
+    out += ["- `-`는 `per_tip.csv`에 `hungarian_*` 열이 없는 결과다. 현재 `eval-model.py`로 "
+            "다시 평가하면 생긴다.", "", "---", ""]
 
 
 def _section_shared_peaks(out: list[str], combos: list[dict]) -> None:

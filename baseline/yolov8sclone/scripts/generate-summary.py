@@ -13,8 +13,9 @@ train-model / eval-model write:
                           prediction, its score, distance, whether it was missed)
 
 The figures summary.json does not carry -- error-distance histograms, frame-level
-detection failures, miss rate by tool count, the under-detection share of the
-long tail, the confidence distribution and per-session spread -- are recomputed
+detection failures, miss rate and Hungarian success rate by tool count, the
+under-detection share of the long tail, the confidence distribution and
+per-session spread -- are recomputed
 here from per_tip.csv, so the report never has to quote a number that cannot be
 regenerated from the files on disk.
 
@@ -124,6 +125,22 @@ def analyse_per_tip(path: str) -> dict | None:
         bucket[0] += len(tips)
         bucket[1] += sum(1 for t in tips if t["missed"] == "1")
 
+    # Hungarian success rate by tool count, as the root final-report §6.7.5
+    # reports it. Needs the hungarian_* columns eval-model writes; an older
+    # per_tip.csv without them leaves this None.
+    caps = [c for c in ("10px", "20px", "50px") if f"hungarian_{c}" in rows[0]]
+    success_by_count = None
+    if caps:
+        success_by_count = {}
+        for tips in frames.values():
+            key = min(len(tips), 4)
+            bucket = success_by_count.setdefault(
+                key, {"frames": 0, "n_gt": 0, **{c: 0 for c in caps}})
+            bucket["frames"] += 1
+            bucket["n_gt"] += len(tips)
+            for cap in caps:
+                bucket[cap] += sum(1 for t in tips if t[f"hungarian_{cap}"] == "assigned")
+
     # how much of the long tail is under-detection rather than mislocation?
     tail = shared = 0
     for tips in frames.values():
@@ -159,6 +176,7 @@ def analyse_per_tip(path: str) -> dict | None:
         "frames_without_prediction": sum(
             1 for tips in frames.values() if all(t["missed"] == "1" for t in tips)),
         "by_tool_count": by_count,
+        "success_by_tool_count": success_by_count,
         "tail_count": tail,
         "tail_shared": shared,
         "scores": percentiles(scores),
@@ -501,6 +519,45 @@ def section_frames(out: list[str], records: list[dict]) -> None:
                          f"{100 * bucket[1] / bucket[0]:.2f} % ({bucket[0]:,} GT)")
         rows.append([label] + cells)
     out += table(headers, rows, "l" + "r" * len(usable))
+
+    out += ["### 프레임 내 도구 수별 탐지 성공률 (Hungarian recall)", ""]
+    usable = [r for r in usable if r["per_tip"]["success_by_tool_count"]]
+    if not usable:
+        out += ["`per_tip.csv`에 `hungarian_*` 열이 없어 계산할 수 없다. "
+                "현재 `eval-model`로 다시 평가해야 한다.", ""]
+        return
+    out += ["GT 팁이 거리 상한 안에서 Hungarian 배정을 받으면 탐지 성공으로 본다",
+            "(루트 `docs/final-report.md` §6.7.5와 같은 정의). 성공률 = 배정된 GT 팁 / GT 팁이며,",
+            "헛예측(FP)은 반영하지 않는다. 도구 4개 이상 구간은 가짜 인스턴스 라벨이 많아 참고값이고,",
+            "`도구 1〜3개 전체` 열에서 뺀다.", ""]
+
+    labels = {1: "도구 1개", 2: "도구 2개", 3: "도구 3개", 4: "도구 4개 이상 (참고)"}
+    rows = []
+    for record in usable:
+        buckets = record["per_tip"]["success_by_tool_count"]
+        rows.append([f"`{record['dataset']}`"] +
+                    [("—" if key not in buckets else
+                      f"{integer(buckets[key]['frames'])} / {integer(buckets[key]['n_gt'])}")
+                     for key in labels])
+    out += table(["데이터셋"] + [f"{v} 프레임 / GT 팁" for v in labels.values()],
+                 rows, "l" + "r" * len(labels))
+
+    rows = []
+    for record in usable:
+        buckets = record["per_tip"]["success_by_tool_count"]
+        caps = [c for c in ("10px", "20px", "50px") if c in next(iter(buckets.values()))]
+        cells = []
+        for key in labels:
+            bucket = buckets.get(key)
+            cells.append("—" if not bucket else " / ".join(
+                f"{100 * bucket[c] / bucket['n_gt']:.1f}" for c in caps))
+        core = [buckets[k] for k in (1, 2, 3) if k in buckets]
+        n_gt = sum(b["n_gt"] for b in core)
+        cells.append("—" if not n_gt or "50px" not in caps else
+                     f"{100 * sum(b['50px'] for b in core) / n_gt:.1f}")
+        rows.append([f"`{record['dataset']}`"] + cells)
+    out += table(["데이터셋"] + [f"{v} (10 / 20 / 50 px, %)" for v in labels.values()] +
+                 ["도구 1〜3개 전체 (50 px, %)"], rows, "l" + "r" * (len(labels) + 1))
 
 
 def section_confidence(out: list[str], records: list[dict]) -> None:

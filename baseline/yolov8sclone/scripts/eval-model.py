@@ -18,7 +18,8 @@ Outputs, under baseline/yolov8sclone/data/results/<dataset>/<split>/ by default:
 
     summary.json   all metrics plus the run parameters
     per_tip.csv    one row per ground-truth tip (coordinates, nearest
-                   prediction, distance, whether it was missed)
+                   prediction, distance, whether it was missed, and
+                   whether the Hungarian assignment at each cap matched it)
 
 Usage:
     ./baseline/yolov8sclone/run eval-model --dataset cholec80
@@ -143,8 +144,13 @@ def main():
         predicted_tips = [((box[0] + box[2]) / 2, (box[1] + box[3]) / 2) for box in tip_boxes]
         scores = [float(box[4]) for box in tip_boxes]
 
-        tip_eval.add(gt_tips, predicted_tips)
-        for gx, gy in gt_tips:
+        assigned = tip_eval.add(gt_tips, predicted_tips)
+        for gt_index, (gx, gy) in enumerate(gt_tips):
+            # Same column names and values as the root project's per_tip.csv,
+            # so success rates by tool count can be recomputed from this file.
+            hungarian = {f"hungarian_{int(cap)}px":
+                         "assigned" if gt_index in matched else "unassigned"
+                         for cap, matched in assigned.items()}
             if predicted_tips:
                 distances = [float(np.hypot(gx - px, gy - py)) for px, py in predicted_tips]
                 nearest = int(np.argmin(distances))
@@ -153,12 +159,13 @@ def main():
                                      "pred_x": round(predicted_tips[nearest][0], 2),
                                      "pred_y": round(predicted_tips[nearest][1], 2),
                                      "score": round(scores[nearest], 4),
-                                     "dist_px": round(distances[nearest], 2), "missed": 0})
+                                     "dist_px": round(distances[nearest], 2), "missed": 0,
+                                     **hungarian})
             else:
                 per_tip_rows.append({"frame": frame_name, "session": session,
                                      "gt_x": round(gx, 2), "gt_y": round(gy, 2),
                                      "pred_x": "", "pred_y": "", "score": "",
-                                     "dist_px": "", "missed": 1})
+                                     "dist_px": "", "missed": 1, **hungarian})
 
     detection_metrics = detection_eval.compute()
     tip_metrics = tip_eval.compute()
@@ -194,7 +201,8 @@ def main():
     with open(os.path.join(output_dir, "per_tip.csv"), "w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=["frame", "session", "gt_x", "gt_y",
                                                     "pred_x", "pred_y", "score",
-                                                    "dist_px", "missed"])
+                                                    "dist_px", "missed"] +
+                                [f"hungarian_{int(cap)}px" for cap in tip_eval.caps])
         writer.writeheader()
         writer.writerows(per_tip_rows)
 

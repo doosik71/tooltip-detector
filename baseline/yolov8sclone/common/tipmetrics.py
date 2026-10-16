@@ -66,7 +66,9 @@ class TipEvaluator:
         self._hits = {cap: 0 for cap in caps}
         self._hungarian = {cap: {"tp": 0, "fp": 0, "fn": 0, "distances": []} for cap in caps}
 
-    def add(self, gt_tips, predicted_tips) -> None:
+    def add(self, gt_tips, predicted_tips) -> dict[float, set[int]]:
+        """Score one frame; return, per cap, the indices of the GT tips the
+        Hungarian assignment matched, so callers can record them per tip."""
         gt = list(gt_tips)
         pred = list(predicted_tips)
         self._n_gt += len(gt)
@@ -81,6 +83,7 @@ class TipEvaluator:
                     if distance <= cap:
                         self._hits[cap] += 1
 
+        assigned = {}
         for cap in self.caps:
             matches = hungarian_match(gt, pred, cap)
             bucket = self._hungarian[cap]
@@ -88,6 +91,8 @@ class TipEvaluator:
             bucket["fn"] += len(gt) - len(matches)
             bucket["fp"] += len(pred) - len(matches)
             bucket["distances"].extend(distance for _, _, distance in matches)
+            assigned[cap] = {gt_index for gt_index, _, _ in matches}
+        return assigned
 
     def compute(self) -> dict:
         distances = np.asarray(self._distances, dtype=float)
