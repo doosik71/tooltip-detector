@@ -165,12 +165,20 @@ tooltip-detector/
 
 스플릿 구성:
 
-| 데이터셋   | train          | val           | test          | 팁 어노테이션 |
-| ---------- | -------------- | ------------- | ------------- | ------------: |
-| `erop`     | 108,424 (60 %) | 36,140 (20 %) | 36,142 (20 %) |       252,977 |
-| `cholec80` | 110,747 (60 %) | 36,901 (20 %) | 36,930 (20 %) |       315,204 |
+| 데이터셋   | 분할 단위 | train            | val             | test             | 팁 어노테이션 |
+| ---------- | --------- | ---------------- | --------------- | ---------------- | ------------: |
+| `erop`     | 프레임    | 108,424 (60.0 %) | 36,140 (20.0 %) | 36,142 (20.0 %)  |       252,977 |
+| `cholec80` | 영상      | 71,032 (38.5 %)  | 15,312 (8.3 %)  | 98,234 (53.2 %)  |       315,204 |
 
-두 데이터셋 모두 영상(세션)마다 독립적으로 60:20:20으로 나누되, 영상 내부는 프레임 단위 무작위 셔플로 분할된다. 따라서 같은 영상의 인접 프레임이 train과 test에 동시에 존재할 수 있다(시간적 누수). 각 프레임마다 RGB 이미지, 이진 분할 마스크, 도구 팁 좌표 어노테이션이 제공된다.
+**두 데이터셋의 분할 방식이 다르다.**
+
+`erop`은 **프레임 단위** 분할이다. 5개 세션 각각을 내부에서 무작위로 셔플해 60:20:20으로 나누므로 5개 세션 전부가 세 스플릿 모두에 등장한다. 따라서 같은 세션의 인접 프레임이 train과 test에 동시에 존재한다(시간적 누수). `erop`의 test 성능은 미지의 새 영상에 대한 일반화 성능보다 낙관적으로 나온다.
+
+`cholec80`은 **영상 단위** 분할이다. `video01`〜`32`를 train, `video33`〜`40`을 val, `video41`〜`80`을 test에 통째로 배정한다(편수 40:10:50). 한 영상이 두 스플릿에 걸치지 않으므로 시간적 누수가 없고, test 성능이 곧 일반화 성능이다. 뒤 40편을 평가에 쓰는 Cholec80의 통상적인 분할 규약을 따른 것이라 **test가 train보다 크다.** 영상 길이가 740〜5,994 프레임으로 편차가 커서 프레임 비율(38.5 : 8.3 : 53.2)은 편수 비율(40:10:50)과 정확히 일치하지 않는다. 분할 규칙은 `data/dataset/cholec80/split-manifest.json`에 기록되어 있다.
+
+이 차이 때문에 두 데이터셋의 test 수치를 같은 척도로 비교할 수 없다. 아래 [평가 결과](#평가-결과)의 데이터셋 축은 데이터셋 난이도만이 아니라 분할 방식 차이까지 포함한다.
+
+각 프레임마다 RGB 이미지, 이진 분할 마스크, 도구 팁 좌표 어노테이션이 제공된다.
 
 데이터셋 포맷 상세 및 데이터셋별 통계: [docs/dataset-guide.md](docs/dataset-guide.md)
 
@@ -341,10 +349,10 @@ run.bat tooltip-tracker data\models\cholec80\gaussian-tip\monai\best.pt   # Wind
 
 **인자는 체크포인트 경로 하나뿐이다.** 경로가 놓인 디렉터리 규칙이 데이터셋·타겟 방식·모델 종류를 이미 말해 주므로 따로 지정할 것이 없다. 인자 없이 실행하면 디스크에 있는 모델 목록을 출력하고 종료한다.
 
-| 경로 규칙                                                | 모델 종류                                                          |
-| -------------------------------------------------------- | ------------------------------------------------------------------ |
-| `data/models/<dataset>/<target-mode>/<model-type>/best.pt` | 이 프로젝트의 히트맵 모델. 히트맵의 피크가 팁이다                  |
-| `baseline/<name>/data/model/<dataset>/<label-set>/model.pt` | 재구현 베이스라인 탐지기. 예측한 `tip` 박스의 중심이 팁이다        |
+| 경로 규칙                                                   | 모델 종류                                                   |
+| ----------------------------------------------------------- | ----------------------------------------------------------- |
+| `data/models/<dataset>/<target-mode>/<model-type>/best.pt`  | 이 프로젝트의 히트맵 모델. 히트맵의 피크가 팁이다           |
+| `baseline/<name>/data/model/<dataset>/<label-set>/model.pt` | 재구현 베이스라인 탐지기. 예측한 `tip` 박스의 중심이 팁이다 |
 
 `<label-set>`은 학습 모드다(`tooltip` = `tool`·`tip` 2클래스, `tiponly` = `tip` 1클래스). 트래커는 팁 클래스를 인덱스가 아니라 이름으로 찾으므로 두 모드의 체크포인트를 모두 그대로 연다.
 
@@ -449,7 +457,7 @@ run eval-model  --dataset cholec80 --device cuda:1
 | [docs/final-report.md](docs/final-report.md)                     | 실험결과보고서 — 8개 조합 전수 실험의 설계·결과·분석·한계                 |
 | [docs/baseline-report.md](docs/baseline-report.md)               | 베이스라인 실험결과보고서 — CLAD-Net·YOLOv8s·YOLO26 비교와 참조 구현 대조 |
 | [docs/results-summary.md](docs/results-summary.md)               | 실험 수치 요약 — 보고서 작성용 기초 자료 (자동 생성)                      |
-| [docs/improvement-plan.md](docs/improvement-plan.md)             | 목표 성능(`tip` AP@0.5 ≥ 0.90) 달성을 위한 격차 분해와 개선 우선순위       |
+| [docs/improvement-plan.md](docs/improvement-plan.md)             | 목표 성능(`tip` AP@0.5 ≥ 0.90) 달성을 위한 격차 분해와 개선 우선순위      |
 | [docs/parameter-optimization.md](docs/parameter-optimization.md) | 후처리 파라미터 최적화(2단계) — threshold × NMS 격자 탐색, watershed 비교 |
 | [docs/model-monai.md](docs/model-monai.md)                       | EfficientNet-B2 + U-Net 풀 모델 아키텍처 상세 설명                        |
 | [docs/model-monai_mini.md](docs/model-monai_mini.md)             | EfficientNet-B2 + U-Net 경량 모델 아키텍처 상세 설명                      |
