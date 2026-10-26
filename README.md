@@ -426,6 +426,7 @@ run eval-model  --dataset cholec80 --device cuda:1
 | [docs/final-report.md](docs/final-report.md)                     | 실험결과보고서 — 8개 조합 전수 실험의 설계·결과·분석·한계                 |
 | [docs/baseline-report.md](docs/baseline-report.md)               | 베이스라인 실험결과보고서 — CLAD-Net·YOLOv8s·YOLO26 비교와 참조 구현 대조 |
 | [docs/results-summary.md](docs/results-summary.md)               | 실험 수치 요약 — 보고서 작성용 기초 자료 (자동 생성)                      |
+| [docs/improvement-plan.md](docs/improvement-plan.md)             | 목표 성능(`tip` AP@0.5 ≥ 0.90) 달성을 위한 격차 분해와 개선 우선순위       |
 | [docs/parameter-optimization.md](docs/parameter-optimization.md) | 후처리 파라미터 최적화(2단계) — threshold × NMS 격자 탐색, watershed 비교 |
 | [docs/model-monai.md](docs/model-monai.md)                       | EfficientNet-B2 + U-Net 풀 모델 아키텍처 상세 설명                        |
 | [docs/model-monai_mini.md](docs/model-monai_mini.md)             | EfficientNet-B2 + U-Net 경량 모델 아키텍처 상세 설명                      |
