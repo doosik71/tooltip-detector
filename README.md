@@ -89,6 +89,28 @@ git submodule update --init --recursive
 uv sync
 ```
 
+### 데이터셋 링크
+
+`data/dataset`은 서브모듈 쪽 데이터셋을 가리키는 **심볼릭 링크**다. `.gitignore`에서 `data/`를 제외하므로 클론해도 생기지 않는다. 한 번 만들어 두면 된다.
+
+```bash
+# Linux / macOS
+mkdir -p data
+ln -s ../tooltip-annotator/data/dataset data/dataset
+```
+
+```bat
+REM Windows (관리자 권한 또는 개발자 모드 필요)
+mkdir data
+mklink /D data\dataset ..\tooltip-annotator\data\dataset
+```
+
+`data/models`와 `data/results`는 학습·평가 스크립트가 알아서 만든다.
+
+학습·평가·GUI는 모두 이 링크를 통해 `tooltip-annotator/data/dataset/<name>/{images,segmentation,annotation}`을 읽는다. 데이터셋 자체를 만드는 절차는 [tooltip-annotator/README.md](./tooltip-annotator/README.md)를 따른다.
+
+사람이 직접 보정한 어노테이션(`annotation-manual`)은 데이터셋별 독립 저장소로 관리되며, 이 경로 아래에 따로 클론해야 한다. 자세한 내용은 [tooltip-annotator/docs/annotation_manual.md](./tooltip-annotator/docs/annotation_manual.md)를 참고한다.
+
 ## 디렉터리 구조
 
 ```text
@@ -124,7 +146,8 @@ tooltip-detector/
 ├── images/
 │   └── tooltip-detector.png      # Tooltip Detector GUI 스크린샷
 ├── data/
-│   ├── dataset/<dataset-name>/            # 학습 데이터 (annotation / images / segmentation), 외부 마운트·read-only
+│   ├── dataset -> ../tooltip-annotator/data/dataset        # 심볼릭 링크 (직접 만들어야 함)
+│   │   └── <dataset-name>/                # 학습 데이터 (images / segmentation / annotation)
 │   ├── models/<dataset-name>/<target-mode>/<model-type>/   # 학습된 모델 가중치 (best.pt, last.pt)
 │   └── results/<dataset-name>/<target-mode>/<model-type>/  # 평가 결과
 └── temp/

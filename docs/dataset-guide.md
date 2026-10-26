@@ -79,6 +79,7 @@ data/dataset/<dataset-name>/
   "image":  "doctor_250620_084707_00000030.png",
   "width":  736,
   "height": 480,
+  "source": "auto",
   "annotations": [
     {
       "bbox": { "x": 63, "y": 136, "width": 92, "height": 51 },
@@ -99,8 +100,12 @@ data/dataset/<dataset-name>/
 | `annotations`        | 프레임 내 수술도구 목록 (없으면 빈 배열 `[]`)                                |
 | `annotations[].bbox` | 수술도구의 경계 상자 — 좌상단 좌표 `(x, y)` 와 `width`, `height` (픽셀 단위) |
 | `annotations[].tip`  | 수술도구 끝부분(팁)의 픽셀 좌표 `(x, y)`                                     |
+| `source`             | 레이블의 출처 — `auto`(마스크에서 자동 생성) 또는 `manual`(사람이 보정)      |
+| `edited_at`          | `source`가 `manual`인 경우에만 존재하는 수정 시각 (ISO 8601)                 |
 
 좌표계: 좌상단이 원점 `(0, 0)`, x축이 오른쪽, y축이 아래쪽.
+
+`source`와 `edited_at`은 어노테이션의 출처를 구분하기 위한 메타데이터이며 학습에는 쓰이지 않는다. 이 필드가 도입되기 전에 생성된 파일에는 `source` 키가 없고, 그 경우는 `auto`로 간주한다. `source`가 `manual`인 레이블의 원본은 `tooltip-annotator`의 `data/dataset/<name>/annotation-manual/`에 따로 보관되며, 어노테이션 자동 생성을 다시 실행해도 덮어쓰이지 않는다. 자세한 내용은 [tooltip-annotator/docs/generate_annotation.md](../tooltip-annotator/docs/generate_annotation.md)를 참고한다.
 
 ### annotation ↔ segmentation 대응
 
