@@ -12,14 +12,18 @@ costs a lot on both sides, so this GUI runs the two together:
      presses Update (Ctrl+U / F4) to start from the detector's prediction.
      The label and the prediction are overlaid in different colours.
   3. Save (Ctrl+S / F2) writes the label to annotation-manual/ and mirrors it
-     into annotation/, exactly like `annotation_editor`. The model then trains
-     in the background on that frame -- plus a few replayed frames from
+     into annotation/, exactly like `annotation_editor`, and opens the next
+     frame of the list at once, in the order the list already has. The model
+     trains in the background on that frame -- plus a few replayed frames from
      annotation-manual/ so it does not forget everything else -- until its
      prediction on the saved frame scores `--target-score` or it has taken
      `--max-steps` steps, and overwrites the checkpoint.
   4. After training, the frames in the list and `--new-files` (4) new ones
      are re-scored with the updated model, so the list grows by that many per
-     training; past `--max-files` (100) only the lowest-scoring are kept.
+     training; past `--max-files` (100) only the lowest-scoring are kept. The
+     refreshed list keeps the frame being edited open, so it may no longer be
+     first: the next frame to edit comes from the previous ranking, which is
+     the price of never waiting for the model.
 
 The model is the YOLOv8s clone baseline (`baseline/yolov8sclone`), trained with
 the `tooltip` label set: it predicts `tool` boxes and `tip` boxes, and the
@@ -99,11 +103,6 @@ MIN_BOX_SIZE = 4
 # Pointer shape and fill colour for the tip or resize handle under the pointer.
 HANDLE_CURSOR = "crosshair"
 HANDLE_HOVER_FILL = "#ffffff"
-# From Save until the list is re-ranked the image is dimmed to this brightness,
-# a message says what the model is doing, and input is ignored, so a slow save
-# is never mistaken for a missed key press and saved twice.
-BUSY_BRIGHTNESS = 0.4
-BUSY_CURSOR = "watch"
 
 # The label keeps annotation_editor's colours (cyan box, red tip); the model's
 # prediction is drawn dashed in magenta beneath it.
@@ -120,6 +119,10 @@ MANUAL_ITEM_BACKGROUND = "#ffe9a8"
 MANUAL_ITEM_FOREGROUND = "#1a1a1a"
 MANUAL_ITEM_SELECT_BACKGROUND = "#e8a33d"
 MANUAL_ITEM_SELECT_FOREGROUND = "#1a1a1a"
+# The frame on screen is shown in sky blue, over the manual colours, so it
+# stays easy to find after a background refresh reorders the list.
+CURRENT_ITEM_BACKGROUND = "#87ceeb"
+CURRENT_ITEM_FOREGROUND = "#1a1a1a"
 
 # The tool number drawn on each bbox, as a multiple of the canvas default font.
 ANNOTATION_LABEL_FONT_SCALE = 2
@@ -579,12 +582,7 @@ class InteractiveTrainer:
         # previous split are recognised and dropped when they arrive.
         self.generation = 0
         self.pending_trains = 0
-        # Set while the re-ranking that follows training is pending: its list
-        # opens on its first frame instead of staying on the current one.
-        self.open_first_on_scores = False
         self.model_ready = False
-        # The message shown over the dimmed image, or None when idle.
-        self.busy_message: str | None = None
 
         self.current_index: int | None = None
         self.current_image_path: Path | None = None
@@ -795,7 +793,6 @@ class InteractiveTrainer:
                     self.model_ready = True
                     self.model_status_var.set(f"Model: {event[1]}")
                 elif kind == "error":
-                    self._set_busy(None)
                     self.model_status_var.set(f"Model error: {event[1]}")
                     messagebox.showerror("Interactive Trainer", event[1])
                 elif kind == "score-progress":
@@ -805,16 +802,11 @@ class InteractiveTrainer:
                     if event[1] == self.generation:
                         self._apply_scores(event[2])
                         self.model_status_var.set(self._idle_status("Scored"))
-                        if self.busy_message is not None:
-                            self._set_busy(None)
                 elif kind == "train-progress":
                     self.model_status_var.set(
                         f"Training on {event[1].name}: step {event[2]} / "
                         f"{self.args.max_steps}, score {event[3]:.3f} "
                         f"(target {self.args.target_score:.2f})")
-                    if self.busy_message is not None:
-                        self._set_busy(f"Training: step {event[2]} / {self.args.max_steps}, "
-                                       f"score {event[3]:.3f}")
                 elif kind == "trained":
                     self._on_trained(*event[1:])
         except queue.Empty:
@@ -828,14 +820,11 @@ class InteractiveTrainer:
         self.pending_trains -= 1
         self.status_var.set(
             f"Trained on {image_path.name}: {steps} steps, score {before:.3f} -> {after:.3f}")
-        # Save is ignored while busy, so one training is pending at most; the
-        # count still guards against re-ranking with a model about to change.
+        # Saves made while the model trains queue more trainings; re-rank once,
+        # after the last, rather than once per training with a model about to
+        # change.
         if self.pending_trains == 0 and self.entries:
-            self.open_first_on_scores = True
-            self._set_busy("Re-ranking the list...")
             self._request_scores(self.args.new_files)
-        elif self.pending_trains == 0:
-            self._set_busy(None)
 
     def _request_scores(self, new_count: int) -> None:
         """Re-score the listed frames plus `new_count` freshly drawn ones."""
@@ -848,7 +837,6 @@ class InteractiveTrainer:
                  for path in listed + drawn]
         if not items:
             self.model_status_var.set("No unchecked frames left in this split.")
-            self._set_busy(None)
             return
         self.model_status_var.set(f"Scoring {len(items)} frames...")
         self.worker.jobs.put(("score", self.generation, items))
@@ -856,16 +844,13 @@ class InteractiveTrainer:
     def _apply_scores(self, results: list[dict]) -> None:
         """List the frames worst first, at most the lowest `--max-files` of them.
 
-        After training the list opens on its first (worst) frame. The one
-        exception is a frame with unsaved edits: it stays on screen, and stays
-        listed even when it no longer ranks, so a refresh never pulls the
-        frame being edited out from under the user.
+        This arrives in the background while the user works, so the frame on
+        screen stays open, and stays listed even when it no longer ranks; only
+        the very first list of a split opens its worst frame.
         """
         ranked = sorted(results, key=lambda result: result["score"])
         kept = ranked[:self.args.max_files]
-        open_first = self.open_first_on_scores and not self.dirty
-        self.open_first_on_scores = False
-        current = None if open_first else self.current_image_path
+        current = self.current_image_path
         if current is not None and all(result["image"] != current for result in kept):
             kept += [result for result in ranked if result["image"] == current]
             kept.sort(key=lambda result: result["score"])
@@ -876,10 +861,10 @@ class InteractiveTrainer:
 
         self.suppress_listbox_event = True
         self.image_listbox.delete(0, tk.END)
-        for index, entry in enumerate(self.entries):
+        for entry in self.entries:
             self.image_listbox.insert(tk.END, self._listbox_label(entry))
-            self._apply_listbox_style(index, entry["image"].stem in self.manual_stems)
         self.suppress_listbox_event = False
+        self._style_listbox_rows()
 
         if current is None:
             if self.entries:
@@ -897,6 +882,19 @@ class InteractiveTrainer:
     def _listbox_label(self, entry: dict) -> str:
         marker = "* " if entry["image"].stem in self.manual_stems else "  "
         return f"{marker}{entry['score']:.3f}  {entry['image'].name}"
+
+    def _style_listbox_rows(self) -> None:
+        """Colour every row: sky blue for the frame on screen, yellow for a
+        hand-annotated one, default otherwise. The list holds at most
+        `--max-files` rows, so repainting all of them is cheap."""
+        for index, entry in enumerate(self.entries):
+            if entry["image"] == self.current_image_path:
+                self.image_listbox.itemconfig(
+                    index, background=CURRENT_ITEM_BACKGROUND, foreground=CURRENT_ITEM_FOREGROUND,
+                    selectbackground=CURRENT_ITEM_BACKGROUND,
+                    selectforeground=CURRENT_ITEM_FOREGROUND)
+            else:
+                self._apply_listbox_style(index, entry["image"].stem in self.manual_stems)
 
     def _apply_listbox_style(self, index: int, is_manual: bool) -> None:
         if is_manual:
@@ -990,7 +988,7 @@ class InteractiveTrainer:
         new_index = int(selection[0])
         if new_index == self.current_index:
             return
-        if self.busy_message is not None or not self._confirm_leave_current_image():
+        if not self._confirm_leave_current_image():
             self._restore_listbox_selection()
             return
         self._open_image_at_index(new_index)
@@ -1007,6 +1005,7 @@ class InteractiveTrainer:
         self.drag_state = None
         self.mode = "select"
         self.dirty = False
+        self._style_listbox_rows()
         self._update_images_label()
         self._update_buttons()
         self._update_status()
@@ -1042,9 +1041,11 @@ class InteractiveTrainer:
 
         Save stays available on an unchanged label too: confirming that the
         label is right and the model wrong is as useful a lesson as a fix.
+
+        Nothing here waits for the model: the next frame of the list, in its
+        current order, opens at once, and the training and the re-ranked list
+        that follows it arrive in the background.
         """
-        if self.busy_message is not None:
-            return
         if self.current_image_path is None:
             return
         annotations = [{"bbox": dict(item["bbox"]), "tip": dict(item["tip"])}
@@ -1064,7 +1065,6 @@ class InteractiveTrainer:
             entry = self.entries[self.current_index]
             self.image_listbox.delete(self.current_index)
             self.image_listbox.insert(self.current_index, self._listbox_label(entry))
-            self._apply_listbox_style(self.current_index, True)
             self._select_listbox_row(self.current_index)
         self.dirty = False
         self._update_buttons()
@@ -1075,12 +1075,19 @@ class InteractiveTrainer:
         replay = [pair for pair in replay if pair[0].exists()]
         self.pending_trains += 1
         self.worker.jobs.put(("train", self.current_image_path, annotations, replay))
-        self._update_status(f"Saved. Training queued ({self.pending_trains} pending).")
-        self._set_busy("Training...")
+
+        saved_name = self.current_image_path.name
+        if self.current_index is not None and self.current_index + 1 < len(self.entries):
+            self._select_listbox_row(self.current_index + 1)
+            self._open_image_at_index(self.current_index + 1)
+            ending = ""
+        else:
+            self._style_listbox_rows()
+            ending = " This is the last frame in the list."
+        self._update_status(f"Saved {saved_name}; training queued "
+                            f"({self.pending_trains} pending).{ending}")
 
     def _reload_current_annotation(self) -> None:
-        if self.busy_message is not None:
-            return
         if self.current_image_path is None:
             return
         self.current_annotations = self._load_annotation(self.current_image_path)
@@ -1095,8 +1102,6 @@ class InteractiveTrainer:
 
     def _update_from_prediction(self) -> None:
         """Replace the label being edited with the model's prediction (unsaved)."""
-        if self.busy_message is not None:
-            return
         entry = self._current_entry()
         if entry is None:
             return
@@ -1180,8 +1185,6 @@ class InteractiveTrainer:
         entry = self._current_entry()
         if self.show_prediction_var.get() and entry is not None and entry["prediction"]:
             resized = self._blend_predictions(resized, entry["prediction"])
-        if self.busy_message is not None:
-            resized = cv2.convertScaleAbs(resized, alpha=BUSY_BRIGHTNESS)
         self.photo_image = self._rgb_to_photoimage(resized)
         self.canvas.create_image(self.canvas_offset_x, self.canvas_offset_y,
                                  anchor=tk.NW, image=self.photo_image)
@@ -1198,20 +1201,6 @@ class InteractiveTrainer:
             cx1, cy1 = self._image_to_canvas(x1, y1)
             cx2, cy2 = self._image_to_canvas(x2, y2)
             self.canvas.create_rectangle(cx1, cy1, cx2, cy2, outline="#f8e45c", width=2, dash=(6, 3))
-
-        if self.busy_message is not None:
-            self.canvas.create_text(canvas_width / 2, canvas_height / 2,
-                                    text=f"Saved. {self.busy_message}", fill="#ffffff",
-                                    font=("TkDefaultFont", 20, "bold"))
-
-    def _set_busy(self, message: str | None) -> None:
-        """Enter (message) or leave (None) the busy state that follows a Save."""
-        self.busy_message = message
-        cursor = BUSY_CURSOR if message is not None else ""
-        self.root.configure(cursor=cursor)
-        self.canvas.configure(cursor=cursor)
-        self._update_buttons()
-        self._render_scene()
 
     def _blend_predictions(self, display_rgb: np.ndarray, predictions: list[dict]) -> np.ndarray:
         """Predicted tools -- dashed box, confidence, diamond tip -- drawn into
@@ -1321,8 +1310,6 @@ class InteractiveTrainer:
     # ── Editing (as in annotation_editor) ────────────────────────────────
 
     def _enter_add_mode(self) -> None:
-        if self.busy_message is not None:
-            return
         if self.current_image_path is None:
             return
         self.mode = "add"
@@ -1333,8 +1320,6 @@ class InteractiveTrainer:
         self._render_scene()
 
     def _delete_selected(self) -> None:
-        if self.busy_message is not None:
-            return
         if self.selected_annotation_index is None:
             return
         del self.current_annotations[self.selected_annotation_index]
@@ -1346,8 +1331,6 @@ class InteractiveTrainer:
         self._mark_dirty()
 
     def _navigate_images(self, step: int) -> None:
-        if self.busy_message is not None:
-            return
         if self.current_index is None or not self.entries:
             return
         new_index = self.current_index + step
@@ -1360,8 +1343,6 @@ class InteractiveTrainer:
         self._open_image_at_index(new_index)
 
     def _on_canvas_press(self, event: tk.Event) -> None:
-        if self.busy_message is not None:
-            return
         if self.current_image_rgb is None:
             return
 
@@ -1422,7 +1403,6 @@ class InteractiveTrainer:
             self.pointer_position is None
             or self.current_image_rgb is None
             or self.mode != "select"
-            or self.busy_message is not None
             or not self.show_annotation_var.get()
         ):
             return None
@@ -1587,7 +1567,7 @@ class InteractiveTrainer:
             self._render_scene()
 
     def _update_buttons(self) -> None:
-        has_image = self.current_image_path is not None and self.busy_message is None
+        has_image = self.current_image_path is not None
         self.save_button.configure(state=tk.NORMAL if has_image else tk.DISABLED)
         self.reload_button.configure(state=tk.NORMAL if has_image else tk.DISABLED)
         self.update_button.configure(state=tk.NORMAL if has_image else tk.DISABLED)
@@ -1600,9 +1580,6 @@ class InteractiveTrainer:
             style=ADD_ACTIVE_STYLE if adding else "Add.TButton",
             state=tk.NORMAL if has_image else tk.DISABLED,
         )
-        busy = tk.DISABLED if self.busy_message is not None else "readonly"
-        self.dataset_combobox.configure(state=busy)
-        self.split_combobox.configure(state=busy)
 
     def _update_images_label(self) -> None:
         total = len(self.entries)
