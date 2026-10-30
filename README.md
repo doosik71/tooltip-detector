@@ -133,6 +133,7 @@ tooltip-detector/
 │   ├── generate-summary.py        # data/models·data/results → docs/results-summary.md 생성
 │   ├── tooltip-detector.py        # 탐지 결과 시각화 GUI (이미지/데이터셋)
 │   ├── tooltip-tracker.py         # 동영상 실시간 탐지·추적 GUI
+│   ├── interactive-trainer.py     # 레이블 보정 + 탐지 모델 학습 병행 GUI
 │   └── dataset-browser.py         # 데이터셋 시각화 GUI
 ├── run(.bat)                      # `run <script> [args...]` → scripts/<script>.py 실행
 ├── docs/
@@ -148,6 +149,7 @@ tooltip-detector/
 ├── data/
 │   ├── dataset -> ../tooltip-annotator/data/dataset        # 심볼릭 링크 (직접 만들어야 함)
 │   │   └── <dataset-name>/                # 학습 데이터 (images / segmentation / annotation)
+│   ├── itrain-model/model.pt      # interactive-trainer의 작업용 탐지기 (학습할 때마다 덮어씀)
 │   ├── models/<dataset-name>/<target-mode>/<model-type>/   # 학습된 모델 가중치 (best.pt, last.pt)
 │   └── results/<dataset-name>/<target-mode>/<model-type>/  # 평가 결과
 └── temp/
@@ -367,18 +369,71 @@ run.bat tooltip-tracker data\models\cholec80\gaussian-tip\monai\best.pt   # Wind
 
 상세 설계와 스무딩 로직, 오탐지 판정 규칙: [docs/tooltip-tracker.md](docs/tooltip-tracker.md)
 
+### 7. 레이블 보정과 모델 학습 병행
+
+```bash
+run interactive-trainer --device cuda:1          # Linux / macOS
+run.bat interactive-trainer --device cuda:1      # Windows
+```
+
+데이터셋 레이블은 성능이 낮은 모델로 자동 생성했기 때문에 품질이 낮고, 그 레이블로 학습한 탐지 모델의 성능도 낮다. 레이블 보정과 모델 개선을 따로 진행하면 양쪽 모두 부담이 크므로, 이 GUI는 둘을 한 루프에서 함께 진행한다. 모델의 예측과 현재 레이블이 가장 어긋나는 프레임을 먼저 보여 주고, 사용자가 레이블을 고쳐 저장하면 모델이 그 프레임으로 바로 학습한다. 모델이 나아질수록 예측을 출발점으로 쓸 수 있는 프레임이 늘어나 수작업이 줄어드는 것을 노린다.
+
+모델은 `yolov8sclone` 베이스라인의 `tooltip` 체크포인트(`tool`·`tip` 2클래스)다. 작업용 사본을 `data/itrain-model/model.pt`에 두고 시작하며, 이 파일은 학습할 때마다 덮어쓴다. 다음 실행은 그때까지 학습된 모델에서 이어간다.
+
+```bash
+mkdir -p data/itrain-model
+cp baseline/yolov8sclone/data/model/cholec80/tooltip/model.pt data/itrain-model/model.pt
+```
+
+동작 순서:
+
+1. 선택한 데이터셋·스플릿에서 프레임 32개(`--initial-files`)를 랜덤으로 뽑아 추론하고, 예측과 레이블의 일치 점수를 매긴다. 목록은 점수가 낮은 순으로 정렬되고 첫 프레임이 열린다. `annotation-manual/`에 이미 있는 프레임은 사람이 확인한 것이므로 뽑지 않는다.
+2. annotation_editor와 같은 방식으로 레이블을 고치거나, `Update`로 모델의 예측을 불러와 그것부터 고친다.
+3. `Save`를 누르면 annotation_editor와 똑같이 `annotation-manual/`에 쓰고 `annotation/`에 복사한 뒤, 백그라운드에서 그 프레임으로 학습한다. 다른 장면을 잊지 않도록 매 스텝 배치에 `annotation-manual/`의 프레임 3장(`--replay`)을 함께 넣는다. 저장한 프레임의 점수가 0.9(`--target-score`)에 이르거나 20스텝(`--max-steps`)이 되면 멈추고 체크포인트를 덮어쓴다.
+4. 학습이 끝나면 목록의 프레임 전체와 새로 뽑은 4개(`--new-files`)를 새 모델로 다시 채점해 목록을 갱신하고, 점수가 가장 낮은 프레임을 연다. 저장하지 않은 편집이 있으면 화면은 그대로 둔다. 목록은 학습할 때마다 4개씩 늘어나고, 1,000개(`--max-files`)를 넘으면 점수가 낮은 1,000개만 남긴다.
+
+추론과 학습은 모두 백그라운드 스레드 하나에서 차례로 실행되므로 학습 중에도 다른 프레임을 편집할 수 있다. 연달아 저장하면 학습이 순서대로 쌓이고, 목록 재채점은 마지막 학습이 끝난 뒤 한 번만 한다.
+
+**일치 점수**는 예측과 레이블의 도구를 1:1로 짝지어(Hungarian) 각 쌍의 `0.5 × 박스 IoU + 0.5 × max(0, 1 − 팁 거리 / 32 px)`를 더하고, 예측과 레이블 중 많은 쪽의 도구 수로 나눈 값(0〜1)이다. 도구를 놓치거나 더 찾으면 완전히 틀린 것과 같은 만큼 감점된다. 예측과 레이블이 모두 비어 있으면 1점이므로, 레이블과 모델이 같은 도구를 함께 놓친 프레임은 이 점수로 찾을 수 없다.
+
+| 조작                                                             | 동작                                                                |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `Update` (Ctrl+U, F4)                                            | 편집 중인 레이블을 모델 예측으로 교체 (저장 전)                     |
+| `Save` (Ctrl+S, F2)                                              | 레이블 저장 후 백그라운드 학습 시작. 고치지 않은 레이블도 저장 가능 |
+| `Reload` (F3)                                                    | 파일의 레이블을 다시 읽음                                           |
+| `Add Tool` (Insert, 휠 클릭) / `Delete Tool` (Delete)            | 도구 추가 / 삭제                                                    |
+| `Show Segmentation` / `Annotation` / `Prediction` (F5 / F6 / F7) | 오버레이 표시 전환 (segmentation은 기본 꺼짐)                       |
+| 방향키, 마우스 휠                                                | 목록의 이전 / 다음 프레임                                           |
+
+- 레이블은 하늘색 박스와 빨간 팁(편집 가능)으로, 예측은 50 % 투명한 자홍색 점선 박스와 마름모 팁, 신뢰도로 겹쳐 그린다. 오른쪽 위에 범례가 있다.
+- 목록에서 수작업 어노테이션이 있는 프레임은 annotation_editor처럼 노란 배경과 `*`로 표시한다.
+
+주의할 점:
+
+- val/test 스플릿에서 저장하면 그 데이터로 모델이 학습되므로, 그 스플릿으로 한 평가는 더 이상 공정하지 않다.
+- 학습 종료는 저장한 프레임의 점수로만 판정한다. 다른 장면의 성능은 베이스라인 평가로 따로 확인한다. `--output-dir`를 빼면 베이스라인 자체의 평가 결과를 덮어쓰므로 반드시 지정한다.
+
+  ```bash
+  ./baseline/yolov8sclone/run eval-model --dataset cholec80 --split val \
+      --model "$PWD/data/itrain-model/model.pt" --output-dir "$PWD/data/itrain-model/results/val"
+  ```
+
+- 목록이 커지면 학습 뒤 재채점도 길어진다(1,000개면 20초 안팎). 그동안에도 편집은 할 수 있다.
+- 학습 중에 창을 닫으면 진행 중인 학습만 사라진다. 체크포인트는 임시 파일에 쓴 뒤 교체하므로 마지막으로 끝난 학습 상태로 남는다.
+
 ## 스크립트 요약
 
-| 스크립트               | 설명                     | 주요 인수                                                                                                                             |
-| ---------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `run dashboard`        | 학습·평가 현황 표 GUI    | `--dataset`(선택), `--models-root`, `--results-root`, `--baseline-root`                                                               |
-| `run train-model`      | 모델 학습                | `--dataset`(필수), `--model-type`, `--target-mode`, `--gaussian-sigma`, `--epochs`, `--batch-size`, `--lr`, `--device`, `--no-resume` |
-| `run eval-model`       | 팁 탐지 정확도 평가      | `--dataset`(필수), `--model-type`, `--target-mode`, `--threshold`, `--nms-radius`, `--model`, `--device`                              |
-| `run compare-speed`    | 모델 추론 속도 비교      | `--dataset`(필수), `--model-types`, `--target-mode`, `--num-samples`, `--batch-size`, `--workers`                                     |
-| `run generate-summary` | 실험 수치 요약 문서 생성 | `--models-root`, `--results-root`, `--output`                                                                                         |
-| `run tooltip-detector` | 탐지 결과 시각화 GUI     | `--dataset`(필수), `--model-type`, `--target-mode`, `--model`, `--data-root`                                                          |
-| `run tooltip-tracker`  | 동영상 실시간 추적 GUI   | `<model-path>`(생략 시 목록 출력)                                                                                                     |
-| `run dataset-browser`  | 데이터셋 시각화 GUI      | `--dataset`(필수), `--split`, `--data-root`                                                                                           |
+| 스크립트                  | 설명                             | 주요 인수                                                                                                                                   |
+| ------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run dashboard`           | 학습·평가 현황 표 GUI            | `--dataset`(선택), `--models-root`, `--results-root`, `--baseline-root`                                                                     |
+| `run train-model`         | 모델 학습                        | `--dataset`(필수), `--model-type`, `--target-mode`, `--gaussian-sigma`, `--epochs`, `--batch-size`, `--lr`, `--device`, `--no-resume`       |
+| `run eval-model`          | 팁 탐지 정확도 평가              | `--dataset`(필수), `--model-type`, `--target-mode`, `--threshold`, `--nms-radius`, `--model`, `--device`                                    |
+| `run compare-speed`       | 모델 추론 속도 비교              | `--dataset`(필수), `--model-types`, `--target-mode`, `--num-samples`, `--batch-size`, `--workers`                                           |
+| `run generate-summary`    | 실험 수치 요약 문서 생성         | `--models-root`, `--results-root`, `--output`                                                                                               |
+| `run tooltip-detector`    | 탐지 결과 시각화 GUI             | `--dataset`(필수), `--model-type`, `--target-mode`, `--model`, `--data-root`                                                                |
+| `run tooltip-tracker`     | 동영상 실시간 추적 GUI           | `<model-path>`(생략 시 목록 출력)                                                                                                           |
+| `run interactive-trainer` | 레이블 보정 + 모델 학습 병행 GUI | `--dataset`, `--split`, `--model`, `--device`, `--initial-files`, `--new-files`, `--max-files`, `--target-score`, `--max-steps`, `--replay` |
+| `run dataset-browser`     | 데이터셋 시각화 GUI              | `--dataset`(필수), `--split`, `--data-root`                                                                                                 |
 
 Windows에서는 `run` 대신 `run.bat`을 사용한다. 인자 없이 `run`(`run.bat`)만 실행하면 사용법과 사용 가능한 스크립트 목록이 출력된다.
 
