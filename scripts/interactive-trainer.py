@@ -18,7 +18,7 @@ costs a lot on both sides, so this GUI runs the two together:
      annotation-manual/ so it does not forget everything else -- until its
      prediction on the saved frame scores `--target-score` or it has taken
      `--max-steps` steps, and overwrites the checkpoint.
-  4. After training, the frames in the list and `--new-files` (4) new ones
+  4. After training, the frames in the list and `--new-files` (8) new ones
      are re-scored with the updated model, so the list grows by that many per
      training; past `--max-files` (100) only the lowest-scoring are kept. The
      refreshed list keeps the frame being edited open, so it may no longer be
@@ -76,7 +76,7 @@ SPLIT_NAMES = ("train", "val", "test")
 ANNOTATION_SUFFIX = ".json"
 
 DEFAULT_INITIAL_FILES = 32
-DEFAULT_NEW_FILES = 4
+DEFAULT_NEW_FILES = 8
 DEFAULT_MAX_FILES = 100
 DEFAULT_TARGET_SCORE = 0.9
 DEFAULT_MAX_STEPS = 20
@@ -96,7 +96,6 @@ TIP_DISTANCE_SCALE = 32.0
 
 HANDLE_SIZE = 7.5
 TIP_RADIUS = 6
-SEGMENTATION_ALPHA = 0.35
 # Add mode dims the image to this brightness, except inside the box being drawn.
 ADD_MODE_BRIGHTNESS = 0.5
 MIN_BOX_SIZE = 4
@@ -140,6 +139,7 @@ BUTTON_STYLES = {
     "Save.TButton": "#e65100",    # orange
     "Reload.TButton": "#6a1b9a",  # purple
     "Update.TButton": "#2e7d32",  # green
+    "Screenshot.TButton": "#00838f",  # teal
 }
 ADD_ACTIVE_STYLE = "AddActive.TButton"
 ADD_ACTIVE_BACKGROUND = "#ffe680"
@@ -152,6 +152,18 @@ DELETE_BUTTON_LABEL = "Delete Tool [DEL]"
 SAVE_BUTTON_LABEL = "Save [F2]"
 RELOAD_BUTTON_LABEL = "Reload [F3]"
 UPDATE_BUTTON_LABEL = "Update [F4]"
+SCREENSHOT_BUTTON_LABEL = "Screenshot [F5]"
+
+# Screenshots are drawn with OpenCV at the image's own resolution, so these
+# mirror the canvas colours (as RGB) and sizes in image pixels, as in
+# annotation_editor.
+SCREENSHOT_BOX_COLOR = (59, 215, 255)       # #3bd7ff
+SCREENSHOT_TIP_LINE_COLOR = (255, 128, 128)  # #ff8080
+SCREENSHOT_TIP_FILL_COLOR = (255, 77, 77)    # #ff4d4d
+SCREENSHOT_TIP_OUTLINE_COLOR = (122, 0, 0)   # #7a0000
+SCREENSHOT_LINE_WIDTH = 2
+SCREENSHOT_LABEL_FONT_SCALE = 0.8
+SCREENSHOT_LABEL_THICKNESS = 2
 
 
 # ---------------------------------------------------------------------------
@@ -170,8 +182,9 @@ def manual_dir(dataset: str, split: str) -> Path:
     return DATA_ROOT / dataset / "annotation-manual" / split
 
 
-def segmentation_path(dataset: str, split: str, stem: str) -> Path:
-    return DATA_ROOT / dataset / "segmentation" / split / f"{stem}.png"
+def screenshot_dir(dataset: str) -> Path:
+    """Where annotation_editor puts its screenshots too."""
+    return DATA_ROOT / dataset / "screenshot"
 
 
 def read_annotations(path: Path) -> list[dict[str, dict[str, int]]]:
@@ -562,8 +575,6 @@ class InteractiveTrainer:
 
         self.dataset_var = tk.StringVar(value=self.current_dataset)
         self.split_var = tk.StringVar(value=self.current_split)
-        # Off by default: the labels being corrected need not come from a mask.
-        self.show_segmentation_var = tk.BooleanVar(value=False)
         self.show_annotation_var = tk.BooleanVar(value=True)
         self.show_prediction_var = tk.BooleanVar(value=True)
         self.status_var = tk.StringVar(value="Ready")
@@ -587,7 +598,6 @@ class InteractiveTrainer:
         self.current_index: int | None = None
         self.current_image_path: Path | None = None
         self.current_image_rgb: np.ndarray | None = None
-        self.current_segmentation_mask: np.ndarray | None = None
         self.current_annotations: list[dict[str, dict[str, int]]] = []
         self.image_width = 0
         self.image_height = 0
@@ -660,10 +670,13 @@ class InteractiveTrainer:
         self.update_button = ttk.Button(top_bar, text=UPDATE_BUTTON_LABEL, style="Update.TButton",
                                         command=self._update_from_prediction)
         self.update_button.pack(side=tk.LEFT, padx=(8, 0))
+        self.screenshot_button = ttk.Button(top_bar, text=SCREENSHOT_BUTTON_LABEL,
+                                            style="Screenshot.TButton",
+                                            command=self._save_screenshot)
+        self.screenshot_button.pack(side=tk.LEFT, padx=(8, 0))
 
         for text, variable, padding in (
-            ("Show Segmentation [F5]", self.show_segmentation_var, (18, 0)),
-            ("Show Annotation [F6]", self.show_annotation_var, (12, 0)),
+            ("Show Annotation [F6]", self.show_annotation_var, (18, 0)),
             ("Show Prediction [F7]", self.show_prediction_var, (12, 0)),
         ):
             ttk.Checkbutton(top_bar, text=text, variable=variable,
@@ -760,10 +773,10 @@ class InteractiveTrainer:
             ("<Control-u>", self._update_from_prediction),
             ("<Control-U>", self._update_from_prediction),
             ("<F4>", self._update_from_prediction),
+            ("<F5>", self._save_screenshot),
         ):
             self.root.bind(sequence, lambda _event, handler=handler: (handler(), "break")[1])
         for sequence, variable in (
-            ("<F5>", self.show_segmentation_var),
             ("<F6>", self.show_annotation_var),
             ("<F7>", self.show_prediction_var),
         ):
@@ -956,7 +969,6 @@ class InteractiveTrainer:
         self.current_index = None
         self.current_image_path = None
         self.current_image_rgb = None
-        self.current_segmentation_mask = None
         self.current_annotations = []
         self.selected_annotation_index = None
         self.preview_box = None
@@ -998,7 +1010,6 @@ class InteractiveTrainer:
         self.current_image_path = self.entries[index]["image"]
         self.current_image_rgb = read_rgb(self.current_image_path)
         self.image_height, self.image_width = self.current_image_rgb.shape[:2]
-        self.current_segmentation_mask = self._load_segmentation_mask(self.current_image_path)
         self.current_annotations = self._load_annotation(self.current_image_path)
         self.selected_annotation_index = 0 if self.current_annotations else None
         self.preview_box = None
@@ -1010,18 +1021,6 @@ class InteractiveTrainer:
         self._update_buttons()
         self._update_status()
         self._render_scene()
-
-    def _load_segmentation_mask(self, image_path: Path) -> np.ndarray | None:
-        mask_path = segmentation_path(self.current_dataset, self.current_split, image_path.stem)
-        if not mask_path.exists():
-            return None
-        mask = cv2.imread(str(mask_path), cv2.IMREAD_UNCHANGED)
-        if mask is None:
-            return None
-        if mask.ndim == 3:
-            mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
-        _, binary = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
-        return binary
 
     def _load_annotation(self, image_path: Path) -> list[dict[str, dict[str, int]]]:
         path = annotation_path(self.current_dataset, self.current_split, image_path.stem)
@@ -1117,6 +1116,57 @@ class InteractiveTrainer:
         self._update_status("Label replaced with the prediction. Edit, then Save.")
         self._render_scene()
 
+    def _save_screenshot(self) -> None:
+        """Write the current frame with its visible overlays for slides.
+
+        As in annotation_editor: the overlays follow the Show Annotation /
+        Show Prediction toggles, the image keeps its native resolution, and
+        editing aids (selection highlight, resize handles, the add-mode
+        preview box) are left out.
+        """
+        if self.current_image_path is None or self.current_image_rgb is None:
+            return
+
+        composed = self.current_image_rgb.copy()
+        entry = self._current_entry()
+        if self.show_prediction_var.get() and entry is not None and entry["prediction"]:
+            composed = self._blend_predictions(composed, entry["prediction"], 1.0)
+        if self.show_annotation_var.get():
+            self._draw_screenshot_annotations(composed)
+
+        screenshot_root = screenshot_dir(self.current_dataset)
+        screenshot_root.mkdir(parents=True, exist_ok=True)
+        screenshot_path = screenshot_root / self.current_image_path.name
+        if not cv2.imwrite(str(screenshot_path), cv2.cvtColor(composed, cv2.COLOR_RGB2BGR)):
+            messagebox.showerror("Screenshot", f"Failed to write screenshot: {screenshot_path}")
+            return
+        self._update_status(f"Saved screenshot: {screenshot_path}")
+
+    def _draw_screenshot_annotations(self, image: np.ndarray) -> None:
+        """Draw boxes, numbers and tips onto an RGB image, as on the canvas."""
+        for index, annotation in enumerate(self.current_annotations):
+            bbox = annotation["bbox"]
+            x1, y1 = bbox["x"], bbox["y"]
+            x2, y2 = x1 + bbox["width"], y1 + bbox["height"]
+            cv2.rectangle(image, (x1, y1), (x2, y2), SCREENSHOT_BOX_COLOR,
+                          SCREENSHOT_LINE_WIDTH, cv2.LINE_AA)
+            label = str(index + 1)
+            (_, text_height), _ = cv2.getTextSize(
+                label, cv2.FONT_HERSHEY_SIMPLEX, SCREENSHOT_LABEL_FONT_SCALE, SCREENSHOT_LABEL_THICKNESS
+            )
+            cv2.putText(image, label, (x1 + 6, y1 + 6 + text_height), cv2.FONT_HERSHEY_SIMPLEX,
+                        SCREENSHOT_LABEL_FONT_SCALE, SCREENSHOT_BOX_COLOR,
+                        SCREENSHOT_LABEL_THICKNESS, cv2.LINE_AA)
+
+        for annotation in self.current_annotations:
+            bbox = annotation["bbox"]
+            tip = (annotation["tip"]["x"], annotation["tip"]["y"])
+            center = (bbox["x"] + bbox["width"] // 2, bbox["y"] + bbox["height"] // 2)
+            cv2.line(image, center, tip, SCREENSHOT_TIP_LINE_COLOR, SCREENSHOT_LINE_WIDTH, cv2.LINE_AA)
+            cv2.circle(image, tip, TIP_RADIUS, SCREENSHOT_TIP_FILL_COLOR, -1, cv2.LINE_AA)
+            cv2.circle(image, tip, TIP_RADIUS, SCREENSHOT_TIP_OUTLINE_COLOR,
+                       SCREENSHOT_LINE_WIDTH, cv2.LINE_AA)
+
     # ── Shortcuts ────────────────────────────────────────────────────────
 
     def _on_previous_image_shortcut(self, _event: tk.Event) -> str:
@@ -1169,7 +1219,6 @@ class InteractiveTrainer:
                 fill="#c7d0d9", font=("TkDefaultFont", 16))
             return
 
-        composed = self._compose_display_image()
         canvas_width = max(self.canvas.winfo_width(), 1)
         canvas_height = max(self.canvas.winfo_height(), 1)
         scale = max(min(canvas_width / self.image_width, canvas_height / self.image_height), 0.01)
@@ -1179,12 +1228,12 @@ class InteractiveTrainer:
         self.canvas_offset_x = (canvas_width - display_width) / 2.0
         self.canvas_offset_y = (canvas_height - display_height) / 2.0
 
-        resized = cv2.resize(composed, (display_width, display_height), interpolation=cv2.INTER_AREA)
+        resized = cv2.resize(self.current_image_rgb, (display_width, display_height), interpolation=cv2.INTER_AREA)
         if self.mode == "add":
             resized = self._dim_for_add_mode(resized)
         entry = self._current_entry()
         if self.show_prediction_var.get() and entry is not None and entry["prediction"]:
-            resized = self._blend_predictions(resized, entry["prediction"])
+            resized = self._blend_predictions(resized, entry["prediction"], scale)
         self.photo_image = self._rgb_to_photoimage(resized)
         self.canvas.create_image(self.canvas_offset_x, self.canvas_offset_y,
                                  anchor=tk.NW, image=self.photo_image)
@@ -1202,15 +1251,16 @@ class InteractiveTrainer:
             cx2, cy2 = self._image_to_canvas(x2, y2)
             self.canvas.create_rectangle(cx1, cy1, cx2, cy2, outline="#f8e45c", width=2, dash=(6, 3))
 
-    def _blend_predictions(self, display_rgb: np.ndarray, predictions: list[dict]) -> np.ndarray:
+    def _blend_predictions(self, display_rgb: np.ndarray, predictions: list[dict],
+                           scale: float) -> np.ndarray:
         """Predicted tools -- dashed box, confidence, diamond tip -- drawn into
-        the display-sized image at PREDICTION_ALPHA opacity.
+        an image `scale` times the frame size at PREDICTION_ALPHA opacity: the
+        display-sized image on screen, the frame itself (1.0) in a screenshot.
 
         The shapes go onto a copy, and the copy is blended with the original:
         pixels nothing was drawn on are equal in both, so only the shapes fade.
         """
         overlay = display_rgb.copy()
-        scale = self.canvas_scale
         color = PREDICTION_COLOR_RGB
         for annotation in predictions:
             bbox, tip = annotation["bbox"], annotation["tip"]
@@ -1241,16 +1291,6 @@ class InteractiveTrainer:
             bottom = int(math.ceil(max(y1, y2) * self.canvas_scale))
             dimmed[top:bottom, left:right] = display_rgb[top:bottom, left:right]
         return dimmed
-
-    def _compose_display_image(self) -> np.ndarray:
-        composed = self.current_image_rgb.copy()
-        if self.show_segmentation_var.get() and self.current_segmentation_mask is not None:
-            mask = self.current_segmentation_mask > 0
-            overlay = composed.copy()
-            overlay[mask] = np.array([30, 220, 80], dtype=np.uint8)
-            composed = cv2.addWeighted(overlay, SEGMENTATION_ALPHA, composed,
-                                       1.0 - SEGMENTATION_ALPHA, 0.0)
-        return composed
 
     def _draw_annotation_box(self, index: int, annotation: dict[str, dict[str, int]]) -> None:
         bbox = annotation["bbox"]
@@ -1571,6 +1611,7 @@ class InteractiveTrainer:
         self.save_button.configure(state=tk.NORMAL if has_image else tk.DISABLED)
         self.reload_button.configure(state=tk.NORMAL if has_image else tk.DISABLED)
         self.update_button.configure(state=tk.NORMAL if has_image else tk.DISABLED)
+        self.screenshot_button.configure(state=tk.NORMAL if has_image else tk.DISABLED)
         self.delete_button.configure(
             state=tk.NORMAL if has_image and self.selected_annotation_index is not None
             else tk.DISABLED)
