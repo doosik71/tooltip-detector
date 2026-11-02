@@ -85,7 +85,10 @@ standalone/yolov8stooltip/
 │   └── progress.py           # tqdm 공통 설정
 ├── scripts/
 │   ├── train-model.py        # 학습
-│   └── eval-model.py         # 평가 (탐지 AP + 팁 hit-rate + 쌍 지표)
+│   ├── eval-model.py         # 평가 (탐지 AP + 팁 hit-rate + 쌍 지표)
+│   └── generate-summary.py   # data/ 산출물 → docs/results-summary.md
+├── docs/
+│   └── results-summary.md    # 학습·평가 수치 요약 (generate-summary가 생성)
 └── data/                     # 체크포인트·평가 결과 (git 추적 제외)
     ├── model/<dataset>/      #   model.pt, model-last.pt, train-status.json, metric.csv
     └── results/<dataset>/<split>/   #   summary.json, per_tip.csv
@@ -135,6 +138,14 @@ uv sync        # 루트에서 한 번 (이미 했다면 불필요)
 ```
 
 결과는 `data/results/<dataset>/<split>/`에 `summary.json`과 `per_tip.csv`로 저장된다. `per_tip.csv`는 루트 프로젝트·베이스라인과 열 이름이 같아 같은 방식으로 다시 집계할 수 있다. `--split`(기본 `test`), `--limit`, `--frame-stride`, `--conf`(기본 0.25), `--map-conf`(AP 곡선용, 기본 0.001)를 받는다.
+
+### 3. 수치 요약
+
+```bash
+./standalone/yolov8stooltip/run generate-summary
+```
+
+`data/model/`과 `data/results/` 아래의 모든 데이터셋을 읽어 [docs/results-summary.md](docs/results-summary.md)를 다시 만든다. 학습 경과, 탐지 AP, 팁 hit-rate, 도구-팁 쌍 지표와 `per_tip.csv`에서 다시 계산한 오차 분포·세션별 성능을 담으며, 없는 산출물은 누락으로 적는다. `--split`(기본 `test`)과 `--output`을 받는다.
 
 ## 검증 현황
 

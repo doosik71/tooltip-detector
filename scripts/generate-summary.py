@@ -70,10 +70,6 @@ MAX_TIP_BUCKET = 4
 # tool's peak (hundreds of px away) says nothing about coordinate bias.
 OFFSET_MATCH_RADIUS_PX = 20
 
-# Two target-mode averages closer than this are called a tie rather than a win;
-# the averages themselves are printed next to the verdict either way.
-TIE_MARGIN = 0.05
-
 # Datasets with more sessions than this get a distribution + best/worst extract
 # in the main body and the full listing in an appendix.
 SESSION_TABLE_MAX = 10
@@ -404,14 +400,14 @@ def _metric_of(combo: dict, key: str):
     }[key]
 
 
-# (column name, _metric_of key, delta unit, absolute unit, lower value is better)
-METRICS = (("Miss율", "miss",   " %p", " %",  True),
-           ("Hit@10", "hit10",  " %p", " %",  False),
-           ("Hit@20", "hit20",  " %p", " %",  False),
-           ("Hit@50", "hit50",  " %p", " %",  False),
-           ("Median", "median", " px", " px", True),
-           ("Mean",   "mean",   " px", " px", True),
-           ("P90",    "p90",    " px", " px", True))
+# (column name, _metric_of key, delta unit, absolute unit)
+METRICS = (("Miss율", "miss",   " %p", " %"),
+           ("Hit@10", "hit10",  " %p", " %"),
+           ("Hit@20", "hit20",  " %p", " %"),
+           ("Hit@50", "hit50",  " %p", " %"),
+           ("Median", "median", " px", " px"),
+           ("Mean",   "mean",   " px", " px"),
+           ("P90",    "p90",    " px", " px"))
 
 
 # ---------------------------------------------------------------------------
@@ -526,8 +522,7 @@ def _section_convergence(out: list[str], combos: list[dict]) -> None:
     out += [
         "## 2. 학습 수렴 (에포크별 검증 손실)",
         "",
-        "`metric.csv`의 `val_loss` 열이다. 손실은 **같은 타겟 방식 안에서만** 비교할 수 있다 — "
-        "`gaussian-tip` 타겟은 대부분의 화소가 0에 가까운 희소 히트맵이므로 MSE가 구조적으로 작다.",
+        "`metric.csv`의 `val_loss` 열이다.",
         "",
     ]
     rows = []
@@ -542,9 +537,8 @@ def _section_convergence(out: list[str], combos: list[dict]) -> None:
                   rows, "l" + "r" * (len(VAL_LOSS_MILESTONES) + 2))
 
     out += [
-        "**파생 지표.** `초기 감소 비중`은 (에포크 1 → 5 감소량) / (에포크 1 → 최저 감소량)으로, "
-        "학습이 얼마나 앞쪽 에포크에 집중됐는지를 나타낸다. `말미 감소율`은 마지막 10 에포크 구간의 "
-        "상대 감소폭으로, 0에서 멀수록 학습 예산이 부족했다는 뜻이다.",
+        "**파생 지표.** `초기 감소 비중`은 (에포크 1 → 5 감소량) / (에포크 1 → 최저 감소량)이고, "
+        "`말미 감소율`은 마지막 10 에포크 구간의 상대 감소폭이다.",
         "",
     ]
     rows = []
@@ -636,7 +630,7 @@ def _section_evaluation(out: list[str], combos: list[dict]) -> None:
         out += _table(["조합", "항목", "summary.json", "per_tip.csv 재계산"], drift, "llrr")
     else:
         out += ["- `per_tip.csv`에서 재계산한 전체 지표가 8개 조합 모두 `summary.json`과 "
-                "일치한다(소수점 둘째 자리 기준). 아래 5–10절의 분석은 같은 파일에서 나온 값이다.", ""]
+                "일치한다(소수점 둘째 자리 기준). 아래 5〜10절의 집계는 같은 파일에서 나온 값이다.", ""]
     out += ["---", ""]
 
 
@@ -678,8 +672,8 @@ def _section_axes(out: list[str], combos: list[dict]) -> None:
             if not (left and right):
                 continue
             deltas = [_metric_of(left, key) - _metric_of(right, key)
-                      for _, key, _, _, _ in METRICS]
-            for (_, key, _, _, _), value in zip(METRICS, deltas):
+                      for _, key, _, _ in METRICS]
+            for (_, key, _, _), value in zip(METRICS, deltas):
                 collected[key].append(value)
             rows.append(cells + [_signed(v, 2, m[2]) for v, m in zip(deltas, METRICS)])
         if not rows:
@@ -696,26 +690,16 @@ def _section_axes(out: list[str], combos: list[dict]) -> None:
                      _signed(max(v), 2, " %p"), _signed(sum(v) / len(v), 2, " %p")])
     out += _table(["축", "최소", "최대", "평균"], rows, "lrrr")
 
-    out += [f"### 4.5 타겟 방식별 평균 지표 (데이터셋·모델 4개 조합 평균)", "",
-            f"`우세`는 두 평균의 차이가 {TIE_MARGIN} 미만이면 `대등`으로 적는다.", ""]
+    out += [f"### 4.5 타겟 방식별 평균 지표 (데이터셋·모델 4개 조합 평균)", ""]
     rows = []
-    for name, key, _, abs_unit, lower_is_better in METRICS:
+    for name, key, _, abs_unit in METRICS:
         means = []
         for target_mode in TARGET_MODES:
             vals = [_metric_of(c, key) for c in combos if c["target_mode"] == target_mode]
             means.append(sum(vals) / len(vals) if vals else None)
-        cells = [name] + [_num(m, 2, abs_unit) for m in means]
-        if len(means) == 2 and all(m is not None for m in means):
-            if abs(means[0] - means[1]) < TIE_MARGIN:
-                better = "대등"
-            else:
-                best = min(means) if lower_is_better else max(means)
-                better = f"`{TARGET_MODES[means.index(best)]}`"
-        else:
-            better = "-"
-        rows.append(cells + [better])
-    out += _table(["지표"] + [f"`{t}`" for t in TARGET_MODES] + ["우세"],
-                  rows, "l" + "r" * len(TARGET_MODES) + "l")
+        rows.append([name] + [_num(m, 2, abs_unit) for m in means])
+    out += _table(["지표"] + [f"`{t}`" for t in TARGET_MODES],
+                  rows, "l" + "r" * len(TARGET_MODES))
     out += ["---", ""]
 
 
@@ -846,11 +830,11 @@ def _section_tip_count(out: list[str], combos: list[dict]) -> None:
 
 def _section_shared_peaks(out: list[str], combos: list[dict]) -> None:
     out += [
-        "## 8. 공유 피크 (과소 탐지) 분석",
+        "## 8. 공유 피크",
         "",
         "평가 프로토콜은 GT 팁마다 독립적으로 최근접 피크를 고르므로 일대일 배정이 아니다. "
-        "한 프레임의 여러 GT 팁이 **동일한 예측 좌표**에 매칭되면, 모델이 그 프레임의 도구 수보다 "
-        "적은 피크를 만들었다는 뜻이다(과소 탐지). 아래는 매칭된 팁을 `공유`와 `단독`으로 나눈 결과다.",
+        "아래는 매칭된 팁 중 같은 프레임의 다른 GT 팁과 **동일한 예측 좌표**에 매칭된 팁을 `공유`, "
+        "나머지를 `단독`으로 나눈 결과다.",
         "",
     ]
     rows = []
@@ -881,8 +865,7 @@ def _section_offset(out: list[str], combos: list[dict]) -> None:
         "## 9. 예측 좌표의 계통 편차",
         "",
         f"부호 있는 좌표 차이(dx = pred_x − gt_x, dy = pred_y − gt_y)를 "
-        f"**{OFFSET_MATCH_RADIUS_PX} px 이내로 매칭된 팁**에 한해 집계한 값이다. 먼 거리 매칭은 "
-        "다른 도구의 피크를 가리키므로 좌표 편차를 재는 데 쓸 수 없어 제외한다. "
+        f"**{OFFSET_MATCH_RADIUS_PX} px 이내로 매칭된 팁**에 한해 집계한 값이다. "
         "좌표가 정수이므로 중앙값·최빈값도 정수 단위로 나온다.",
         "",
     ]
@@ -898,9 +881,8 @@ def _section_offset(out: list[str], combos: list[dict]) -> None:
                    "편차 크기", "최빈 dx", "최빈 dy"], rows, "lrrrrrr")
 
     out += [
-        "**편차 보정 효과.** 위 중앙값 편차를 예측 좌표에서 뺀 뒤 거리를 다시 계산한 결과다. "
-        "모집단은 8절의 **단독 매칭** 팁으로 한정했다 — 공유 매칭 팁은 애초에 다른 도구를 "
-        "가리키므로 좌표 보정과 무관하다. 편차가 (0, 0)인 조합은 보정 전후가 같다.",
+        "**편차 보정 전후.** 위 중앙값 편차를 예측 좌표에서 뺀 뒤 거리를 다시 계산한 결과다. "
+        "모집단은 8절의 **단독 매칭** 팁이다. 편차가 (0, 0)인 조합은 보정 전후가 같다.",
         "",
     ]
     rows = []
