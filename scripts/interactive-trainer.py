@@ -12,9 +12,10 @@ costs a lot on both sides, so this GUI runs the two together:
      presses Update (Ctrl+U / F4) to start from the detector's prediction.
      The label and the prediction are overlaid in different colours.
   3. Save (Ctrl+S / F2) writes the label to annotation-manual/ and mirrors it
-     into annotation/, exactly like `annotation_editor`, and opens the next
-     frame of the list at once, in the order the list already has. The model
-     trains in the background on that frame -- plus a few replayed frames from
+     into annotation/, exactly like `annotation_editor`, and opens the
+     lowest-scoring other frame of the list at once, by the scores the list
+     already has. The model trains in the background on
+     that frame -- plus a few replayed frames from
      annotation-manual/ so it does not forget everything else -- until its
      prediction on the saved frame scores `--target-score` or it has taken
      `--max-steps` steps, and overwrites the checkpoint.
@@ -25,11 +26,19 @@ costs a lot on both sides, so this GUI runs the two together:
      first: the next frame to edit comes from the previous ranking, which is
      the price of never waiting for the model.
 
-The model is the YOLOv8s clone baseline (`baseline/yolov8sclone`), trained with
-the `tooltip` label set: it predicts `tool` boxes and `tip` boxes, and the
-centre of a tip box is the tip. Every model call -- loading, scoring, training
--- runs on one background thread, so the GUI never waits for the GPU and the
-model is never touched by two threads at once.
+The model is picked in the GUI from the checkpoints in data/itrainer-model/,
+and either of two families works:
+
+  yolov8stooltip   (standalone/yolov8stooltip, the default) each `tool`
+                   detection carries its own tip as a keypoint, so the output
+                   is the annotation list as it is.
+  yolov8sclone     (baseline/yolov8sclone, `tooltip` label set) `tool` boxes
+                   and `tip` boxes come out unrelated, and `pair_detections`
+                   guesses which tip belongs to which tool.
+
+A `kpt_shape` in the checkpoint tells them apart. Every model call --
+loading, scoring, training -- runs on one background thread, so the GUI never
+waits for the GPU and the model is never touched by two threads at once.
 
 Frames already in annotation-manual/ are never drawn for the list: a person
 has already checked them. They serve as the replay set instead.
@@ -38,6 +47,8 @@ has already checked them. They serve as the replay set instead.
 from __future__ import annotations
 
 import argparse
+import importlib
+import importlib.util
 import json
 import math
 import os
@@ -57,21 +68,39 @@ import torch
 from scipy.optimize import linear_sum_assignment
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-BASELINE_DIR = REPO_ROOT / "baseline" / "yolov8sclone"
 
-# The baseline's package is called `common`, the same convention
-# ttd/tip_source.py relies on; this process loads no other baseline.
-if True:
-    sys.path.insert(0, str(BASELINE_DIR))
 
-    from common.boxes import letterbox, non_max_suppression, undo_letterbox
-    from common.dataset import SurgicalDetectionDataset, available_datasets
-    from common.loss import DetectionLoss
-    from common.model import build, decode
+def import_common(alias: str, project_dir: Path):
+    """Import `project_dir`/common as a package called `alias`.
+
+    Both model projects name their package `common`, so one process can hold
+    both only under names of their own. Their modules import each other
+    relatively, which resolves inside the alias.
+    """
+    package_dir = project_dir / "common"
+    spec = importlib.util.spec_from_file_location(
+        alias, package_dir / "__init__.py", submodule_search_locations=[str(package_dir)])
+    package = importlib.util.module_from_spec(spec)
+    sys.modules[alias] = package
+    spec.loader.exec_module(package)
+    for name in ("boxes", "dataset", "loss", "model"):
+        setattr(package, name, importlib.import_module(f"{alias}.{name}"))
+    return package
+
+
+# yolov8sclone: `tool` and `tip` boxes as two classes, paired afterwards.
+clone_common = import_common("clone_common", REPO_ROOT / "baseline" / "yolov8sclone")
+# yolov8stooltip: each `tool` detection carries its own tip as a keypoint.
+pose_common = import_common("pose_common", REPO_ROOT / "standalone" / "yolov8stooltip")
+
+letterbox = clone_common.boxes.letterbox
+undo_letterbox = clone_common.boxes.undo_letterbox
+available_datasets = clone_common.dataset.available_datasets
 
 
 DATA_ROOT = REPO_ROOT / "data" / "dataset"
-DEFAULT_MODEL_PATH = REPO_ROOT / "data" / "itrain-model" / "model.pt"
+MODEL_DIR = REPO_ROOT / "data" / "itrainer-model"
+DEFAULT_MODEL_PATH = MODEL_DIR / "yolov8stooltip.pt"
 SPLIT_NAMES = ("train", "val", "test")
 ANNOTATION_SUFFIX = ".json"
 
@@ -84,6 +113,24 @@ DEFAULT_REPLAY = 3
 DEFAULT_LR = 1e-4
 DEFAULT_CONF = 0.25
 DEFAULT_IOU = 0.45
+
+# The values the Option dialog edits: argument name, label, type, and the
+# smallest and largest value it accepts (None for no limit). They start from
+# the command line and last for the session.
+SETTINGS = (
+    ("initial_files", "Frames drawn when a split opens", int, 1, None),
+    ("new_files", "Frames added after each training", int, 0, None),
+    ("max_files", "Most frames in the list", int, 1, None),
+    ("target_score", "Training target score", float, 0.0, 1.0),
+    ("max_steps", "Most training steps per save", int, 1, None),
+    ("replay", "Replayed frames per step", int, 0, None),
+    ("lr", "Learning rate (AdamW)", float, 1e-8, 1.0),
+    ("conf", "Detection confidence threshold", float, 0.0, 1.0),
+    ("iou", "NMS IoU threshold", float, 0.0, 1.0),
+)
+# Changing these changes the predictions or the list cap, so the list is
+# re-scored right away; the rest take effect at the next training or split.
+RESCORE_SETTINGS = {"conf", "iou", "max_files"}
 GRAD_CLIP_NORM = 10.0       # matches the baseline's trainer
 
 # A predicted tip pairs with a predicted tool box only if it lies inside the box
@@ -153,6 +200,7 @@ SAVE_BUTTON_LABEL = "Save [F2]"
 RELOAD_BUTTON_LABEL = "Reload [F3]"
 UPDATE_BUTTON_LABEL = "Update [F4]"
 SCREENSHOT_BUTTON_LABEL = "Screenshot [F5]"
+OPTION_BUTTON_LABEL = "Option"
 
 # Screenshots are drawn with OpenCV at the image's own resolution, so these
 # mirror the canvas colours (as RGB) and sizes in image pixels, as in
@@ -292,22 +340,39 @@ def pair_detections(detections: np.ndarray, tool_class: int, tip_class: int,
         else:
             tip_x = x1 if abs(x1 - width / 2) < abs(x2 - width / 2) else x2
             tip_y = y1 if abs(y1 - height / 2) < abs(y2 - height / 2) else y2
-        tip_x = min(max(int(round(tip_x)), 0), width - 1)
-        tip_y = min(max(int(round(tip_y)), 0), height - 1)
-        # Grow the box to hold the tip pixel, as annotation_editor does when a
-        # tip is dragged outside its box.
-        left = max(min(int(math.floor(x1)), tip_x), 0)
-        top = max(min(int(math.floor(y1)), tip_y), 0)
-        right = min(max(int(math.ceil(x2)), tip_x + 1), width)
-        bottom = min(max(int(math.ceil(y2)), tip_y + 1), height)
-        annotations.append({
-            "bbox": {"x": left, "y": top,
-                     "width": max(right - left, 1), "height": max(bottom - top, 1)},
-            "tip": {"x": tip_x, "y": tip_y},
-            "score": float(tool[4]),
-        })
+        annotations.append(tool_annotation(tool[:4], (tip_x, tip_y), tool[4], width, height))
     annotations.sort(key=lambda item: (item["bbox"]["x"], item["bbox"]["y"]))
     return annotations
+
+
+def pose_annotations(detections: np.ndarray, width: int, height: int) -> list[dict]:
+    """yolov8stooltip rows [x1, y1, x2, y2, score, class, kx, ky] -> annotations.
+
+    Each row already pairs a tool box with its own tip, so nothing is matched.
+    """
+    annotations = [tool_annotation(row[:4], row[6:8], row[4], width, height)
+                   for row in detections]
+    annotations.sort(key=lambda item: (item["bbox"]["x"], item["bbox"]["y"]))
+    return annotations
+
+
+def tool_annotation(box, tip, score: float, width: int, height: int) -> dict:
+    """One predicted tool as an annotation, with the tip clipped to the frame."""
+    x1, y1, x2, y2 = box
+    tip_x = min(max(int(round(tip[0])), 0), width - 1)
+    tip_y = min(max(int(round(tip[1])), 0), height - 1)
+    # Grow the box to hold the tip pixel, as annotation_editor does when a
+    # tip is dragged outside its box.
+    left = max(min(int(math.floor(x1)), tip_x), 0)
+    top = max(min(int(math.floor(y1)), tip_y), 0)
+    right = min(max(int(math.ceil(x2)), tip_x + 1), width)
+    bottom = min(max(int(math.ceil(y2)), tip_y + 1), height)
+    return {
+        "bbox": {"x": left, "y": top,
+                 "width": max(right - left, 1), "height": max(bottom - top, 1)},
+        "tip": {"x": tip_x, "y": tip_y},
+        "score": float(score),
+    }
 
 
 def _box_iou(a: dict[str, int], b: dict[str, int]) -> float:
@@ -346,58 +411,64 @@ def agreement_score(predicted: list[dict], labelled: list[dict]) -> float:
 # ---------------------------------------------------------------------------
 
 class ModelRunner:
-    """The detector checkpoint, kept unfused so it can keep training.
+    """A detector checkpoint, kept unfused so it can keep training.
 
-    `common.inference.Detector` folds BatchNorm into the convolutions, which
-    makes the model faster but no longer trainable, so the model is built
-    here directly from the same checkpoint format.
+    The projects' own inference classes fold BatchNorm into the convolutions,
+    which makes a model faster but no longer trainable, so the model is built
+    here directly from the checkpoint. The training loop and saving are shared;
+    building the model, turning its output into annotations and writing the
+    training targets differ per model family (see the subclasses).
     """
 
-    def __init__(self, path: Path, device: torch.device, args: argparse.Namespace):
+    kind = ""
+
+    def __init__(self, path: Path, checkpoint: dict, device: torch.device,
+                 args: argparse.Namespace):
         self.path = path
         self.device = device
         self.args = args
-
-        checkpoint = torch.load(path, map_location="cpu", weights_only=False)
         self.class_names = tuple(checkpoint.get("class_names", ()))
-        if "tool" not in self.class_names or "tip" not in self.class_names:
-            raise RuntimeError(
-                f"{path} predicts {self.class_names}; the interactive trainer needs a "
-                "`tooltip` checkpoint that predicts both `tool` and `tip`.")
-        self.tool_class = self.class_names.index("tool")
-        self.tip_class = self.class_names.index("tip")
         self.image_size = int(checkpoint.get("image_size", 640))
-        self.tip_box_size = float(checkpoint["tip_box_size"])
         # Everything but the weights is written back unchanged on save, so the
-        # baseline's own tools can still open the checkpoint.
+        # model's own project can still open the checkpoint.
         self.metadata = {key: value for key, value in checkpoint.items() if key != "model"}
 
-        self.model = build(num_classes=len(self.class_names), **checkpoint.get("arch", {}))
+        self.model, self.criterion = self._build(checkpoint)
         self.model.load_state_dict(checkpoint["model"])
         self.model.to(device).eval()
-        self.criterion = DetectionLoss(self.model)
         self.optimizer = torch.optim.AdamW(
             [p for p in self.model.parameters() if p.requires_grad], lr=args.lr)
 
+    @staticmethod
+    def open(path: Path, device: torch.device, args: argparse.Namespace) -> "ModelRunner":
+        """Load either family; a `kpt_shape` in the checkpoint marks yolov8stooltip."""
+        checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+        runner = PoseRunner if "kpt_shape" in checkpoint else DetectorRunner
+        return runner(path, checkpoint, device, args)
+
     def describe(self) -> str:
         rounds = self.metadata.get("itrain_rounds", 0)
-        return (f"{self.path.name} ({self.metadata.get('dataset')}, "
+        return (f"{self.path.name} [{self.kind}] ({self.metadata.get('dataset')}, "
                 f"epoch {self.metadata.get('epoch')}, {rounds} rounds) on {self.device}")
 
-    @torch.no_grad()
+    def _build(self, checkpoint: dict):
+        """(model, loss) for this checkpoint."""
+        raise NotImplementedError
+
     def predict(self, frame_rgb: np.ndarray) -> list[dict]:
-        self.model.eval()
-        height, width = frame_rgb.shape[:2]
+        raise NotImplementedError
+
+    def _label_rows(self, annotations: list[dict]) -> tuple[np.ndarray, list[int], list[int]]:
+        """Training labels of one frame in frame pixels, and which of their
+        columns are x and which y coordinates; the remaining columns after the
+        class are box sizes or flags."""
+        raise NotImplementedError
+
+    def _letterboxed(self, frame_rgb: np.ndarray):
+        """The network input for one frame, and how to map back to the frame."""
         padded, scale, pad_x, pad_y = letterbox(frame_rgb, self.image_size)
         tensor = torch.from_numpy(padded.transpose(2, 0, 1))[None]
-        tensor = tensor.to(self.device).float().div_(255.0)
-        predictions = decode(self.model(tensor), self.model)
-        detections = non_max_suppression(predictions, self.args.conf, self.args.iou)[0]
-        detections = detections.cpu().numpy()
-        if len(detections):
-            detections[:, :4] = undo_letterbox(detections[:, :4], scale, pad_x, pad_y,
-                                               width, height)
-        return pair_detections(detections, self.tool_class, self.tip_class, width, height)
+        return tensor.to(self.device).float().div_(255.0), scale, pad_x, pad_y
 
     def train(self, frame_rgb: np.ndarray, annotations: list[dict],
               replay: list[tuple[Path, Path]], report) -> tuple[int, float, float]:
@@ -407,6 +478,10 @@ class ModelRunner:
         afresh from `replay`. Only the saved frame decides when to stop.
         Returns (steps, score before, score after).
         """
+        # The learning rate may have been changed in the Option dialog since
+        # the optimizer was built.
+        for group in self.optimizer.param_groups:
+            group["lr"] = self.args.lr
         before = score = agreement_score(self.predict(frame_rgb), annotations)
         steps = 0
         while score < self.args.target_score and steps < self.args.max_steps:
@@ -436,33 +511,27 @@ class ModelRunner:
 
     def _training_batch(self, batch: list[tuple[np.ndarray, list[dict]]]
                         ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Letterbox, random horizontal flip and colour jitter, in the
-        baseline's target format: (n, 6) [image, class, cx, cy, w, h] normalised."""
+        """Letterbox, random horizontal flip and colour jitter, in the model's
+        target format: one row per label, [image, class, ...] with every
+        coordinate and size normalised to the input."""
         size = self.image_size
         images, targets = [], []
         for index, (frame, annotations) in enumerate(batch):
             padded, scale, pad_x, pad_y = letterbox(frame, size)
-            rows = []
-            for annotation in annotations:
-                bbox, tip = annotation["bbox"], annotation["tip"]
-                rows.append((self.tool_class, bbox["x"] + bbox["width"] / 2,
-                             bbox["y"] + bbox["height"] / 2, bbox["width"], bbox["height"]))
-                rows.append((self.tip_class, tip["x"], tip["y"],
-                             self.tip_box_size, self.tip_box_size))
-            labels = np.asarray(rows, dtype=np.float32).reshape(-1, 5)
-            labels[:, 1] = labels[:, 1] * scale + pad_x
-            labels[:, 2] = labels[:, 2] * scale + pad_y
+            labels, x_columns, y_columns = self._label_rows(annotations)
+            labels[:, x_columns] = labels[:, x_columns] * scale + pad_x
+            labels[:, y_columns] = labels[:, y_columns] * scale + pad_y
             labels[:, 3:5] *= scale
             if random.random() < 0.5:
                 padded = np.ascontiguousarray(padded[:, ::-1])
-                labels[:, 1] = size - labels[:, 1]
-            padded = SurgicalDetectionDataset._augment_colour(padded)
+                labels[:, x_columns] = size - labels[:, x_columns]
+            padded = clone_common.dataset.SurgicalDetectionDataset._augment_colour(padded)
 
             images.append(torch.from_numpy(np.ascontiguousarray(padded.transpose(2, 0, 1))))
-            target = torch.zeros((len(labels), 6), dtype=torch.float32)
+            labels[:, x_columns + y_columns + [3, 4]] /= size
+            target = torch.zeros((len(labels), 1 + labels.shape[1]), dtype=torch.float32)
             target[:, 0] = index
-            target[:, 1] = torch.from_numpy(labels[:, 0])
-            target[:, 2:] = torch.from_numpy(labels[:, 1:5]) / size
+            target[:, 1:] = torch.from_numpy(labels)
             targets.append(target)
         images = torch.stack(images).to(self.device).float().div_(255.0)
         return images, torch.cat(targets)
@@ -478,14 +547,100 @@ class ModelRunner:
         os.replace(temporary, self.path)
 
 
+class DetectorRunner(ModelRunner):
+    """yolov8sclone: `tool` and `tip` boxes as unrelated classes, paired by
+    `pair_detections`; a tip is learned as a `tip_box_size` square."""
+
+    kind = "yolov8sclone"
+
+    def _build(self, checkpoint: dict):
+        if "tool" not in self.class_names or "tip" not in self.class_names:
+            raise RuntimeError(
+                f"{self.path} predicts {self.class_names}; a yolov8sclone checkpoint must "
+                "be the `tooltip` label set, predicting both `tool` and `tip`.")
+        self.tool_class = self.class_names.index("tool")
+        self.tip_class = self.class_names.index("tip")
+        self.tip_box_size = float(checkpoint["tip_box_size"])
+        model = clone_common.model.build(num_classes=len(self.class_names),
+                                         **checkpoint.get("arch", {}))
+        return model, clone_common.loss.DetectionLoss(model)
+
+    @torch.no_grad()
+    def predict(self, frame_rgb: np.ndarray) -> list[dict]:
+        self.model.eval()
+        height, width = frame_rgb.shape[:2]
+        tensor, scale, pad_x, pad_y = self._letterboxed(frame_rgb)
+        predictions = clone_common.model.decode(self.model(tensor), self.model)
+        detections = clone_common.boxes.non_max_suppression(
+            predictions, self.args.conf, self.args.iou)[0].cpu().numpy()
+        if len(detections):
+            detections[:, :4] = undo_letterbox(detections[:, :4], scale, pad_x, pad_y,
+                                               width, height)
+        return pair_detections(detections, self.tool_class, self.tip_class, width, height)
+
+    def _label_rows(self, annotations):
+        """[class, cx, cy, w, h]: a tool box and a tip box per annotation."""
+        rows = []
+        for annotation in annotations:
+            bbox, tip = annotation["bbox"], annotation["tip"]
+            rows.append((self.tool_class, bbox["x"] + bbox["width"] / 2,
+                         bbox["y"] + bbox["height"] / 2, bbox["width"], bbox["height"]))
+            rows.append((self.tip_class, tip["x"], tip["y"],
+                         self.tip_box_size, self.tip_box_size))
+        return np.asarray(rows, dtype=np.float32).reshape(-1, 5), [1], [2]
+
+
+class PoseRunner(ModelRunner):
+    """yolov8stooltip: every `tool` detection carries its own tip, so its
+    output is the annotation list as it is, with no pairing."""
+
+    kind = "yolov8stooltip"
+
+    def _build(self, checkpoint: dict):
+        self.kpt_shape = tuple(checkpoint["kpt_shape"])
+        if self.kpt_shape != (1, 2):
+            raise RuntimeError(f"{self.path} has keypoints {self.kpt_shape}; the tip is "
+                               "expected as one (x, y) keypoint.")
+        model = pose_common.model.build(num_classes=len(self.class_names),
+                                        kpt_shape=self.kpt_shape, **checkpoint.get("arch", {}))
+        sigma = checkpoint.get("kpt_sigma", pose_common.loss.DEFAULT_KPT_SIGMA)
+        return model, pose_common.loss.PoseLoss(model, kpt_sigma=sigma)
+
+    @torch.no_grad()
+    def predict(self, frame_rgb: np.ndarray) -> list[dict]:
+        self.model.eval()
+        height, width = frame_rgb.shape[:2]
+        tensor, scale, pad_x, pad_y = self._letterboxed(frame_rgb)
+        predictions = pose_common.model.decode(self.model(tensor), self.model)
+        detections = pose_common.boxes.non_max_suppression(
+            predictions, len(self.class_names), self.args.conf, self.args.iou)[0].cpu().numpy()
+        if len(detections):
+            detections[:, :4] = undo_letterbox(detections[:, :4], scale, pad_x, pad_y,
+                                               width, height)
+            detections[:, 6:] = pose_common.boxes.undo_letterbox_points(
+                detections[:, 6:], scale, pad_x, pad_y, width, height)
+        return pose_annotations(detections, width, height)
+
+    def _label_rows(self, annotations):
+        """[class, cx, cy, w, h, kx, ky, kv]: one row per tool, tip included."""
+        rows = [(0, a["bbox"]["x"] + a["bbox"]["width"] / 2,
+                 a["bbox"]["y"] + a["bbox"]["height"] / 2, a["bbox"]["width"],
+                 a["bbox"]["height"], a["tip"]["x"], a["tip"]["y"], 1.0)
+                for a in annotations]
+        return np.asarray(rows, dtype=np.float32).reshape(-1, 8), [1, 5], [2, 6]
+
+
 class ModelWorker(threading.Thread):
     """Runs every model call in order on one thread, reporting through `events`.
 
     Jobs (put on `jobs`):
+      ("load", model path)
       ("score", generation, [(image path, label path), ...])
       ("train", image path, annotations, [(image path, label path), ...])
+    Jobs run in the order queued, so trainings queued before a "load" still
+    train, and save, the model they were saved against.
     Events (read by the GUI):
-      ("ready", text) ("error", text)
+      ("ready", model path, text) ("load-failed", model path, text) ("error", text)
       ("score-progress", generation, done, total)
       ("scored", generation, [{"image", "prediction", "score"}, ...])
       ("train-progress", image path, step, score)
@@ -500,16 +655,15 @@ class ModelWorker(threading.Thread):
         self.jobs: queue.Queue = queue.Queue()
 
     def run(self) -> None:
-        try:
-            runner = ModelRunner(self.args.model, self.device, self.args)
-        except Exception as exc:  # reported in the GUI rather than lost on stderr
-            traceback.print_exc()
-            self.events.put(("error", f"Failed to load model: {exc}"))
-            return
-        self.events.put(("ready", runner.describe()))
-
+        runner = self._load(self.args.model)
         while True:
             job = self.jobs.get()
+            if job[0] == "load":
+                runner = self._load(job[1]) or runner
+                continue
+            if runner is None:
+                self.events.put(("error", f"{job[0]} skipped: no model is loaded."))
+                continue
             try:
                 if job[0] == "score":
                     self._score(runner, *job[1:])
@@ -518,6 +672,17 @@ class ModelWorker(threading.Thread):
             except Exception as exc:
                 traceback.print_exc()
                 self.events.put(("error", f"{job[0]} failed: {exc}"))
+
+    def _load(self, path: Path) -> ModelRunner | None:
+        """Open a checkpoint; None, reported to the GUI, when that fails."""
+        try:
+            runner = ModelRunner.open(path, self.device, self.args)
+        except Exception as exc:  # reported in the GUI rather than lost on stderr
+            traceback.print_exc()
+            self.events.put(("load-failed", path, f"Failed to load {path.name}: {exc}"))
+            return None
+        self.events.put(("ready", path, runner.describe()))
+        return runner
 
     def _score(self, runner: ModelRunner, generation: int,
                items: list[tuple[Path, Path]]) -> None:
@@ -575,6 +740,12 @@ class InteractiveTrainer:
 
         self.dataset_var = tk.StringVar(value=self.current_dataset)
         self.split_var = tk.StringVar(value=self.current_split)
+        # The model files sit side by side in one directory (--model's), and
+        # the Option dialog switches between them by file name.
+        self.model_dir = args.model.parent
+        self.current_model = args.model.name
+        # The model the worker actually holds, which a failed switch falls back to.
+        self.loaded_model: str | None = None
         self.show_annotation_var = tk.BooleanVar(value=True)
         self.show_prediction_var = tk.BooleanVar(value=True)
         self.status_var = tk.StringVar(value="Ready")
@@ -646,14 +817,14 @@ class InteractiveTrainer:
         ttk.Label(top_bar, text="Dataset").pack(side=tk.LEFT)
         self.dataset_combobox = ttk.Combobox(
             top_bar, textvariable=self.dataset_var, values=self.datasets,
-            state="readonly", width=14)
-        self.dataset_combobox.pack(side=tk.LEFT, padx=(8, 18))
+            state="readonly", width=10)
+        self.dataset_combobox.pack(side=tk.LEFT, padx=(8, 12))
 
         ttk.Label(top_bar, text="Split").pack(side=tk.LEFT)
         self.split_combobox = ttk.Combobox(
             top_bar, textvariable=self.split_var, values=SPLIT_NAMES,
-            state="readonly", width=8)
-        self.split_combobox.pack(side=tk.LEFT, padx=(8, 18))
+            state="readonly", width=6)
+        self.split_combobox.pack(side=tk.LEFT, padx=(8, 12))
 
         self.add_button = ttk.Button(top_bar, text=ADD_BUTTON_LABEL, style="Add.TButton",
                                      command=self._on_add_button)
@@ -681,6 +852,8 @@ class InteractiveTrainer:
         ):
             ttk.Checkbutton(top_bar, text=text, variable=variable,
                             command=self._render_scene).pack(side=tk.LEFT, padx=padding)
+        ttk.Button(top_bar, text=OPTION_BUTTON_LABEL,
+                   command=self._open_options).pack(side=tk.LEFT, padx=(18, 0))
         self._build_legend(top_bar).pack(side=tk.RIGHT)
 
         body = ttk.Panedwindow(self.root, orient=tk.HORIZONTAL)
@@ -804,7 +977,13 @@ class InteractiveTrainer:
                 kind = event[0]
                 if kind == "ready":
                     self.model_ready = True
-                    self.model_status_var.set(f"Model: {event[1]}")
+                    self.loaded_model = event[1].name
+                    self.model_status_var.set(f"Model: {event[2]}")
+                elif kind == "load-failed":
+                    # The worker kept the model it had, so go back to it.
+                    self.current_model = self.loaded_model or self.current_model
+                    self.model_status_var.set(f"Model error: {event[2]}")
+                    messagebox.showerror("Interactive Trainer", event[2])
                 elif kind == "error":
                     self.model_status_var.set(f"Model error: {event[1]}")
                     messagebox.showerror("Interactive Trainer", event[1])
@@ -959,6 +1138,89 @@ class InteractiveTrainer:
         self.current_split = self.split_var.get()
         self._load_split()
 
+    def _list_models(self) -> list[str]:
+        """Checkpoint files in the model directory, re-read whenever the list opens."""
+        return sorted(path.name for path in self.model_dir.glob("*.pt"))
+
+    def _open_options(self) -> None:
+        """The Option dialog: the model and the numeric settings, applied on OK.
+
+        Values are checked before anything changes, so a typo leaves every
+        setting as it was. Edits on the image stay as they are.
+        """
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Options")
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+        frame = ttk.Frame(dialog, padding=12)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frame, text="Model").grid(row=0, column=0, sticky=tk.W, padx=(0, 12), pady=3)
+        model_var = tk.StringVar(value=self.current_model)
+        ttk.Combobox(frame, textvariable=model_var, values=self._list_models(),
+                     state="readonly", width=22).grid(row=0, column=1, sticky=tk.EW, pady=3)
+        variables = {}
+        for row, (name, label, kind, low, high) in enumerate(SETTINGS, start=1):
+            limits = f"{low:g}" + (f" to {high:g}" if high is not None else " or more")
+            ttk.Label(frame, text=label).grid(row=row, column=0, sticky=tk.W, padx=(0, 12),
+                                              pady=3)
+            variables[name] = tk.StringVar(value=f"{getattr(self.args, name):g}")
+            ttk.Entry(frame, textvariable=variables[name], width=24).grid(
+                row=row, column=1, sticky=tk.EW, pady=3)
+            ttk.Label(frame, text=limits, foreground="#666666").grid(
+                row=row, column=2, sticky=tk.W, padx=(8, 0))
+
+        def apply() -> None:
+            values = {}
+            for name, label, kind, low, high in SETTINGS:
+                text = variables[name].get().strip()
+                try:
+                    value = kind(float(text)) if kind is int and float(text).is_integer() \
+                        else kind(text)
+                except ValueError:
+                    value = None
+                if value is None or value < low or (high is not None and value > high):
+                    messagebox.showerror("Options", f"{label}: {text!r} is not a valid value.",
+                                         parent=dialog)
+                    return
+                values[name] = value
+            changed = {name for name, value in values.items() if value != getattr(self.args, name)}
+            for name in changed:
+                setattr(self.args, name, values[name])
+            dialog.destroy()
+            if model_var.get() != self.current_model:
+                self._switch_model(model_var.get())     # re-scores with the new model
+            elif changed & RESCORE_SETTINGS and self.entries:
+                self._request_scores(0)
+
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=len(SETTINGS) + 1, column=0, columnspan=3, sticky=tk.E, pady=(12, 0))
+        ttk.Button(buttons, text="OK", command=apply).pack(side=tk.LEFT)
+        ttk.Button(buttons, text="Cancel", command=dialog.destroy).pack(side=tk.LEFT, padx=(8, 0))
+        dialog.bind("<Return>", lambda _event: apply())
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        dialog.wait_visibility()
+        dialog.grab_set()
+
+    def _switch_model(self, name: str) -> None:
+        """Switch the model and re-score the list with it.
+
+        Trainings already queued still run on the previous model and save to
+        its file first: the worker takes jobs in order. Edits stay as they are.
+        """
+        if name == self.current_model:
+            return
+        self.current_model = name
+        self.worker.jobs.put(("load", self.model_dir / name))
+        if self.entries:
+            self._request_scores(0)
+        elif self.split_images:
+            # The first list of the split is still being scored by the previous
+            # model; drop that and draw it with the new one.
+            self.generation += 1
+            self._request_scores(self.args.initial_files)
+        self.model_status_var.set(f"Loading {name}...")
+
     def _load_split(self) -> None:
         """Forget the list and draw a fresh one from the selected split."""
         self.generation += 1
@@ -1041,9 +1303,9 @@ class InteractiveTrainer:
         Save stays available on an unchanged label too: confirming that the
         label is right and the model wrong is as useful a lesson as a fix.
 
-        Nothing here waits for the model: the next frame of the list, in its
-        current order, opens at once, and the training and the re-ranked list
-        that follows it arrive in the background.
+        Nothing here waits for the model: the lowest-scoring other frame of the
+        list opens at once, ranked by the scores the list already has, and the training and the re-ranked list that
+        follows it arrive in the background.
         """
         if self.current_image_path is None:
             return
@@ -1076,13 +1338,17 @@ class InteractiveTrainer:
         self.worker.jobs.put(("train", self.current_image_path, annotations, replay))
 
         saved_name = self.current_image_path.name
-        if self.current_index is not None and self.current_index + 1 < len(self.entries):
-            self._select_listbox_row(self.current_index + 1)
-            self._open_image_at_index(self.current_index + 1)
+        # The list is kept sorted by score, so the first frame other than this
+        # one is the lowest-scoring one left.
+        next_index = next((index for index, entry in enumerate(self.entries)
+                           if entry["image"] != self.current_image_path), None)
+        if next_index is not None:
+            self._select_listbox_row(next_index)
+            self._open_image_at_index(next_index)
             ending = ""
         else:
             self._style_listbox_rows()
-            ending = " This is the last frame in the list."
+            ending = " No other frame is in the list."
         self._update_status(f"Saved {saved_name}; training queued "
                             f"({self.pending_trains} pending).{ending}")
 
@@ -1701,8 +1967,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--split", default="train", choices=SPLIT_NAMES,
                         help="Initial split. Switchable in the GUI.")
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH,
-                        help="yolov8sclone `tooltip` checkpoint. It is overwritten "
-                             "after every training round.")
+                        help="Initial checkpoint, yolov8stooltip or yolov8sclone `tooltip` "
+                             "(default: data/itrainer-model/yolov8stooltip.pt). The GUI "
+                             "lists every *.pt beside it to switch to; each is "
+                             "overwritten after every training round on it.")
     parser.add_argument("--device", default="",
                         help="Torch device, e.g. cuda:1 (default: cuda if available, else cpu).")
     parser.add_argument("--initial-files", type=int, default=DEFAULT_INITIAL_FILES,

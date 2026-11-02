@@ -149,7 +149,7 @@ tooltip-detector/
 ├── data/
 │   ├── dataset -> ../tooltip-annotator/data/dataset        # 심볼릭 링크 (직접 만들어야 함)
 │   │   └── <dataset-name>/                # 학습 데이터 (images / segmentation / annotation)
-│   ├── itrain-model/model.pt      # interactive-trainer의 작업용 탐지기 (학습할 때마다 덮어씀)
+│   ├── itrainer-model/*.pt        # interactive-trainer가 고르는 작업용 탐지기 (학습할 때마다 덮어씀)
 │   ├── models/<dataset-name>/<target-mode>/<model-type>/   # 학습된 모델 가중치 (best.pt, last.pt)
 │   └── results/<dataset-name>/<target-mode>/<model-type>/  # 평가 결과
 └── temp/
@@ -378,26 +378,37 @@ run.bat interactive-trainer --device cuda:1      # Windows
 
 데이터셋 레이블은 성능이 낮은 모델로 자동 생성했기 때문에 품질이 낮고, 그 레이블로 학습한 탐지 모델의 성능도 낮다. 레이블 보정과 모델 개선을 따로 진행하면 양쪽 모두 부담이 크므로, 이 GUI는 둘을 한 루프에서 함께 진행한다. 모델의 예측과 현재 레이블이 가장 어긋나는 프레임을 먼저 보여 주고, 사용자가 레이블을 고쳐 저장하면 모델이 그 프레임으로 바로 학습한다. 모델이 나아질수록 예측을 출발점으로 쓸 수 있는 프레임이 늘어나 수작업이 줄어드는 것을 노린다.
 
-모델은 `yolov8sclone` 베이스라인의 `tooltip` 체크포인트(`tool`·`tip` 2클래스)다. 작업용 사본을 `data/itrain-model/model.pt`에 두고 시작하며, 이 파일은 학습할 때마다 덮어쓴다. 다음 실행은 그때까지 학습된 모델에서 이어간다.
+모델은 `data/itrainer-model/`에 둔 체크포인트 중에서 툴바 끝의 `Option` 버튼으로 여는 환경 설정 팝업에서 고른다. 기본값은 `yolov8stooltip.pt`(`--model`로 바꿀 수 있다)이고, 실행 중에도 바꿀 수 있다. 두 종류를 지원하며, 체크포인트에 `kpt_shape`가 있는지로 구분한다.
+
+| 모델                                                              | 예측이 레이블이 되는 방식                                                                                      |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| [yolov8stooltip](standalone/yolov8stooltip/) (기본)               | 탐지 하나가 도구 박스와 그 도구의 팁을 함께 내므로 그대로 레이블이 된다                                        |
+| [yolov8sclone](baseline/yolov8sclone/) `tooltip` (`tool`·`tip`) | `tool` 박스와 `tip` 박스가 따로 나오므로 후처리 규칙으로 짝을 짓는다. 도구가 겹치면 다른 도구의 팁을 고를 수 있다 |
+
+각 파일은 그 모델로 학습할 때마다 덮어쓰고, 다음 실행은 그때까지 학습된 모델에서 이어간다. 작업용 사본은 각 프로젝트의 학습 결과에서 만든다.
 
 ```bash
-mkdir -p data/itrain-model
-cp baseline/yolov8sclone/data/model/cholec80/tooltip/model.pt data/itrain-model/model.pt
+mkdir -p data/itrainer-model
+cp standalone/yolov8stooltip/data/model/cholec80/model.pt data/itrainer-model/yolov8stooltip.pt
+cp baseline/yolov8sclone/data/model/cholec80/tooltip/model.pt data/itrainer-model/yolo8s.pt
 ```
+
+모델을 바꾸면 그 모델로 목록 전체를 다시 채점한다. 편집 중인 프레임과 편집 내용은 그대로 남는다. 바꾸기 전에 저장해 둔 학습은 이전 모델로 끝까지 학습하고 이전 모델 파일에 저장된다. 불러오기에 실패하면 원래 모델로 돌아간다.
 
 동작 순서:
 
 1. 선택한 데이터셋·스플릿에서 프레임 32개(`--initial-files`)를 랜덤으로 뽑아 추론하고, 예측과 레이블의 일치 점수를 매긴다. 목록은 점수가 낮은 순으로 정렬되고 첫 프레임이 열린다. `annotation-manual/`에 이미 있는 프레임은 사람이 확인한 것이므로 뽑지 않는다.
 2. annotation_editor와 같은 방식으로 레이블을 고치거나, `Update`로 모델의 예측을 불러와 그것부터 고친다.
-3. `Save`를 누르면 annotation_editor와 똑같이 `annotation-manual/`에 쓰고 `annotation/`에 복사한 뒤, 목록의 바로 다음 프레임을 곧바로 열어 편집할 수 있게 한다. 그 프레임으로 하는 학습은 백그라운드에서 진행된다. 다른 장면을 잊지 않도록 매 스텝 배치에 `annotation-manual/`의 프레임 3장(`--replay`)을 함께 넣는다. 저장한 프레임의 점수가 0.9(`--target-score`)에 이르거나 20스텝(`--max-steps`)이 되면 멈추고 체크포인트를 덮어쓴다.
+3. `Save`를 누르면 annotation_editor와 똑같이 `annotation-manual/`에 쓰고 `annotation/`에 복사한 뒤, 목록에서 방금 저장한 프레임을 뺀 나머지 중 점수가 가장 낮은 것을 곧바로 열어 편집할 수 있게 한다. 그 프레임으로 하는 학습은 백그라운드에서 진행된다. 다른 장면을 잊지 않도록 매 스텝 배치에 `annotation-manual/`의 프레임 3장(`--replay`)을 함께 넣는다. 저장한 프레임의 점수가 0.9(`--target-score`)에 이르거나 20스텝(`--max-steps`)이 되면 멈추고 체크포인트를 덮어쓴다.
 4. 학습이 끝나면 목록의 프레임 전체와 새로 뽑은 8개(`--new-files`)를 새 모델로 다시 채점해 목록을 백그라운드에서 갱신한다. 편집 중인 프레임은 그대로 열려 있다. 목록은 학습할 때마다 8개씩 늘어나고, 100개(`--max-files`)를 넘으면 점수가 낮은 100개만 남긴다.
 
-추론과 학습은 백그라운드 스레드 하나에서 차례로 실행되므로, 저장 뒤 학습이나 재채점을 기다리지 않고 바로 다음 프레임을 편집한다. 그 대신 다음 프레임은 갱신된 모델의 순위가 아니라 저장할 때의 목록 순서로 정해지며, 목록이 갱신되면 편집 중인 프레임이 첫 번째가 아닐 수 있다. 학습 중에 또 저장하면 학습이 순서대로 쌓이고, 목록 재채점은 마지막 학습이 끝난 뒤 한 번만 한다. 학습 진행 상황은 목록 아래에 표시된다.
+추론과 학습은 백그라운드 스레드 하나에서 차례로 실행되므로, 저장 뒤 학습이나 재채점을 기다리지 않고 바로 다음 프레임을 편집한다. 그 대신 다음 프레임은 갱신된 모델의 점수가 아니라 저장할 때 목록에 있던 점수로 정해지며, 목록이 갱신되면 편집 중인 프레임이 첫 번째가 아닐 수 있다. 학습 중에 또 저장하면 학습이 순서대로 쌓이고, 목록 재채점은 마지막 학습이 끝난 뒤 한 번만 한다. 학습 진행 상황은 목록 아래에 표시된다.
 
 **일치 점수**는 예측과 레이블의 도구를 1:1로 짝지어(Hungarian) 각 쌍의 `0.5 × 박스 IoU + 0.5 × max(0, 1 − 팁 거리 / 32 px)`를 더하고, 예측과 레이블 중 많은 쪽의 도구 수로 나눈 값(0〜1)이다. 도구를 놓치거나 더 찾으면 완전히 틀린 것과 같은 만큼 감점된다. 예측과 레이블이 모두 비어 있으면 1점이므로, 레이블과 모델이 같은 도구를 함께 놓친 프레임은 이 점수로 찾을 수 없다.
 
 | 조작                                                  | 동작                                                                                                          |
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `Option`                                              | 환경 설정 팝업: 모델 선택과 목록·학습·탐지 수치값 조정                                                        |
 | `Update` (Ctrl+U, F4)                                 | 편집 중인 레이블을 모델 예측으로 교체 (저장 전)                                                               |
 | `Save` (Ctrl+S, F2)                                   | 레이블 저장 후 백그라운드 학습 시작. 고치지 않은 레이블도 저장 가능                                           |
 | `Reload` (F3)                                         | 파일의 레이블을 다시 읽음                                                                                     |
@@ -412,13 +423,18 @@ cp baseline/yolov8sclone/data/model/cholec80/tooltip/model.pt data/itrain-model/
 주의할 점:
 
 - val/test 스플릿에서 저장하면 그 데이터로 모델이 학습되므로, 그 스플릿으로 한 평가는 더 이상 공정하지 않다.
-- 학습 종료는 저장한 프레임의 점수로만 판정한다. 다른 장면의 성능은 베이스라인 평가로 따로 확인한다. `--output-dir`를 빼면 베이스라인 자체의 평가 결과를 덮어쓰므로 반드시 지정한다.
+- 학습 종료는 저장한 프레임의 점수로만 판정한다. 다른 장면의 성능은 각 모델 프로젝트의 평가로 따로 확인한다. `--output-dir`를 빼면 그 프로젝트 자체의 평가 결과를 덮어쓰므로 반드시 지정한다.
 
   ```bash
+  ./standalone/yolov8stooltip/run eval-model --dataset cholec80 --split val \
+      --model "$PWD/data/itrainer-model/yolov8stooltip.pt" \
+      --output-dir "$PWD/data/itrainer-model/results/yolov8stooltip/val"
   ./baseline/yolov8sclone/run eval-model --dataset cholec80 --split val \
-      --model "$PWD/data/itrain-model/model.pt" --output-dir "$PWD/data/itrain-model/results/val"
+      --model "$PWD/data/itrainer-model/yolo8s.pt" \
+      --output-dir "$PWD/data/itrainer-model/results/yolo8s/val"
   ```
 
+- 위에서 괄호로 적은 수치값(`--initial-files`, `--new-files`, `--max-files`, `--target-score`, `--max-steps`, `--replay`)과 학습률(`--lr`), 탐지 신뢰도 임계값(`--conf`), NMS IoU(`--iou`)는 명령행 인자로 시작값을 정하고, 실행 중에는 `Option` 팝업에서 바꾼다. OK를 누를 때 모든 값을 검사한 뒤 한꺼번에 적용하며, 이번 실행 동안만 유지된다. 모델, 신뢰도 임계값, NMS IoU, 목록 최대 수를 바꾸면 목록을 바로 다시 채점하고, 나머지는 다음 학습이나 다음 스플릿부터 적용된다.
 - 학습 뒤 재채점 시간은 목록 크기에 비례한다(RTX A6000에서 100개에 1초 남짓).
 - 학습 중에 창을 닫으면 진행 중인 학습만 사라진다. 체크포인트는 임시 파일에 쓴 뒤 교체하므로 마지막으로 끝난 학습 상태로 남는다.
 
