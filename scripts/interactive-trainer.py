@@ -42,6 +42,11 @@ waits for the GPU and the model is never touched by two threads at once.
 
 Frames already in annotation-manual/ are never drawn for the list: a person
 has already checked them. They serve as the replay set instead.
+
+A second, short list under the first keeps the last `RECENT_FILES` frames
+opened in the split, most recent first, so earlier work is one click away even
+after it has left the ranked list. Its frames are re-scored along with the
+list, and it lasts for the session.
 """
 
 from __future__ import annotations
@@ -175,6 +180,11 @@ ANNOTATION_LABEL_FONT_SCALE = 2
 
 # The frame list, as a multiple of the default fixed-width font.
 LIST_FONT_SCALE = 1.2
+
+# The recent-frames list under it: how many frames it keeps per split, and how
+# many rows it shows.
+RECENT_FILES = 20
+RECENT_LIST_ROWS = 10
 
 # The tool count in the status bar stands out from the rest of the readout.
 TOOL_COUNT_FONT_SCALE = 1.5
@@ -635,14 +645,16 @@ class ModelWorker(threading.Thread):
 
     Jobs (put on `jobs`):
       ("load", model path)
-      ("score", generation, [(image path, label path), ...])
+      ("score", generation, [(image path, label path), ...], [recent ones, ...])
       ("train", image path, annotations, [(image path, label path), ...])
+    The recent ones are frames only the recent list holds; they are scored too
+    but reported apart, so they never enter the ranking.
     Jobs run in the order queued, so trainings queued before a "load" still
     train, and save, the model they were saved against.
     Events (read by the GUI):
       ("ready", model path, text) ("load-failed", model path, text) ("error", text)
       ("score-progress", generation, done, total)
-      ("scored", generation, [{"image", "prediction", "score"}, ...])
+      ("scored", generation, [{"image", "prediction", "score"}, ...], [recent ones, ...])
       ("train-progress", image path, step, score)
       ("trained", image path, steps, score before, score after)
     """
@@ -685,14 +697,14 @@ class ModelWorker(threading.Thread):
         return runner
 
     def _score(self, runner: ModelRunner, generation: int,
-               items: list[tuple[Path, Path]]) -> None:
+               items: list[tuple[Path, Path]], recent: list[tuple[Path, Path]]) -> None:
         results = []
-        for done, (image_path, label_path) in enumerate(items, start=1):
+        for done, (image_path, label_path) in enumerate(items + recent, start=1):
             prediction = runner.predict(read_rgb(image_path))
             score = agreement_score(prediction, read_annotations(label_path))
             results.append({"image": image_path, "prediction": prediction, "score": score})
-            self.events.put(("score-progress", generation, done, len(items)))
-        self.events.put(("scored", generation, results))
+            self.events.put(("score-progress", generation, done, len(items) + len(recent)))
+        self.events.put(("scored", generation, results[:len(items)], results[len(items):]))
 
     def _train(self, runner: ModelRunner, image_path: Path, annotations: list[dict],
                replay: list[tuple[Path, Path]]) -> None:
@@ -759,6 +771,10 @@ class InteractiveTrainer:
         self.manual_stems: set[str] = set()
         # The ranked list: {"image": Path, "prediction": list, "score": float}.
         self.entries: list[dict] = []
+        # The latest score of every frame in the list or the recent list, by image.
+        self.scored: dict[Path, dict] = {}
+        # The frames opened in each (dataset, split), most recent first.
+        self.recent_images: dict[tuple[str, str], list[Path]] = {}
         self.saved_images: set[Path] = set()
         # Bumped on every dataset/split switch, so scores computed for the
         # previous split are recognised and dropped when they arrive.
@@ -865,6 +881,20 @@ class InteractiveTrainer:
         ttk.Label(left_panel, textvariable=self.model_status_var, wraplength=330,
                   justify=tk.LEFT).pack(side=tk.BOTTOM, anchor=tk.W, pady=(6, 0))
 
+        # Packed from the bottom before the ranked list, so that list takes
+        # whatever height is left.
+        recent_frame = ttk.Frame(left_panel)
+        recent_frame.pack(side=tk.BOTTOM, fill=tk.X)
+        self.recent_listbox = tk.Listbox(recent_frame, width=46, height=RECENT_LIST_ROWS,
+                                         exportselection=False, font=self.list_font)
+        self.recent_listbox.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        recent_scrollbar = ttk.Scrollbar(recent_frame, orient=tk.VERTICAL,
+                                         command=self.recent_listbox.yview)
+        recent_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.recent_listbox.configure(yscrollcommand=recent_scrollbar.set)
+        ttk.Label(left_panel, text=f"Recent (last {RECENT_FILES}), most recent first").pack(
+            side=tk.BOTTOM, anchor=tk.W, pady=(10, 6))
+
         list_frame = ttk.Frame(left_panel)
         list_frame.pack(fill=tk.BOTH, expand=True)
         self.image_listbox = tk.Listbox(list_frame, width=46, exportselection=False,
@@ -924,6 +954,9 @@ class InteractiveTrainer:
         # one step the toplevel binding below takes.
         self.image_listbox.bind("<Up>", self._on_previous_image_shortcut)
         self.image_listbox.bind("<Down>", self._on_next_image_shortcut)
+        self.recent_listbox.bind("<<ListboxSelect>>", self._on_recent_selected)
+        self.recent_listbox.bind("<Up>", self._on_previous_image_shortcut)
+        self.recent_listbox.bind("<Down>", self._on_next_image_shortcut)
         self.canvas.bind("<ButtonPress-1>", self._on_canvas_press)
         self.canvas.bind("<B1-Motion>", self._on_canvas_drag)
         self.canvas.bind("<ButtonRelease-1>", self._on_canvas_release)
@@ -992,7 +1025,7 @@ class InteractiveTrainer:
                         self.model_status_var.set(f"Scoring {event[2]} / {event[3]} frames...")
                 elif kind == "scored":
                     if event[1] == self.generation:
-                        self._apply_scores(event[2])
+                        self._apply_scores(event[2], event[3])
                         self.model_status_var.set(self._idle_status("Scored"))
                 elif kind == "train-progress":
                     self.model_status_var.set(
@@ -1019,27 +1052,34 @@ class InteractiveTrainer:
             self._request_scores(self.args.new_files)
 
     def _request_scores(self, new_count: int) -> None:
-        """Re-score the listed frames plus `new_count` freshly drawn ones."""
+        """Re-score the listed frames plus `new_count` freshly drawn ones, and
+        the recent frames the list does not hold."""
         listed = [entry["image"] for entry in self.entries]
         excluded = set(listed)
         candidates = [path for path in self.split_images
                       if path not in excluded and path.stem not in self.manual_stems]
         drawn = random.sample(candidates, min(new_count, len(candidates)))
-        items = [(path, annotation_path(self.current_dataset, self.current_split, path.stem))
-                 for path in listed + drawn]
-        if not items:
+        excluded.update(drawn)
+        recent = [path for path in self._recent() if path not in excluded]
+        items, recent_items = (
+            [(path, annotation_path(self.current_dataset, self.current_split, path.stem))
+             for path in paths]
+            for paths in (listed + drawn, recent))
+        if not items and not recent_items:
             self.model_status_var.set("No unchecked frames left in this split.")
             return
-        self.model_status_var.set(f"Scoring {len(items)} frames...")
-        self.worker.jobs.put(("score", self.generation, items))
+        self.model_status_var.set(f"Scoring {len(items) + len(recent_items)} frames...")
+        self.worker.jobs.put(("score", self.generation, items, recent_items))
 
-    def _apply_scores(self, results: list[dict]) -> None:
+    def _apply_scores(self, results: list[dict], recent_results: list[dict]) -> None:
         """List the frames worst first, at most the lowest `--max-files` of them.
 
         This arrives in the background while the user works, so the frame on
         screen stays open, and stays listed even when it no longer ranks; only
-        the very first list of a split opens its worst frame.
+        the very first list of a split opens its worst frame. `recent_results`
+        only update the recent list.
         """
+        self.scored = {result["image"]: result for result in results + recent_results}
         ranked = sorted(results, key=lambda result: result["score"])
         kept = ranked[:self.args.max_files]
         current = self.current_image_path
@@ -1057,6 +1097,7 @@ class InteractiveTrainer:
             self.image_listbox.insert(tk.END, self._listbox_label(entry))
         self.suppress_listbox_event = False
         self._style_listbox_rows()
+        self._fill_recent_listbox()
 
         if current is None:
             if self.entries:
@@ -1065,8 +1106,7 @@ class InteractiveTrainer:
             return
         self.current_index = next(
             (index for index, entry in enumerate(self.entries) if entry["image"] == current), None)
-        if self.current_index is not None:
-            self._select_listbox_row(self.current_index)
+        self._restore_listbox_selection()
         self._update_images_label()
         self._update_status()
         self._render_scene()
@@ -1076,27 +1116,71 @@ class InteractiveTrainer:
         return f"{marker}{entry['score']:.3f}  {entry['image'].name}"
 
     def _style_listbox_rows(self) -> None:
-        """Colour every row: sky blue for the frame on screen, yellow for a
-        hand-annotated one, default otherwise. The list holds at most
-        `--max-files` rows, so repainting all of them is cheap."""
-        for index, entry in enumerate(self.entries):
-            if entry["image"] == self.current_image_path:
-                self.image_listbox.itemconfig(
-                    index, background=CURRENT_ITEM_BACKGROUND, foreground=CURRENT_ITEM_FOREGROUND,
-                    selectbackground=CURRENT_ITEM_BACKGROUND,
-                    selectforeground=CURRENT_ITEM_FOREGROUND)
-            else:
-                self._apply_listbox_style(index, entry["image"].stem in self.manual_stems)
+        """Colour every row of both lists: sky blue for the frame on screen,
+        yellow for a hand-annotated one, default otherwise. The lists hold at
+        most `--max-files` and RECENT_FILES rows, so repainting all of them is
+        cheap."""
+        for listbox, images in ((self.image_listbox, [entry["image"] for entry in self.entries]),
+                                (self.recent_listbox, self._recent())):
+            for index, image in enumerate(images):
+                if image == self.current_image_path:
+                    listbox.itemconfig(
+                        index, background=CURRENT_ITEM_BACKGROUND,
+                        foreground=CURRENT_ITEM_FOREGROUND,
+                        selectbackground=CURRENT_ITEM_BACKGROUND,
+                        selectforeground=CURRENT_ITEM_FOREGROUND)
+                else:
+                    self._apply_listbox_style(listbox, index, image.stem in self.manual_stems)
 
-    def _apply_listbox_style(self, index: int, is_manual: bool) -> None:
+    def _apply_listbox_style(self, listbox: tk.Listbox, index: int, is_manual: bool) -> None:
         if is_manual:
-            self.image_listbox.itemconfig(
+            listbox.itemconfig(
                 index, background=MANUAL_ITEM_BACKGROUND, foreground=MANUAL_ITEM_FOREGROUND,
                 selectbackground=MANUAL_ITEM_SELECT_BACKGROUND,
                 selectforeground=MANUAL_ITEM_SELECT_FOREGROUND)
         else:
-            self.image_listbox.itemconfig(index, background="", foreground="",
-                                          selectbackground="", selectforeground="")
+            listbox.itemconfig(index, background="", foreground="",
+                               selectbackground="", selectforeground="")
+
+    def _recent(self) -> list[Path]:
+        """The frames opened in the current split, most recent first."""
+        return self.recent_images.setdefault((self.current_dataset, self.current_split), [])
+
+    def _remember_recent(self, image_path: Path) -> None:
+        recent = self._recent()
+        if image_path in recent:
+            recent.remove(image_path)
+        recent.insert(0, image_path)
+        del recent[RECENT_FILES:]
+
+    def _recent_label(self, image_path: Path) -> str:
+        """As `_listbox_label`, with "-" until the frame has been scored."""
+        entry = self.scored.get(image_path)
+        if entry is not None:
+            return self._listbox_label(entry)
+        marker = "* " if image_path.stem in self.manual_stems else "  "
+        return f"{marker}{'-':^5}  {image_path.name}"
+
+    def _fill_recent_listbox(self) -> None:
+        self.suppress_listbox_event = True
+        self.recent_listbox.delete(0, tk.END)
+        for image_path in self._recent():
+            self.recent_listbox.insert(tk.END, self._recent_label(image_path))
+        self.suppress_listbox_event = False
+        self._style_listbox_rows()
+        self._select_recent_row()
+
+    def _select_recent_row(self) -> None:
+        """Select the frame on screen in the recent list, where it is the
+        first row whenever it is there at all."""
+        self.suppress_listbox_event = True
+        self.recent_listbox.selection_clear(0, tk.END)
+        recent = self._recent()
+        if recent and recent[0] == self.current_image_path:
+            self.recent_listbox.selection_set(0)
+            self.recent_listbox.activate(0)
+            self.recent_listbox.see(0)
+        self.suppress_listbox_event = False
 
     def _select_listbox_row(self, index: int) -> None:
         self.suppress_listbox_event = True
@@ -1227,6 +1311,7 @@ class InteractiveTrainer:
         self.split_images = sorted(images_dir(self.current_dataset, self.current_split).glob("*.png"))
         self.manual_stems = self._list_manual_stems()
         self.entries = []
+        self.scored = {}
         self.image_listbox.delete(0, tk.END)
         self.current_index = None
         self.current_image_path = None
@@ -1237,6 +1322,7 @@ class InteractiveTrainer:
         self.drag_state = None
         self.mode = "select"
         self.dirty = False
+        self._fill_recent_listbox()
         self._update_images_label()
         self._update_buttons()
         self._render_scene()
@@ -1267,9 +1353,31 @@ class InteractiveTrainer:
             return
         self._open_image_at_index(new_index)
 
+    def _on_recent_selected(self, _event: tk.Event) -> None:
+        if self.suppress_listbox_event:
+            return
+        selection = self.recent_listbox.curselection()
+        if not selection:
+            return
+        image_path = self._recent()[int(selection[0])]
+        if image_path == self.current_image_path:
+            return
+        if not self._confirm_leave_current_image():
+            self._restore_listbox_selection()
+            return
+        self._open_image(image_path)
+
     def _open_image_at_index(self, index: int) -> None:
-        self.current_index = index
-        self.current_image_path = self.entries[index]["image"]
+        self._open_image(self.entries[index]["image"])
+
+    def _open_image(self, image_path: Path) -> None:
+        """Open a frame of either list. A recent frame the ranked list no
+        longer holds opens with no row selected there (`current_index` None)."""
+        self.current_index = next(
+            (index for index, entry in enumerate(self.entries) if entry["image"] == image_path),
+            None)
+        self.current_image_path = image_path
+        self._remember_recent(image_path)
         self.current_image_rgb = read_rgb(self.current_image_path)
         self.image_height, self.image_width = self.current_image_rgb.shape[:2]
         self.current_annotations = self._load_annotation(self.current_image_path)
@@ -1278,7 +1386,8 @@ class InteractiveTrainer:
         self.drag_state = None
         self.mode = "select"
         self.dirty = False
-        self._style_listbox_rows()
+        self._restore_listbox_selection()
+        self._fill_recent_listbox()
         self._update_images_label()
         self._update_buttons()
         self._update_status()
@@ -1290,10 +1399,7 @@ class InteractiveTrainer:
                 for item in read_annotations(path)]
 
     def _current_entry(self) -> dict | None:
-        if self.current_image_path is None:
-            return None
-        return next((entry for entry in self.entries
-                     if entry["image"] == self.current_image_path), None)
+        return self.scored.get(self.current_image_path)
 
     # ── Save / Reload / Update ───────────────────────────────────────────
 
@@ -1327,6 +1433,7 @@ class InteractiveTrainer:
             self.image_listbox.delete(self.current_index)
             self.image_listbox.insert(self.current_index, self._listbox_label(entry))
             self._select_listbox_row(self.current_index)
+        self._fill_recent_listbox()
         self.dirty = False
         self._update_buttons()
 
@@ -1919,8 +2026,12 @@ class InteractiveTrainer:
         return True
 
     def _restore_listbox_selection(self) -> None:
+        """Select the frame on screen in both lists, or nothing where it is absent."""
         if self.current_index is not None:
             self._select_listbox_row(self.current_index)
+        else:
+            self.image_listbox.selection_clear(0, tk.END)
+        self._select_recent_row()
 
     def _normalize_bbox(self, bbox: dict[str, int]) -> dict[str, int]:
         x = self._clamp_int(int(bbox["x"]), 0, max(self.image_width - 1, 0))
