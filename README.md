@@ -439,6 +439,8 @@ cp baseline/yolov8sclone/data/model/cholec80/tooltip/model.pt data/itrainer-mode
 - 학습 뒤 재채점 시간은 목록 크기에 비례한다(RTX A6000에서 100개에 1초 남짓).
 - 학습 중에 창을 닫으면 진행 중인 학습만 사라진다. 체크포인트는 임시 파일에 쓴 뒤 교체하므로 마지막으로 끝난 학습 상태로 남는다.
 
+상세 설계, 일치 점수 계산식, 조작 방법: [docs/interactive-trainer.md](docs/interactive-trainer.md)
+
 ## 스크립트 요약
 
 | 스크립트                  | 설명                             | 주요 인수                                                                                                                                   |
@@ -541,4 +543,5 @@ run eval-model  --dataset cholec80 --device cuda:1
 | [docs/eval-guide.md](docs/eval-guide.md)                         | 평가 실행 방법, 피크 탐지 알고리즘, 지표 정의, 결과 파일 구조             |
 | [docs/tooltip-detector.md](docs/tooltip-detector.md)             | 탐지 GUI 화면 구성, 추론 흐름, 조작 방법, 설계 상세                       |
 | [docs/tooltip-tracker.md](docs/tooltip-tracker.md)               | 추적 GUI 화면 구성, 화살표 스무딩 로직, 오탐지 판정 규칙, 설계 상세       |
+| [docs/interactive-trainer.md](docs/interactive-trainer.md)       | 레이블 보정·학습 병행 GUI 작업 흐름, 일치 점수 계산식, 설계 상세          |
 | [docs/dataset-browser-guide.md](docs/dataset-browser-guide.md)   | GUI 화면 구성, 조작 방법, 키보드 단축키                                   |
