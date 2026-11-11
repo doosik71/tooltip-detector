@@ -79,7 +79,7 @@ data/dataset/<dataset-name>/
   "image":  "doctor_250620_084707_00000030.png",
   "width":  736,
   "height": 480,
-  "source": "auto",
+  "source": "standalone/yolov8stooltip/data/model/erop/model.pt",
   "annotations": [
     {
       "bbox": { "x": 63, "y": 136, "width": 92, "height": 51 },
@@ -100,12 +100,22 @@ data/dataset/<dataset-name>/
 | `annotations`        | 프레임 내 수술도구 목록 (없으면 빈 배열 `[]`)                                |
 | `annotations[].bbox` | 수술도구의 경계 상자 — 좌상단 좌표 `(x, y)` 와 `width`, `height` (픽셀 단위) |
 | `annotations[].tip`  | 수술도구 끝부분(팁)의 픽셀 좌표 `(x, y)`                                     |
-| `source`             | 레이블의 출처 — `auto`(마스크에서 자동 생성) 또는 `manual`(사람이 보정)      |
+| `source`             | 레이블의 출처 — `manual`(사람이 보정) 또는 레이블을 만든 스크립트·모델 경로  |
 | `edited_at`          | `source`가 `manual`인 경우에만 존재하는 수정 시각 (ISO 8601)                 |
 
 좌표계: 좌상단이 원점 `(0, 0)`, x축이 오른쪽, y축이 아래쪽.
 
-`source`와 `edited_at`은 어노테이션의 출처를 구분하기 위한 메타데이터이며 학습에는 쓰이지 않는다. 이 필드가 도입되기 전에 생성된 파일에는 `source` 키가 없고, 그 경우는 `auto`로 간주한다. `source`가 `manual`인 레이블의 원본은 `tooltip-annotator`의 `data/dataset/<name>/annotation-manual/`에 따로 보관되며, 어노테이션 자동 생성을 다시 실행해도 덮어쓰이지 않는다. 자세한 내용은 [tooltip-annotator/docs/generate_annotation.md](../tooltip-annotator/docs/generate_annotation.md)를 참고한다.
+`source`와 `edited_at`은 어노테이션의 출처를 구분하기 위한 메타데이터이며 학습에는 쓰이지 않는다. 자동 레이블은 무엇이 만들었는지를 저장소 루트 기준 경로로 적는다.
+
+| `source` 값                                              | 만든 방법                                                                                     |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `manual`                                                 | 사람이 `annotation_editor` 또는 `interactive-trainer`로 보정                                  |
+| `standalone/yolov8stooltip/data/model/cholec80/model.pt` | cholec80의 자동 레이블. 이 체크포인트로 `scripts/relabel-annotation.py`가 다시 레이블         |
+| `standalone/yolov8stooltip/data/model/erop/model.pt`     | erop의 자동 레이블. 이 체크포인트로 `scripts/relabel-annotation.py`가 다시 레이블             |
+| `tooltip-annotator/scripts/generate_annotation.py`       | segmentation 마스크의 contour 휴리스틱으로 생성 (`annotation_editor`의 `Revert to Auto` 포함) |
+| `auto` 또는 키 없음                                      | 출처를 구체적으로 적기 전에 생성된 파일. 마스크 기반(`generate_annotation.py`)과 같다         |
+
+탐지 모델로 다시 레이블한 프레임은 bbox·tip만 바뀌고 segmentation 마스크는 마스크 파이프라인의 것이 그대로 남는다. 따라서 `gradient-seg` 타겟은 마스크와 팁의 출처가 서로 다르다. 재레이블은 `run relabel-annotation --dataset <name>`으로 하며, 모델은 `interactive-trainer`와 같은 방식(`ModelRunner`, conf 0.25, NMS IoU 0.45)으로 불러 추론한다. 기본 모델인 yolov8stooltip은 도구마다 팁을 키포인트로 직접 내므로 짝짓기가 필요 없다. `manual` 프레임은 건드리지 않는다. 반대로 `generate_annotation.py --overwrite`를 다시 실행하면 재레이블한 프레임이 마스크 기반 레이블로 되돌아간다. `source`가 `manual`인 레이블의 원본은 `tooltip-annotator`의 `data/dataset/<name>/annotation-manual/`에 따로 보관되며, 어노테이션 자동 생성을 다시 실행해도 덮어쓰이지 않는다. 자세한 내용은 [tooltip-annotator/docs/generate_annotation.md](../tooltip-annotator/docs/generate_annotation.md)를 참고한다.
 
 ### annotation ↔ segmentation 대응
 
@@ -282,7 +292,7 @@ python scripts/generate_dataset.py --dataset cholec80 --split-unit video --train
 
 ### 어노테이션 생성
 
-cholec80 원본은 도구 팁 좌표나 픽셀 단위 분할 마스크를 제공하지 않는다. 이 데이터셋의 마스크·팁·바운딩 박스는 erop와 동일한 반자동 파이프라인(사전학습 분할 모델 추론 + contour 휴리스틱)으로 생성됐다. 상세와 그 한계는 [final-report.md](final-report.md)의 데이터셋 장을 참고한다.
+cholec80 원본은 도구 팁 좌표나 픽셀 단위 분할 마스크를 제공하지 않는다. 이 데이터셋의 마스크·팁·바운딩 박스는 erop와 동일한 반자동 파이프라인(사전학습 분할 모델 추론 + contour 휴리스틱)으로 생성됐다. 이후 manual이 아닌 프레임의 팁·바운딩 박스는 `standalone/yolov8stooltip/data/model/cholec80/model.pt`로 다시 레이블되었고, 마스크는 그대로다(위 `source` 표 참고). 상세와 그 한계는 [final-report.md](final-report.md)의 데이터셋 장을 참고한다.
 
 ## 학습 타겟 생성 방법
 

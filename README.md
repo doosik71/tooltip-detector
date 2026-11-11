@@ -134,6 +134,7 @@ tooltip-detector/
 │   ├── tooltip-detector.py        # 탐지 결과 시각화 GUI (이미지/데이터셋)
 │   ├── tooltip-tracker.py         # 동영상 실시간 탐지·추적 GUI
 │   ├── interactive-trainer.py     # 레이블 보정 + 탐지 모델 학습 병행 GUI
+│   ├── relabel-annotation.py      # yolov8stooltip 탐지 모델로 자동 레이블 재생성
 │   └── dataset-browser.py         # 데이터셋 시각화 GUI
 ├── run(.bat)                      # `run <script> [args...]` → scripts/<script>.py 실행
 ├── docs/
@@ -453,6 +454,7 @@ cp baseline/yolov8sclone/data/model/cholec80/tooltip/model.pt data/itrainer-mode
 | `run tooltip-detector`    | 탐지 결과 시각화 GUI             | `--dataset`(필수), `--model-type`, `--target-mode`, `--model`, `--data-root`                                                                |
 | `run tooltip-tracker`     | 동영상 실시간 추적 GUI           | `<model-path>`(생략 시 목록 출력)                                                                                                           |
 | `run interactive-trainer` | 레이블 보정 + 모델 학습 병행 GUI | `--dataset`, `--split`, `--model`, `--device`, `--initial-files`, `--new-files`, `--max-files`, `--target-score`, `--max-steps`, `--replay` |
+| `run relabel-annotation`  | 탐지 모델로 자동 레이블 재생성   | `--dataset`(필수), `--model`, `--split`, `--device`, `--conf`, `--iou`, `--workers`                                                         |
 | `run dataset-browser`     | 데이터셋 시각화 GUI              | `--dataset`(필수), `--split`, `--data-root`                                                                                                 |
 
 Windows에서는 `run` 대신 `run.bat`을 사용한다. 인자 없이 `run`(`run.bat`)만 실행하면 사용법과 사용 가능한 스크립트 목록이 출력된다.
