@@ -160,9 +160,17 @@ HANDLE_HOVER_FILL = "#ffffff"
 PREDICTION_COLOR = "#ff4dff"
 PREDICTION_COLOR_RGB = (255, 77, 255)
 PREDICTION_TIP_RADIUS = 7
+# Twice the label box's width, so the prediction still shows on both sides
+# when a label box is drawn over it.
+PREDICTION_BOX_WIDTH = 4
 # Canvas items cannot be translucent, so the prediction is drawn into the
 # displayed image instead and blended in at this opacity.
 PREDICTION_ALPHA = 0.5
+# The confidence is drawn at full opacity, after the blend, so it
+# stays readable over the image.
+PREDICTION_SCORE_COLOR_RGB = (255, 77, 255)
+PREDICTION_SCORE_FONT_SCALE = 0.7
+PREDICTION_SCORE_THICKNESS = 2
 
 # Frames with a hand-made annotation (annotation-manual/) are highlighted in
 # the list, in the colours annotation_editor uses for them.
@@ -176,7 +184,7 @@ CURRENT_ITEM_BACKGROUND = "#87ceeb"
 CURRENT_ITEM_FOREGROUND = "#1a1a1a"
 
 # The tool number drawn on each bbox, as a multiple of the canvas default font.
-ANNOTATION_LABEL_FONT_SCALE = 2
+ANNOTATION_LABEL_FONT_SCALE = 3
 
 # The frame list, as a multiple of the default fixed-width font.
 LIST_FONT_SCALE = 1.2
@@ -939,7 +947,8 @@ class InteractiveTrainer:
         legend.create_text(42, 13, text="Label", anchor=tk.W)
         # Prediction: dashed magenta box with a hollow diamond tip.
         r = PREDICTION_TIP_RADIUS
-        legend.create_rectangle(104, 5, 130, 21, outline=PREDICTION_COLOR, width=2, dash=(8, 4))
+        legend.create_rectangle(104, 5, 130, 21, outline=PREDICTION_COLOR,
+                                width=PREDICTION_BOX_WIDTH, dash=(8, 4))
         legend.create_polygon(130, 13 - r, 130 + r, 13, 130, 13 + r, 130 - r, 13,
                               outline=PREDICTION_COLOR, fill="", width=2)
         legend.create_text(142, 13, text="Prediction", anchor=tk.W)
@@ -1635,6 +1644,7 @@ class InteractiveTrainer:
         """
         overlay = display_rgb.copy()
         color = PREDICTION_COLOR_RGB
+        scores = []
         for annotation in predictions:
             bbox, tip = annotation["bbox"], annotation["tip"]
             x1, y1 = round(bbox["x"] * scale), round(bbox["y"] * scale)
@@ -1643,16 +1653,21 @@ class InteractiveTrainer:
             tip_x, tip_y = round(tip["x"] * scale), round(tip["y"] * scale)
             for start, end in (((x1, y1), (x2, y1)), ((x2, y1), (x2, y2)),
                                ((x2, y2), (x1, y2)), ((x1, y2), (x1, y1))):
-                draw_dashed_line(overlay, start, end, color, 2, dash=8, gap=4)
+                draw_dashed_line(overlay, start, end, color, PREDICTION_BOX_WIDTH, dash=8, gap=4)
             draw_dashed_line(overlay, ((x1 + x2) // 2, (y1 + y2) // 2), (tip_x, tip_y),
                              color, 1, dash=3, gap=3)
             r = PREDICTION_TIP_RADIUS
             diamond = np.array([(tip_x, tip_y - r), (tip_x + r, tip_y),
                                 (tip_x, tip_y + r), (tip_x - r, tip_y)], dtype=np.int32)
             cv2.polylines(overlay, [diamond], True, color, 2, cv2.LINE_AA)
-            cv2.putText(overlay, f"{annotation['score']:.2f}", (x1 + 4, y2 - 4),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
-        return cv2.addWeighted(overlay, PREDICTION_ALPHA, display_rgb, 1.0 - PREDICTION_ALPHA, 0.0)
+            scores.append((f"{annotation['score']:.2f}", (x1 + 4, y2 - 6)))
+        blended = cv2.addWeighted(overlay, PREDICTION_ALPHA, display_rgb,
+                                  1.0 - PREDICTION_ALPHA, 0.0)
+        for text, origin in scores:
+            cv2.putText(blended, text, origin, cv2.FONT_HERSHEY_SIMPLEX,
+                        PREDICTION_SCORE_FONT_SCALE, PREDICTION_SCORE_COLOR_RGB,
+                        PREDICTION_SCORE_THICKNESS, cv2.LINE_AA)
+        return blended
 
     def _dim_for_add_mode(self, display_rgb: np.ndarray) -> np.ndarray:
         dimmed = cv2.convertScaleAbs(display_rgb, alpha=ADD_MODE_BRIGHTNESS)
