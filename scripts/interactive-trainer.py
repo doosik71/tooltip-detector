@@ -8,15 +8,17 @@ costs a lot on both sides, so this GUI runs the two together:
      the detector on each, and score how well its prediction agrees with the
      frame's current label (see `agreement_score`). The list shows the frames
      lowest score first, and the lowest one opens first.
-  2. The user edits the label as in tooltip-annotator's `annotation_editor`, or
-     presses Update (Ctrl+U / F4) to start from the detector's prediction.
-     The label and the prediction are overlaid in different colours.
+  2. The user edits the label as in tooltip-annotator's `annotation_editor`
+     (including a tool's optional second tip, `tip2`, through the right-click
+     menu), or presses Update (Ctrl+U / F4) to start from the detector's
+     prediction. The label and the prediction are overlaid in different
+     colours.
   3. Save (Ctrl+S / F2) writes the label to annotation-manual/ and mirrors it
      into annotation/, exactly like `annotation_editor`, and opens the
      lowest-scoring other frame of the list at once, by the scores the list
      already has. The model trains in the background on
-     that frame -- plus a few replayed frames from
-     annotation-manual/ so it does not forget everything else -- until its
+     that frame -- plus a few replayed frames a person has already checked,
+     so it does not forget everything else -- until its
      prediction on the saved frame scores `--target-score` or it has taken
      `--max-steps` steps, and overwrites the checkpoint.
   4. After training, the frames in the list and `--new-files` (8) new ones
@@ -27,21 +29,29 @@ costs a lot on both sides, so this GUI runs the two together:
      the price of never waiting for the model.
 
 The model is picked in the GUI from the checkpoints in data/itrainer-model/,
-and either of two families works:
+and any of three families works:
 
-  yolov8stooltip   (standalone/yolov8stooltip, the default) each `tool`
-                   detection carries its own tip as a keypoint, so the output
-                   is the annotation list as it is.
+  detrtooltip      (standalone/detrtooltip, the default when detrtooltip.pt
+                   is there) each tool comes with one or two tips. Only its
+                   head trains here; the backbone stays frozen.
+  yolov8stooltip   (standalone/yolov8stooltip, the default otherwise) each
+                   `tool` detection carries its own tip as a keypoint, so the
+                   output is the annotation list as it is.
   yolov8sclone     (baseline/yolov8sclone, `tooltip` label set) `tool` boxes
                    and `tip` boxes come out unrelated, and `pair_detections`
                    guesses which tip belongs to which tool.
 
-A `kpt_shape` in the checkpoint tells them apart. Every model call --
+A `"family": "detrtooltip"` or a `kpt_shape` in the checkpoint tells them
+apart. The two YOLO families predict one tip per tool and learn only `tip`;
+a label's `tip2` is kept on save but not trained on. Every model call --
 loading, scoring, training -- runs on one background thread, so the GUI never
 waits for the GPU and the model is never touched by two threads at once.
 
-Frames already in annotation-manual/ are never drawn for the list: a person
-has already checked them. They serve as the replay set instead.
+Frames a person has already checked are never drawn for the list; they serve
+as the replay set instead, trained on with their final label in annotation/.
+A frame counts as checked when it has a file in annotation-manual/, or when
+annotation/'s `source` is one that only a person's choice in annotation_editor
+puts there (see `is_checked_source`).
 
 A second, short list under the first keeps the last `RECENT_FILES` frames
 opened in the split, most recent first, so earlier work is one click away even
@@ -50,17 +60,6 @@ list, and it lasts for the session.
 """
 
 from __future__ import annotations
-
-# Disabled until it supports the multi-source annotation format: it reads only
-# `bbox` and `tip`, so a save would drop the `tip2` and `label` fields that
-# annotation-editor now writes. Checked before the heavy imports so the notice
-# shows at once.
-if __name__ == "__main__":
-    raise SystemExit(
-        "interactive-trainer is disabled for now.\n"
-        "It does not yet support the new annotation format (tip2, label, multiple\n"
-        "sources), and saving a frame would erase those fields from annotation/ and\n"
-        "annotation-manual/. Use tooltip-annotator's annotation-editor to edit labels.")
 
 import argparse
 import importlib
@@ -73,6 +72,7 @@ import random
 import sys
 import threading
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 import tkinter as tk
@@ -89,8 +89,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 def import_common(alias: str, project_dir: Path):
     """Import `project_dir`/common as a package called `alias`.
 
-    Both model projects name their package `common`, so one process can hold
-    both only under names of their own. Their modules import each other
+    The model projects all name their package `common`, so one process can
+    hold them together only under names of their own. Their modules import each other
     relatively, which resolves inside the alias.
     """
     package_dir = project_dir / "common"
@@ -108,6 +108,8 @@ def import_common(alias: str, project_dir: Path):
 clone_common = import_common("clone_common", REPO_ROOT / "baseline" / "yolov8sclone")
 # yolov8stooltip: each `tool` detection carries its own tip as a keypoint.
 pose_common = import_common("pose_common", REPO_ROOT / "standalone" / "yolov8stooltip")
+# detrtooltip: each tool query carries one or two tips.
+detr_common = import_common("detr_common", REPO_ROOT / "standalone" / "detrtooltip")
 
 letterbox = clone_common.boxes.letterbox
 undo_letterbox = clone_common.boxes.undo_letterbox
@@ -116,7 +118,9 @@ available_datasets = clone_common.dataset.available_datasets
 
 DATA_ROOT = REPO_ROOT / "data" / "dataset"
 MODEL_DIR = REPO_ROOT / "data" / "itrainer-model"
-DEFAULT_MODEL_PATH = MODEL_DIR / "yolov8stooltip.pt"
+# detrtooltip when its checkpoint is there, since it also gives second tips.
+DETR_MODEL_PATH = MODEL_DIR / "detrtooltip.pt"
+DEFAULT_MODEL_PATH = DETR_MODEL_PATH if DETR_MODEL_PATH.is_file() else MODEL_DIR / "yolov8stooltip.pt"
 SPLIT_NAMES = ("train", "val", "test")
 ANNOTATION_SUFFIX = ".json"
 
@@ -159,6 +163,14 @@ TIP_DISTANCE_SCALE = 32.0
 
 HANDLE_SIZE = 7.5
 TIP_RADIUS = 6
+# Annotation keys holding a tip. "tip2" is optional: the second end of an
+# opened jaw, as annotation_editor and detrtooltip record it.
+TIP_KEYS = ("tip", "tip2")
+# `source` values of annotation/ that do not mean a person chose the label:
+# missing or "auto" (the old mask pipeline), the old mask script's path, and
+# detector checkpoints (*.pt), which an old relabel run wrote there and which
+# adopting the editor's Yolo tab writes too, so the two cannot be told apart.
+UNCHECKED_SOURCES = {None, "auto", "tooltip-annotator/scripts/generate-annotation.py"}
 # Add mode dims the image to this brightness, except inside the box being drawn.
 ADD_MODE_BRIGHTNESS = 0.5
 MIN_BOX_SIZE = 4
@@ -264,8 +276,10 @@ def screenshot_dir(dataset: str) -> Path:
     return DATA_ROOT / dataset / "screenshot"
 
 
-def read_annotations(path: Path) -> list[dict[str, dict[str, int]]]:
-    """One annotation JSON as a list of {"bbox", "tip"}; [] if absent or broken."""
+def read_annotations(path: Path) -> list[dict]:
+    """One annotation JSON as a list of {"bbox", "tip", optional "tip2",
+    optional "label"}; [] if absent or broken. `label` is kept as it is so a
+    save writes it back; nothing here edits it."""
     try:
         payload = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError):
@@ -273,24 +287,52 @@ def read_annotations(path: Path) -> list[dict[str, dict[str, int]]]:
     annotations = []
     for item in payload.get("annotations", []):
         bbox = item.get("bbox", {})
-        tip = item.get("tip", {})
         try:
-            annotations.append({
+            annotation = {
                 "bbox": {
                     "x": int(bbox.get("x", 0)),
                     "y": int(bbox.get("y", 0)),
                     "width": max(int(bbox.get("width", 1)), 1),
                     "height": max(int(bbox.get("height", 1)), 1),
                 },
-                "tip": {"x": int(tip.get("x", 0)), "y": int(tip.get("y", 0))},
-            })
+            }
+            for key in TIP_KEYS:
+                tip = item.get(key)
+                if isinstance(tip, dict):
+                    annotation[key] = {"x": int(tip.get("x", 0)), "y": int(tip.get("y", 0))}
         except (TypeError, ValueError):
             continue
+        if "tip" not in annotation:
+            continue
+        if isinstance(item.get("label"), str):
+            annotation["label"] = item["label"]
+        annotations.append(annotation)
     return annotations
 
 
+def read_source(path: Path) -> str | None:
+    try:
+        return json.loads(path.read_text()).get("source")
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def is_checked_source(source: str | None) -> bool:
+    """Whether annotation/'s `source` means a person chose this label.
+
+    "manual" is a hand edit. Any other automatic labeller's value (opus,
+    qwen, the mask script, ...) reaches annotation/ only when a person adopts
+    that tab in annotation_editor. See UNCHECKED_SOURCES for the exceptions.
+    """
+    return source not in UNCHECKED_SOURCES and not source.endswith(".pt")
+
+
+def annotation_tips(annotation: dict) -> list[dict[str, int]]:
+    return [annotation[key] for key in TIP_KEYS if key in annotation]
+
+
 def write_manual_annotation(path: Path, image_name: str, width: int, height: int,
-                            annotations: list[dict[str, dict[str, int]]]) -> None:
+                            annotations: list[dict]) -> None:
     """Write the same payload tooltip-annotator's `build_payload` makes for a
     manual edit, so generate_annotation and annotation_editor read it as theirs."""
     payload = {
@@ -385,23 +427,26 @@ def pose_annotations(detections: np.ndarray, width: int, height: int) -> list[di
     return annotations
 
 
-def tool_annotation(box, tip, score: float, width: int, height: int) -> dict:
-    """One predicted tool as an annotation, with the tip clipped to the frame."""
+def tool_annotation(box, tip, score: float, width: int, height: int, tip2=None) -> dict:
+    """One predicted tool as an annotation, with its tips clipped to the frame."""
     x1, y1, x2, y2 = box
-    tip_x = min(max(int(round(tip[0])), 0), width - 1)
-    tip_y = min(max(int(round(tip[1])), 0), height - 1)
-    # Grow the box to hold the tip pixel, as annotation_editor does when a
+    tips = {key: (min(max(int(round(point[0])), 0), width - 1),
+                  min(max(int(round(point[1])), 0), height - 1))
+            for key, point in (("tip", tip), ("tip2", tip2)) if point is not None}
+    xs = [x for x, _ in tips.values()]
+    ys = [y for _, y in tips.values()]
+    # Grow the box to hold the tip pixels, as annotation_editor does when a
     # tip is dragged outside its box.
-    left = max(min(int(math.floor(x1)), tip_x), 0)
-    top = max(min(int(math.floor(y1)), tip_y), 0)
-    right = min(max(int(math.ceil(x2)), tip_x + 1), width)
-    bottom = min(max(int(math.ceil(y2)), tip_y + 1), height)
-    return {
-        "bbox": {"x": left, "y": top,
-                 "width": max(right - left, 1), "height": max(bottom - top, 1)},
-        "tip": {"x": tip_x, "y": tip_y},
-        "score": float(score),
-    }
+    left = max(min([int(math.floor(x1))] + xs), 0)
+    top = max(min([int(math.floor(y1))] + ys), 0)
+    right = min(max([int(math.ceil(x2))] + [x + 1 for x in xs]), width)
+    bottom = min(max([int(math.ceil(y2))] + [y + 1 for y in ys]), height)
+    annotation = {"bbox": {"x": left, "y": top,
+                           "width": max(right - left, 1), "height": max(bottom - top, 1)}}
+    for key, (x, y) in tips.items():
+        annotation[key] = {"x": x, "y": y}
+    annotation["score"] = float(score)
+    return annotation
 
 
 def _box_iou(a: dict[str, int], b: dict[str, int]) -> float:
@@ -412,14 +457,30 @@ def _box_iou(a: dict[str, int], b: dict[str, int]) -> float:
     return inter / union if union > 0 else 0.0
 
 
+def tip_agreement(predicted: dict, labelled: dict) -> float:
+    """How well one tool's tips agree, from 0 to 1.
+
+    Tips carry no order, so the one or two predicted tips are matched to the
+    label's tips whichever way scores higher; each pair is worth its
+    closeness, 1 - distance / TIP_DISTANCE_SCALE clipped at 0. The sum is
+    divided by the larger tip count, so a second tip on one side only (a
+    missed or an extra `tip2`) counts as a completely wrong tip.
+    """
+    p_tips, l_tips = annotation_tips(predicted), annotation_tips(labelled)
+    closeness = np.array([[max(0.0, 1.0 - math.hypot(p["x"] - l["x"], p["y"] - l["y"])
+                                / TIP_DISTANCE_SCALE) for l in l_tips] for p in p_tips])
+    rows, cols = linear_sum_assignment(-closeness)
+    return float(closeness[rows, cols].sum()) / max(len(p_tips), len(l_tips))
+
+
 def agreement_score(predicted: list[dict], labelled: list[dict]) -> float:
     """How well a prediction agrees with a label, from 0 (not at all) to 1.
 
     Each (prediction, label) pair is worth the mean of its box IoU and its tip
-    closeness, 1 - distance / TIP_DISTANCE_SCALE clipped at 0. Pairs are
-    matched one-to-one to maximise the total, and the total is divided by the
-    larger of the two counts, so a missed or an extra tool costs as much as a
-    completely wrong one. Two empty frames agree perfectly.
+    agreement (`tip_agreement`). Pairs are matched one-to-one to maximise the
+    total, and the total is divided by the larger of the two counts, so a
+    missed or an extra tool costs as much as a completely wrong one. Two
+    empty frames agree perfectly.
     """
     if not predicted and not labelled:
         return 1.0
@@ -428,9 +489,7 @@ def agreement_score(predicted: list[dict], labelled: list[dict]) -> float:
     quality = np.zeros((len(predicted), len(labelled)))
     for i, p in enumerate(predicted):
         for j, l in enumerate(labelled):
-            distance = math.hypot(p["tip"]["x"] - l["tip"]["x"], p["tip"]["y"] - l["tip"]["y"])
-            closeness = max(0.0, 1.0 - distance / TIP_DISTANCE_SCALE)
-            quality[i, j] = 0.5 * _box_iou(p["bbox"], l["bbox"]) + 0.5 * closeness
+            quality[i, j] = 0.5 * _box_iou(p["bbox"], l["bbox"]) + 0.5 * tip_agreement(p, l)
     rows, cols = linear_sum_assignment(-quality)
     return float(quality[rows, cols].sum()) / max(len(predicted), len(labelled))
 
@@ -457,7 +516,9 @@ class ModelRunner:
         self.device = device
         self.args = args
         self.class_names = tuple(checkpoint.get("class_names", ()))
-        self.image_size = int(checkpoint.get("image_size", 640))
+        # The letterbox side for the YOLO families; detrtooltip stores
+        # [width, height] and takes frames at that size as they are.
+        self.image_size = checkpoint.get("image_size", 640)
         # Everything but the weights is written back unchanged on save, so the
         # model's own project can still open the checkpoint.
         self.metadata = {key: value for key, value in checkpoint.items() if key != "model"}
@@ -470,9 +531,16 @@ class ModelRunner:
 
     @staticmethod
     def open(path: Path, device: torch.device, args: argparse.Namespace) -> "ModelRunner":
-        """Load either family; a `kpt_shape` in the checkpoint marks yolov8stooltip."""
+        """Load any family: `"family": "detrtooltip"` marks detrtooltip, a
+        `kpt_shape` yolov8stooltip, and anything else is taken as yolov8sclone."""
         checkpoint = torch.load(path, map_location="cpu", weights_only=False)
-        runner = PoseRunner if "kpt_shape" in checkpoint else DetectorRunner
+        if checkpoint.get("family") == "detrtooltip":
+            if checkpoint.get("stage") == "pretrain":
+                raise RuntimeError(f"{path.name} is a detrtooltip pretraining checkpoint "
+                                   "(backbone only); use a trained model.pt.")
+            runner = DetrRunner
+        else:
+            runner = PoseRunner if "kpt_shape" in checkpoint else DetectorRunner
         return runner(path, checkpoint, device, args)
 
     def describe(self) -> str:
@@ -659,6 +727,77 @@ class PoseRunner(ModelRunner):
         return np.asarray(rows, dtype=np.float32).reshape(-1, 8), [1, 5], [2, 6]
 
 
+class DetrRunner(ModelRunner):
+    """detrtooltip: each query is one tool with one or two tips, so its output
+    is the annotation list as it is. Only the head trains here: the backbone
+    gets no gradient, and BatchNorm keeps its statistics as in every family.
+    `--iou` does not apply: one query is one tool, with no NMS."""
+
+    kind = "detrtooltip"
+
+    def _build(self, checkpoint: dict):
+        model = detr_common.model.build(**checkpoint.get("arch", {}))
+        # Before the base class builds the optimizer from what still trains.
+        for parameter in model.backbone.parameters():
+            parameter.requires_grad_(False)
+        return model, detr_common.loss.SetCriterion()
+
+    @staticmethod
+    def _model_frame(frame_rgb: np.ndarray) -> np.ndarray:
+        """The frame at the model's input size (cholec80 frames already are)."""
+        size = (detr_common.model.IMAGE_WIDTH, detr_common.model.IMAGE_HEIGHT)
+        if (frame_rgb.shape[1], frame_rgb.shape[0]) != size:
+            frame_rgb = cv2.resize(frame_rgb, size, interpolation=cv2.INTER_LINEAR)
+        return frame_rgb
+
+    @torch.no_grad()
+    def predict(self, frame_rgb: np.ndarray) -> list[dict]:
+        self.model.eval()
+        height, width = frame_rgb.shape[:2]
+        frame = self._model_frame(frame_rgb)
+        tensor = torch.from_numpy(np.ascontiguousarray(frame.transpose(2, 0, 1)))[None]
+        tensor = tensor.to(self.device).float().div_(255.0)
+        with torch.autocast(self.device.type, dtype=torch.bfloat16,
+                            enabled=self.device.type == "cuda"):
+            outputs = self.model(tensor)
+        annotations = []
+        for item in detr_common.model.postprocess(outputs, self.args.conf, width, height)[0]:
+            box = item["bbox"]
+            tip2 = (item["tip2"]["x"], item["tip2"]["y"]) if "tip2" in item else None
+            annotations.append(tool_annotation(
+                (box["x"], box["y"], box["x"] + box["width"], box["y"] + box["height"]),
+                (item["tip"]["x"], item["tip"]["y"]), item["score"], width, height, tip2=tip2))
+        annotations.sort(key=lambda item: (item["bbox"]["x"], item["bbox"]["y"]))
+        return annotations
+
+    def _training_batch(self, batch: list[tuple[np.ndarray, list[dict]]]
+                        ) -> tuple[torch.Tensor, list[dict]]:
+        """Random horizontal flip and colour jitter, as detrtooltip trains,
+        and its per-frame targets. Every frame here was checked by a person,
+        so a missing `tip2` is taken as a fact (`trusted`)."""
+        dataset = detr_common.dataset
+        images, targets = [], []
+        for frame, annotations in batch:
+            height, width = frame.shape[:2]
+            frame = self._model_frame(frame)
+            sx, sy = frame.shape[1] / width, frame.shape[0] / height
+            tools = [{"box": (a["bbox"]["x"] * sx, a["bbox"]["y"] * sy,
+                              (a["bbox"]["x"] + a["bbox"]["width"]) * sx,
+                              (a["bbox"]["y"] + a["bbox"]["height"]) * sy),
+                      "tips": [(tip["x"] * sx, tip["y"] * sy) for tip in annotation_tips(a)]}
+                     for a in annotations]
+            flip = random.random() < 0.5
+            if flip:
+                frame = np.ascontiguousarray(frame[:, ::-1])
+            frame = dataset.augment_colour(frame)
+            target = dataset.build_target(dataset.transform_tools(tools, 1.0, 0, 0, flip),
+                                          trusted=True)
+            targets.append({key: (value.to(self.device) if torch.is_tensor(value) else value)
+                            for key, value in target.items()})
+            images.append(torch.from_numpy(np.ascontiguousarray(frame.transpose(2, 0, 1))))
+        return torch.stack(images).to(self.device).float().div_(255.0), targets
+
+
 class ModelWorker(threading.Thread):
     """Runs every model call in order on one thread, reporting through `events`.
 
@@ -784,10 +923,15 @@ class InteractiveTrainer:
         self.tool_count_var = tk.StringVar(value="0")
         self.images_label_var = tk.StringVar(value="Images (0 / 0)")
 
-        # The split's frames, and the frames a person has already checked
-        # (annotation-manual/), which are never drawn for the list.
+        # The split's frames, and the frames a person has already checked,
+        # which are never drawn for the list: those with a file in
+        # annotation-manual/, plus those whose annotation/ label a person
+        # adopted in annotation_editor (read once per split, see
+        # `is_checked_source`).
         self.split_images: list[Path] = []
         self.manual_stems: set[str] = set()
+        self.adopted_stems: set[str] = set()
+        self.checked_stems: set[str] = set()
         # The ranked list: {"image": Path, "prediction": list, "score": float}.
         self.entries: list[dict] = []
         # The latest score of every frame in the list or the recent list, by image.
@@ -930,7 +1074,8 @@ class InteractiveTrainer:
         self.canvas.pack(fill=tk.BOTH, expand=True)
 
         instruction = (
-            "Drag bbox to move, handles to resize, red tip to move the tip. "
+            "Drag bbox to move, handles to resize, red tips to move a tip. "
+            "Right-click: second tip, delete or add a tool. "
             "Arrow keys or mouse wheel move between images. Update = Ctrl+U / F4."
         )
         bottom_bar = ttk.Frame(self.root, padding=(10, 0, 10, 10))
@@ -984,6 +1129,7 @@ class InteractiveTrainer:
         self.canvas.bind("<Leave>", self._on_canvas_leave)
         self.canvas.bind("<Configure>", lambda _event: self._render_scene())
         self.canvas.bind("<ButtonPress-2>", self._on_canvas_wheel_click)
+        self.canvas.bind("<ButtonPress-3>", self._on_canvas_context_menu)
         self.canvas.bind("<MouseWheel>", self._on_canvas_wheel)
         self.canvas.bind("<Button-4>", self._on_previous_image_shortcut)
         self.canvas.bind("<Button-5>", self._on_next_image_shortcut)
@@ -1077,7 +1223,7 @@ class InteractiveTrainer:
         listed = [entry["image"] for entry in self.entries]
         excluded = set(listed)
         candidates = [path for path in self.split_images
-                      if path not in excluded and path.stem not in self.manual_stems]
+                      if path not in excluded and path.stem not in self.checked_stems]
         drawn = random.sample(candidates, min(new_count, len(candidates)))
         excluded.update(drawn)
         recent = [path for path in self._recent() if path not in excluded]
@@ -1109,7 +1255,9 @@ class InteractiveTrainer:
         self.entries = kept
         # Re-read from disk, so frames corrected meanwhile in another tool
         # (annotation_editor) are highlighted, and no longer drawn, too.
+        # Labels adopted there meanwhile show only after the split reloads.
         self.manual_stems = self._list_manual_stems()
+        self.checked_stems = self.manual_stems | self.adopted_stems
 
         self.suppress_listbox_event = True
         self.image_listbox.delete(0, tk.END)
@@ -1132,12 +1280,12 @@ class InteractiveTrainer:
         self._render_scene()
 
     def _listbox_label(self, entry: dict) -> str:
-        marker = "* " if entry["image"].stem in self.manual_stems else "  "
+        marker = "* " if entry["image"].stem in self.checked_stems else "  "
         return f"{marker}{entry['score']:.3f}  {entry['image'].name}"
 
     def _style_listbox_rows(self) -> None:
         """Colour every row of both lists: sky blue for the frame on screen,
-        yellow for a hand-annotated one, default otherwise. The lists hold at
+        yellow for one a person has checked, default otherwise. The lists hold at
         most `--max-files` and RECENT_FILES rows, so repainting all of them is
         cheap."""
         for listbox, images in ((self.image_listbox, [entry["image"] for entry in self.entries]),
@@ -1150,7 +1298,7 @@ class InteractiveTrainer:
                         selectbackground=CURRENT_ITEM_BACKGROUND,
                         selectforeground=CURRENT_ITEM_FOREGROUND)
                 else:
-                    self._apply_listbox_style(listbox, index, image.stem in self.manual_stems)
+                    self._apply_listbox_style(listbox, index, image.stem in self.checked_stems)
 
     def _apply_listbox_style(self, listbox: tk.Listbox, index: int, is_manual: bool) -> None:
         if is_manual:
@@ -1178,7 +1326,7 @@ class InteractiveTrainer:
         entry = self.scored.get(image_path)
         if entry is not None:
             return self._listbox_label(entry)
-        marker = "* " if image_path.stem in self.manual_stems else "  "
+        marker = "* " if image_path.stem in self.checked_stems else "  "
         return f"{marker}{'-':^5}  {image_path.name}"
 
     def _fill_recent_listbox(self) -> None:
@@ -1330,6 +1478,8 @@ class InteractiveTrainer:
         self.generation += 1
         self.split_images = sorted(images_dir(self.current_dataset, self.current_split).glob("*.png"))
         self.manual_stems = self._list_manual_stems()
+        self.adopted_stems = self._list_adopted_stems()
+        self.checked_stems = self.manual_stems | self.adopted_stems
         self.entries = []
         self.scored = {}
         self.image_listbox.delete(0, tk.END)
@@ -1350,7 +1500,9 @@ class InteractiveTrainer:
             self._update_status("No images found in the selected split.")
             return
         self._update_status(f"{len(self.split_images):,} frames, "
-                            f"{len(self.manual_stems):,} already checked by hand.")
+                            f"{len(self.checked_stems):,} already checked "
+                            f"({len(self.manual_stems):,} by hand, "
+                            f"{len(self.checked_stems - self.manual_stems):,} adopted).")
         self._request_scores(self.args.initial_files)
 
     def _list_manual_stems(self) -> set[str]:
@@ -1358,6 +1510,20 @@ class InteractiveTrainer:
         if not manual.is_dir():
             return set()
         return {path.stem for path in manual.glob(f"*{ANNOTATION_SUFFIX}")}
+
+    def _list_adopted_stems(self) -> set[str]:
+        """Frames whose annotation/ `source` says a person chose the label.
+
+        Reads every label of the split once (a few seconds for 70,000), on
+        several threads since the time goes into opening files.
+        """
+        self._update_status("Reading label sources...")
+        self.root.update_idletasks()
+        paths = [annotation_path(self.current_dataset, self.current_split, path.stem)
+                 for path in self.split_images if path.stem not in self.manual_stems]
+        with ThreadPoolExecutor(16) as pool:
+            sources = list(pool.map(read_source, paths))
+        return {path.stem for path, source in zip(paths, sources) if is_checked_source(source)}
 
     def _on_image_selected(self, _event: tk.Event) -> None:
         if self.suppress_listbox_event:
@@ -1413,10 +1579,19 @@ class InteractiveTrainer:
         self._update_status()
         self._render_scene()
 
-    def _load_annotation(self, image_path: Path) -> list[dict[str, dict[str, int]]]:
+    def _load_annotation(self, image_path: Path) -> list[dict]:
         path = annotation_path(self.current_dataset, self.current_split, image_path.stem)
-        return [{"bbox": self._normalize_bbox(item["bbox"]), "tip": self._normalize_tip(item["tip"])}
-                for item in read_annotations(path)]
+        return [self._normalize_annotation(item) for item in read_annotations(path)]
+
+    def _normalize_annotation(self, item: dict) -> dict:
+        """A label or prediction clipped to the frame; `label` passes through."""
+        annotation = {"bbox": self._normalize_bbox(item["bbox"])}
+        for key in TIP_KEYS:
+            if key in item:
+                annotation[key] = self._normalize_tip(item[key])
+        if "label" in item:
+            annotation["label"] = item["label"]
+        return annotation
 
     def _current_entry(self) -> dict | None:
         return self.scored.get(self.current_image_path)
@@ -1435,7 +1610,8 @@ class InteractiveTrainer:
         """
         if self.current_image_path is None:
             return
-        annotations = [{"bbox": dict(item["bbox"]), "tip": dict(item["tip"])}
+        annotations = [{key: (dict(value) if isinstance(value, dict) else value)
+                        for key, value in item.items()}
                        for item in self.current_annotations]
         stem = self.current_image_path.stem
         manual = manual_dir(self.current_dataset, self.current_split)
@@ -1448,6 +1624,7 @@ class InteractiveTrainer:
 
         self.saved_images.add(self.current_image_path)
         self.manual_stems.add(stem)
+        self.checked_stems.add(stem)
         if self.current_index is not None:
             entry = self.entries[self.current_index]
             self.image_listbox.delete(self.current_index)
@@ -1457,9 +1634,12 @@ class InteractiveTrainer:
         self.dirty = False
         self._update_buttons()
 
+        # Replayed with their final labels: for a frame whose hand edit was
+        # later replaced by another adopted result, annotation/ is what counts.
         images = images_dir(self.current_dataset, self.current_split)
-        replay = [(images / f"{other}.png", manual / f"{other}{ANNOTATION_SUFFIX}")
-                  for other in self.manual_stems if other != stem]
+        replay = [(images / f"{other}.png",
+                   annotation_path(self.current_dataset, self.current_split, other))
+                  for other in self.checked_stems if other != stem]
         replay = [pair for pair in replay if pair[0].exists()]
         self.pending_trains += 1
         self.worker.jobs.put(("train", self.current_image_path, annotations, replay))
@@ -1493,12 +1673,14 @@ class InteractiveTrainer:
         self._render_scene()
 
     def _update_from_prediction(self) -> None:
-        """Replace the label being edited with the model's prediction (unsaved)."""
+        """Replace the label being edited with the model's prediction (unsaved).
+        A predicted second tip comes along; tool names (`label`) do not, since
+        the models do not predict them."""
         entry = self._current_entry()
         if entry is None:
             return
         self.current_annotations = [
-            {"bbox": self._normalize_bbox(item["bbox"]), "tip": self._normalize_tip(item["tip"])}
+            self._normalize_annotation({key: item[key] for key in ("bbox", *TIP_KEYS) if key in item})
             for item in entry["prediction"]
         ]
         self.selected_annotation_index = 0 if self.current_annotations else None
@@ -1553,12 +1735,14 @@ class InteractiveTrainer:
 
         for annotation in self.current_annotations:
             bbox = annotation["bbox"]
-            tip = (annotation["tip"]["x"], annotation["tip"]["y"])
             center = (bbox["x"] + bbox["width"] // 2, bbox["y"] + bbox["height"] // 2)
-            cv2.line(image, center, tip, SCREENSHOT_TIP_LINE_COLOR, SCREENSHOT_LINE_WIDTH, cv2.LINE_AA)
-            cv2.circle(image, tip, TIP_RADIUS, SCREENSHOT_TIP_FILL_COLOR, -1, cv2.LINE_AA)
-            cv2.circle(image, tip, TIP_RADIUS, SCREENSHOT_TIP_OUTLINE_COLOR,
-                       SCREENSHOT_LINE_WIDTH, cv2.LINE_AA)
+            for point in annotation_tips(annotation):
+                tip = (point["x"], point["y"])
+                cv2.line(image, center, tip, SCREENSHOT_TIP_LINE_COLOR, SCREENSHOT_LINE_WIDTH,
+                         cv2.LINE_AA)
+                cv2.circle(image, tip, TIP_RADIUS, SCREENSHOT_TIP_FILL_COLOR, -1, cv2.LINE_AA)
+                cv2.circle(image, tip, TIP_RADIUS, SCREENSHOT_TIP_OUTLINE_COLOR,
+                           SCREENSHOT_LINE_WIDTH, cv2.LINE_AA)
 
     # ── Shortcuts ────────────────────────────────────────────────────────
 
@@ -1657,20 +1841,21 @@ class InteractiveTrainer:
         color = PREDICTION_COLOR_RGB
         scores = []
         for annotation in predictions:
-            bbox, tip = annotation["bbox"], annotation["tip"]
+            bbox = annotation["bbox"]
             x1, y1 = round(bbox["x"] * scale), round(bbox["y"] * scale)
             x2 = round((bbox["x"] + bbox["width"]) * scale)
             y2 = round((bbox["y"] + bbox["height"]) * scale)
-            tip_x, tip_y = round(tip["x"] * scale), round(tip["y"] * scale)
             for start, end in (((x1, y1), (x2, y1)), ((x2, y1), (x2, y2)),
                                ((x2, y2), (x1, y2)), ((x1, y2), (x1, y1))):
                 draw_dashed_line(overlay, start, end, color, PREDICTION_BOX_WIDTH, dash=8, gap=4)
-            draw_dashed_line(overlay, ((x1 + x2) // 2, (y1 + y2) // 2), (tip_x, tip_y),
-                             color, 1, dash=3, gap=3)
-            r = PREDICTION_TIP_RADIUS
-            diamond = np.array([(tip_x, tip_y - r), (tip_x + r, tip_y),
-                                (tip_x, tip_y + r), (tip_x - r, tip_y)], dtype=np.int32)
-            cv2.polylines(overlay, [diamond], True, color, 2, cv2.LINE_AA)
+            for tip in annotation_tips(annotation):
+                tip_x, tip_y = round(tip["x"] * scale), round(tip["y"] * scale)
+                draw_dashed_line(overlay, ((x1 + x2) // 2, (y1 + y2) // 2), (tip_x, tip_y),
+                                 color, 1, dash=3, gap=3)
+                r = PREDICTION_TIP_RADIUS
+                diamond = np.array([(tip_x, tip_y - r), (tip_x + r, tip_y),
+                                    (tip_x, tip_y + r), (tip_x - r, tip_y)], dtype=np.int32)
+                cv2.polylines(overlay, [diamond], True, color, 2, cv2.LINE_AA)
             scores.append((f"{annotation['score']:.2f}", (x1 + 4, y2 - 6)))
         blended = cv2.addWeighted(overlay, PREDICTION_ALPHA, display_rgb,
                                   1.0 - PREDICTION_ALPHA, 0.0)
@@ -1721,14 +1906,17 @@ class InteractiveTrainer:
         bbox = annotation["bbox"]
         cx1, cy1 = self._image_to_canvas(bbox["x"], bbox["y"])
         cx2, cy2 = self._image_to_canvas(bbox["x"] + bbox["width"], bbox["y"] + bbox["height"])
-        tip_x, tip_y = self._image_to_canvas(annotation["tip"]["x"], annotation["tip"]["y"])
-        self.canvas.create_line((cx1 + cx2) / 2.0, (cy1 + cy2) / 2.0, tip_x, tip_y,
-                                fill="#ff8080", width=2, dash=(3, 2))
-        self.canvas.create_oval(
-            tip_x - TIP_RADIUS, tip_y - TIP_RADIUS, tip_x + TIP_RADIUS, tip_y + TIP_RADIUS,
-            outline="#7a0000",
-            fill=HANDLE_HOVER_FILL if self.hovered_handle == ("tip", index, None) else "#ff4d4d",
-            width=2)
+        for key in TIP_KEYS:
+            if key not in annotation:
+                continue
+            tip_x, tip_y = self._image_to_canvas(annotation[key]["x"], annotation[key]["y"])
+            self.canvas.create_line((cx1 + cx2) / 2.0, (cy1 + cy2) / 2.0, tip_x, tip_y,
+                                    fill="#ff8080", width=2, dash=(3, 2))
+            self.canvas.create_oval(
+                tip_x - TIP_RADIUS, tip_y - TIP_RADIUS, tip_x + TIP_RADIUS, tip_y + TIP_RADIUS,
+                outline="#7a0000",
+                fill=HANDLE_HOVER_FILL if self.hovered_handle == ("tip", index, key) else "#ff4d4d",
+                width=2)
 
     def _rgb_to_photoimage(self, rgb: np.ndarray) -> tk.PhotoImage:
         height, width = rgb.shape[:2]
@@ -1757,6 +1945,71 @@ class InteractiveTrainer:
         self._update_buttons()
         self._update_status("Add mode: drag on the image to create a new bbox.")
         self._render_scene()
+
+    def _on_canvas_context_menu(self, event: tk.Event) -> str:
+        """Pop up the tool actions for the right-clicked or selected tool, as
+        annotation_editor does.
+
+        A right click on a tool selects it first, like a left click. With a tool
+        selected the menu offers Add or Remove Second Tip, whichever applies,
+        then Delete Tool; with none it offers Add Tool. Cancel, Esc or a click
+        outside closes it.
+        """
+        if self.current_image_rgb is None or self.mode == "add":
+            return "break"
+        image_x, image_y = self._canvas_to_image(event.x, event.y)
+        if self.show_annotation_var.get():
+            hit = self._hit_test(image_x, image_y)
+            if hit is not None and hit["index"] != self.selected_annotation_index:
+                self.selected_annotation_index = hit["index"]
+                self._update_buttons()
+                self._render_scene()
+        else:
+            # Hidden tools cannot be targeted, matching the left click.
+            self.selected_annotation_index = None
+            self._update_buttons()
+            self._render_scene()
+
+        menu = tk.Menu(self.root, tearoff=False)
+        if self.selected_annotation_index is None:
+            menu.add_command(label="Add Tool", command=self._enter_add_mode)
+        else:
+            if "tip2" in self.current_annotations[self.selected_annotation_index]:
+                menu.add_command(label="Remove Second Tip", command=self._remove_second_tip)
+            else:
+                menu.add_command(label="Add Second Tip",
+                                 command=lambda: self._add_second_tip(image_x, image_y))
+            delete_color = BUTTON_STYLES["Delete.TButton"]
+            menu.add_command(label="Delete Tool", command=self._delete_selected,
+                             foreground=delete_color, activeforeground=delete_color)
+        menu.add_separator()
+        menu.add_command(label="Cancel")
+        # tk_popup returns at once on X11 and the menu keeps its grab until it
+        # closes, so a click anywhere outside the menu closes it.
+        menu.tk_popup(event.x_root, event.y_root)
+        return "break"
+
+    def _add_second_tip(self, image_x: float, image_y: float) -> None:
+        """Give the selected tool a second tip at the right-clicked point,
+        pulled onto the nearest pixel inside its box."""
+        if self.selected_annotation_index is None:
+            return
+        annotation = self.current_annotations[self.selected_annotation_index]
+        if "tip2" in annotation:
+            return
+        bbox = annotation["bbox"]
+        annotation["tip2"] = {
+            "x": self._clamp_int(int(round(image_x)), bbox["x"], bbox["x"] + bbox["width"] - 1),
+            "y": self._clamp_int(int(round(image_y)), bbox["y"], bbox["y"] + bbox["height"] - 1),
+        }
+        self._mark_dirty()
+
+    def _remove_second_tip(self) -> None:
+        if self.selected_annotation_index is None:
+            return
+        annotation = self.current_annotations[self.selected_annotation_index]
+        if annotation.pop("tip2", None) is not None:
+            self._mark_dirty()
 
     def _delete_selected(self) -> None:
         if self.selected_annotation_index is None:
@@ -1810,7 +2063,8 @@ class InteractiveTrainer:
             "index": hit["index"],
             "start_point": (image_x, image_y),
             "start_bbox": annotation["bbox"].copy(),
-            "start_tip": annotation["tip"].copy(),
+            "start_tips": {key: annotation[key].copy() for key in TIP_KEYS if key in annotation},
+            # For a tip drag "handle" names the tip being dragged.
             "handle": hit.get("handle"),
         }
         self._update_buttons()
@@ -1836,7 +2090,7 @@ class InteractiveTrainer:
             return (
                 str(self.drag_state["kind"]),
                 int(self.drag_state["index"]),
-                self.drag_state["handle"] if self.drag_state["kind"] == "resize" else None,
+                self.drag_state["handle"],
             )
         if (
             self.pointer_position is None
@@ -1868,7 +2122,7 @@ class InteractiveTrainer:
         annotation = self.current_annotations[int(self.drag_state["index"])]
         if kind == "tip":
             tip = {"x": int(round(image_x)), "y": int(round(image_y))}
-            annotation["tip"] = tip
+            annotation[self.drag_state["handle"]] = tip
             # Grow the box from its drag-start extent so it always contains the
             # tip pixel; dragging the tip back inside restores the original box.
             start_bbox = self.drag_state["start_bbox"]
@@ -1881,17 +2135,17 @@ class InteractiveTrainer:
         elif kind == "move":
             start_x, start_y = self.drag_state["start_point"]
             start_bbox = self.drag_state["start_bbox"]
-            start_tip = self.drag_state["start_tip"]
             new_x = self._clamp_int(start_bbox["x"] + int(round(image_x - start_x)), 0,
                                     self.image_width - start_bbox["width"])
             new_y = self._clamp_int(start_bbox["y"] + int(round(image_y - start_y)), 0,
                                     self.image_height - start_bbox["height"])
             annotation["bbox"] = {"x": new_x, "y": new_y,
                                   "width": start_bbox["width"], "height": start_bbox["height"]}
-            annotation["tip"] = self._normalize_tip({
-                "x": start_tip["x"] + new_x - start_bbox["x"],
-                "y": start_tip["y"] + new_y - start_bbox["y"],
-            })
+            for key, start_tip in self.drag_state["start_tips"].items():
+                annotation[key] = self._normalize_tip({
+                    "x": start_tip["x"] + new_x - start_bbox["x"],
+                    "y": start_tip["y"] + new_y - start_bbox["y"],
+                })
         elif kind == "resize":
             start_bbox = self.drag_state["start_bbox"]
             x1 = start_bbox["x"]
@@ -1910,15 +2164,15 @@ class InteractiveTrainer:
                 x2 = image_x
             normalized = self._normalize_box_from_points(x1, y1, x2, y2)
             annotation["bbox"] = normalized
-            # Pull the tip from its drag-start position onto the nearest pixel
+            # Pull each tip from its drag-start position onto the nearest pixel
             # inside the box, so shrinking never leaves it outside.
-            start_tip = self.drag_state["start_tip"]
-            annotation["tip"] = {
-                "x": self._clamp_int(start_tip["x"], normalized["x"],
-                                     normalized["x"] + normalized["width"] - 1),
-                "y": self._clamp_int(start_tip["y"], normalized["y"],
-                                     normalized["y"] + normalized["height"] - 1),
-            }
+            for key, start_tip in self.drag_state["start_tips"].items():
+                annotation[key] = {
+                    "x": self._clamp_int(start_tip["x"], normalized["x"],
+                                         normalized["x"] + normalized["width"] - 1),
+                    "y": self._clamp_int(start_tip["y"], normalized["y"],
+                                         normalized["y"] + normalized["height"] - 1),
+                }
         self._mark_dirty(render=False)
         self._render_scene()
 
@@ -1958,17 +2212,20 @@ class InteractiveTrainer:
         handle_threshold = max(12.0 / self.canvas_scale, 3.0)
         tip_threshold_sq = (threshold * 1.5) ** 2
 
-        tip_hit: tuple[tuple[float, bool], int] | None = None
+        tip_hit: tuple[tuple[float, bool], int, str] | None = None
         for index, annotation in enumerate(self.current_annotations):
-            tip = annotation["tip"]
-            distance_sq = (tip["x"] - image_x) ** 2 + (tip["y"] - image_y) ** 2
-            if distance_sq > tip_threshold_sq:
-                continue
-            key = (distance_sq, index != self.selected_annotation_index)
-            if tip_hit is None or key < tip_hit[0]:
-                tip_hit = (key, index)
+            for tip_key in TIP_KEYS:
+                if tip_key not in annotation:
+                    continue
+                tip = annotation[tip_key]
+                distance_sq = (tip["x"] - image_x) ** 2 + (tip["y"] - image_y) ** 2
+                if distance_sq > tip_threshold_sq:
+                    continue
+                key = (distance_sq, index != self.selected_annotation_index)
+                if tip_hit is None or key < tip_hit[0]:
+                    tip_hit = (key, index, tip_key)
         if tip_hit is not None:
-            return {"index": tip_hit[1], "kind": "tip"}
+            return {"index": tip_hit[1], "kind": "tip", "handle": tip_hit[2]}
 
         if self.selected_annotation_index is not None:
             bbox = self.current_annotations[self.selected_annotation_index]["bbox"]
@@ -2104,8 +2361,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--split", default="train", choices=SPLIT_NAMES,
                         help="Initial split. Switchable in the GUI.")
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH,
-                        help="Initial checkpoint, yolov8stooltip or yolov8sclone `tooltip` "
-                             "(default: data/itrainer-model/yolov8stooltip.pt). The GUI "
+                        help="Initial checkpoint: detrtooltip, yolov8stooltip or yolov8sclone "
+                             "`tooltip` (default: data/itrainer-model/detrtooltip.pt if it "
+                             "exists, else yolov8stooltip.pt). The GUI "
                              "lists every *.pt beside it to switch to; each is "
                              "overwritten after every training round on it.")
     parser.add_argument("--device", default="",
