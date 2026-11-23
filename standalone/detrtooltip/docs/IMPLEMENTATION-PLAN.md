@@ -4,7 +4,7 @@
 
 - 작성일: 2026-11-23
 - 대상 데이터셋: `cholec80`만
-- 상태: 계획. 코드는 아직 없다
+- 상태: 구현 완료, 짧은 학습으로 검증함. 본 학습은 미실시 (검증 결과는 [README 6절](../README.md))
 
 ## 1. 목표와 범위
 
@@ -119,12 +119,15 @@ video41에는 사람이 확인한 `tip2`의 대부분이 있어 학습에 남긴
 
 ### 5.1 순서
 
-| 단계 | 학습 대상     | 백본           | 학습률 (출발값)      |
-| ---- | ------------- | -------------- | -------------------- |
-| 2a   | 헤드만        | 고정 (BN 포함) | 헤드 1e-4            |
-| 2b   | 전체 미세조정 | 학습           | 헤드 1e-4, 백본 1e-5 |
+처음 계획은 헤드만 학습(백본 고정)한 뒤 전체를 미세조정하는 두 단계(2a, 2b)였다. 짧은 학습(각 3 에포크 × 8천 장)에서 헤드만 학습한 쪽이 모든 에포크에서 뒤처져(video42 tool AP50 0.592 대 0.803), 2026-11-23 사용자 승인으로 **헤드만 학습하는 단계를 없앴다.** 헤드 단독 학습이 막으려던 문제, 즉 무작위 헤드의 큰 그래디언트가 사전학습 백본을 흔드는 문제는 백본 학습률 0.1배와 500 step warmup이 맡는다.
 
-옵티마이저는 AdamW(weight decay 1e-4), 그래디언트 클리핑 0.1, EMA, AMP(손실과 attention 샘플링은 fp32)를 쓴다. 에포크 수는 1단계와 2a의 처리 속도를 잰 뒤 정한다.
+| 학습 대상 | 백본                                   | 학습률 (출발값)      |
+| --------- | -------------------------------------- | -------------------- |
+| 전체      | 1단계 가중치에서 시작, BN 통계는 고정 | 헤드 1e-4, 백본 1e-5 |
+
+옵티마이저는 AdamW(weight decay 1e-4), 그래디언트 클리핑 0.1, EMA, AMP(손실과 attention 샘플링은 fp32)를 쓴다. 기본값은 30 에포크 × 3만 장이다.
+
+interactive 모드(7절)에서는 지금처럼 백본을 고정하고 헤드만 학습한다.
 
 ### 5.2 매칭과 손실
 
@@ -166,7 +169,7 @@ L = 2·L_focal + 5·L_box_L1 + 2·L_GIoU + λ_tip·L_tip + λ_ex·L_exist      (
     "image_size": [736, 480],
     "class_names": ["tool"],
     "dataset": "cholec80",
-    "epoch": ..., "stage": "2b",
+    "epoch": ..., "stage": "train",
 }
 ```
 
@@ -203,13 +206,14 @@ standalone/detrtooltip/
 │   ├── loss.py               # 헝가리안 매처, 순서 무관 팁 손실, 존재 손실, 복원 손실
 │   ├── boxes.py              # 박스 변환, GIoU
 │   ├── dataset.py            # 레이블 출처 우선순위, 샘플링 가중치, 증강, 마스킹
+│   ├── evaluation.py         # 학습 중 선택과 eval-model이 함께 쓰는 평가 (구현 중 추가)
 │   ├── inference.py          # checkpoint 로딩, 프레임 단위 추론
 │   ├── metrics.py            # (yolov8stooltip에서 복사) 탐지 AP
 │   ├── tipmetrics.py         # (yolov8stooltip에서 복사 후 tip2 지표 추가)
 │   └── progress.py           # (yolov8stooltip에서 복사)
 ├── scripts/
 │   ├── pretrain-model.py     # 1단계
-│   ├── train-model.py        # 2단계 (--stage 2a|2b)
+│   ├── train-model.py        # 2단계
 │   └── eval-model.py
 ├── docs/IMPLEMENTATION-PLAN.md
 └── data/                     # git 추적 제외 (model/cholec80/, results/cholec80/)
