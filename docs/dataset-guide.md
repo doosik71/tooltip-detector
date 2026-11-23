@@ -110,12 +110,12 @@ data/dataset/<dataset-name>/
 | `source` 값                                              | 만든 방법                                                                                     |
 | -------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `manual`                                                 | 사람이 `annotation_editor` 또는 `interactive-trainer`로 보정                                  |
-| `standalone/yolov8stooltip/data/model/cholec80/model.pt` | cholec80의 자동 레이블. 이 체크포인트로 `scripts/relabel-annotation.py`가 다시 레이블         |
-| `standalone/yolov8stooltip/data/model/erop/model.pt`     | erop의 자동 레이블. 이 체크포인트로 `scripts/relabel-annotation.py`가 다시 레이블             |
+| `standalone/yolov8stooltip/data/model/cholec80/model.pt` | cholec80의 자동 레이블. 이 체크포인트로 다시 레이블 (아래 설명 참고)                          |
+| `standalone/yolov8stooltip/data/model/erop/model.pt`     | erop의 자동 레이블. 이 체크포인트로 다시 레이블 (아래 설명 참고)                              |
 | `tooltip-annotator/scripts/generate_annotation.py`       | segmentation 마스크의 contour 휴리스틱으로 생성 (`annotation_editor`의 `Revert to Auto` 포함) |
 | `auto` 또는 키 없음                                      | 출처를 구체적으로 적기 전에 생성된 파일. 마스크 기반(`generate_annotation.py`)과 같다         |
 
-탐지 모델로 다시 레이블한 프레임은 bbox·tip만 바뀌고 segmentation 마스크는 마스크 파이프라인의 것이 그대로 남는다. 따라서 `gradient-seg` 타겟은 마스크와 팁의 출처가 서로 다르다. 재레이블은 `run relabel-annotation --dataset <name>`으로 하며, 모델은 `interactive-trainer`와 같은 방식(`ModelRunner`, conf 0.25, NMS IoU 0.45)으로 불러 추론한다. 기본 모델인 yolov8stooltip은 도구마다 팁을 키포인트로 직접 내므로 짝짓기가 필요 없다. `manual` 프레임은 건드리지 않는다. 반대로 `generate_annotation.py --overwrite`를 다시 실행하면 재레이블한 프레임이 마스크 기반 레이블로 되돌아간다. `source`가 `manual`인 레이블의 원본은 `tooltip-annotator`의 `data/dataset/<name>/annotation-manual/`에 따로 보관되며, 어노테이션 자동 생성을 다시 실행해도 덮어쓰이지 않는다. 자세한 내용은 [tooltip-annotator/docs/generate_annotation.md](../tooltip-annotator/docs/generate_annotation.md)를 참고한다.
+탐지 모델로 다시 레이블한 프레임은 bbox·tip만 바뀌고 segmentation 마스크는 마스크 파이프라인의 것이 그대로 남는다. 따라서 `gradient-seg` 타겟은 마스크와 팁의 출처가 서로 다르다. 이 재레이블은 `scripts/relabel-annotation.py`가 `annotation/`에 직접 썼으나, 이 스크립트는 삭제되었다. `annotation/`은 이제 `annotation_editor`에서 사람이 고른 최종 레이블이므로 스크립트가 덮어쓰지 않는다. 탐지 모델의 레이블이 필요하면 `tooltip-annotator`의 `generate-annotation-yolo`로 `annotation-yolo/`에 만들고 편집기에서 채택한다. `source` 값은 위 표와 같다. 반대로 `generate_annotation.py --overwrite`를 다시 실행하면 재레이블한 프레임이 마스크 기반 레이블로 되돌아간다. `source`가 `manual`인 레이블의 원본은 `tooltip-annotator`의 `data/dataset/<name>/annotation-manual/`에 따로 보관되며, 어노테이션 자동 생성을 다시 실행해도 덮어쓰이지 않는다. 자세한 내용은 [tooltip-annotator/docs/generate_annotation.md](../tooltip-annotator/docs/generate_annotation.md)를 참고한다.
 
 ### annotation ↔ segmentation 대응
 

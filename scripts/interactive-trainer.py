@@ -51,6 +51,17 @@ list, and it lasts for the session.
 
 from __future__ import annotations
 
+# Disabled until it supports the multi-source annotation format: it reads only
+# `bbox` and `tip`, so a save would drop the `tip2` and `label` fields that
+# annotation-editor now writes. Checked before the heavy imports so the notice
+# shows at once.
+if __name__ == "__main__":
+    raise SystemExit(
+        "interactive-trainer is disabled for now.\n"
+        "It does not yet support the new annotation format (tip2, label, multiple\n"
+        "sources), and saving a frame would erase those fields from annotation/ and\n"
+        "annotation-manual/. Use tooltip-annotator's annotation-editor to edit labels.")
+
 import argparse
 import importlib
 import importlib.util
