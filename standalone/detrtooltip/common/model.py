@@ -391,12 +391,17 @@ def parameter_count(module: nn.Module, trainable_only: bool = False) -> int:
     return sum(p.numel() for p in module.parameters() if p.requires_grad or not trainable_only)
 
 
+TIP_MERGE_PX = 20.0
+
+
 @torch.no_grad()
 def postprocess(outputs: dict, conf: float, width: int = IMAGE_WIDTH,
                 height: int = IMAGE_HEIGHT) -> list[list[dict]]:
     """Model outputs -> per image, annotations in frame pixels, best first:
     {"bbox", "tip", optional "tip2", "score", "tip2_score"}. One query is one
-    tool, so no NMS is applied."""
+    tool, so no NMS is applied. Two tips at most TIP_MERGE_PX apart are given
+    as one `tip` at their mean, as the labels record them (the 20 px
+    tolerance of tip F1 @ 20 px)."""
     scores = outputs["logits"].float().sigmoid()
     exist = outputs["exist_logits"].float().sigmoid()
     boxes = outputs["boxes"].float()
@@ -419,7 +424,11 @@ def postprocess(outputs: dict, conf: float, width: int = IMAGE_WIDTH,
                 "tip2_score": float(exist[b, q]),
             }
             if exist[b, q] > 0.5:
-                item["tip2"] = {"x": tip_points[1][0], "y": tip_points[1][1]}
+                (ax, ay), (bx, by) = tip_points
+                if math.hypot(ax - bx, ay - by) <= TIP_MERGE_PX:
+                    item["tip"] = {"x": (ax + bx) / 2, "y": (ay + by) / 2}
+                else:
+                    item["tip2"] = {"x": bx, "y": by}
             annotations.append(item)
         results.append(annotations)
     return results
